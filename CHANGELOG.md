@@ -5,6 +5,15 @@ All notable changes to Horus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-05-20
+
+### Changed
+- Split monolithic `horus.py` into a `horus/` package: `config`, `state`, `filters`, `http`, `report`, `cli`, and `sources/{github,nvd}`
+- Entry point is now `python3 -m horus` (replaces `python3 horus.py`)
+
+### Removed
+- X/Twitter (`xurl`) integration and related queries — no longer used
+
 ## [0.1.0] - 2026-05-19
 
 ### Added

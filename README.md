@@ -1,6 +1,6 @@
 # Horus
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 
 Daily PoC research scanner. Searches GitHub and NVD for new vulnerability disclosures with proof-of-concept exploits.
 
@@ -8,15 +8,14 @@ Daily PoC research scanner. Searches GitHub and NVD for new vulnerability disclo
 
 - **GitHub**: Searches for new PoC/exploit repositories (filtered: <30d old, >10 stars, fresh PoC keywords)
 - **NVD**: Fetches recently published CVEs with CVSS scores
-- **X/Twitter**: Optional via xurl (requires paid X API access)
-- **Deduplication**: Tracks seen items to avoid reporting duplicates
+- **Deduplication**: Tracks seen items in `state/seen_items.json` to avoid reporting duplicates
 - **Delivery**: Designed to run as a daily cron job, outputs to stdout
 
 ## Usage
 
 ```bash
 # Run manually
-python3 horus.py
+python3 -m horus
 
 # Run via cron (daily at 09:00 UTC)
 # Cron ID: f68b886451d7
@@ -50,17 +49,27 @@ Total: 24 items | GitHub: 9 | NVD: 15
 |--------|------|------|----------|
 | GitHub API | None | Free | New PoC repos |
 | NVD API | None | Free | Recent CVEs with CVSS |
-| X/Twitter | xurl + API key | Pay-per-use | Early disclosures |
 
 ## Project Structure
 
 ```
 Horus/
-├── horus.py          # Main scanner script
-├── README.md         # This file
-├── CHANGELOG.md      # Version history
-└── state/
-    └── seen_items.json   # Deduplication state
+├── horus/
+│   ├── __init__.py       # Version
+│   ├── __main__.py       # `python3 -m horus` entry
+│   ├── cli.py            # Orchestration
+│   ├── config.py         # Queries, keywords, thresholds, paths
+│   ├── filters.py        # PoC relevance + CVE extraction
+│   ├── http.py           # Shared HTTP/JSON helper
+│   ├── report.py         # Output formatting
+│   ├── state.py          # Deduplication state
+│   └── sources/
+│       ├── github.py     # GitHub repo search
+│       └── nvd.py        # NVD CVE feed
+├── state/
+│   └── seen_items.json   # Deduplication state
+├── README.md
+└── CHANGELOG.md
 ```
 
 ## Changelog

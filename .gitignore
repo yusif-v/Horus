@@ -16,3 +16,9 @@ venv/
 .idea/
 *.swp
 *.swo
+
+# Claude Code / AI tooling
+.claude/
+.remember/
+CLAUDE.local.md
+graphify-out/
