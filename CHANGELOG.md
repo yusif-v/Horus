@@ -5,6 +5,18 @@ All notable changes to Horus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-20
+
+### Added
+- CLI flags: `--min-cvss`, `--max-results`, `--format {text,md}`, `--quiet`, `--version`
+- Markdown output mode for chat-friendly delivery (Telegram, Slack, etc.)
+- Per-source last-run tracking in `state/last_run.json`
+- Adaptive NVD lookback: window stretches back to the previous run (capped at 14 days), so missed days are recovered automatically
+
+### Changed
+- Progress lines now go to **stderr** (was stdout). `--format md > report.md` produces clean markdown
+- GitHub and NVD sources sort and cap results internally; the orchestrator no longer reshuffles them
+
 ## [0.2.0] - 2026-05-20
 
 ### Changed

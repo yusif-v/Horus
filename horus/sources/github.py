@@ -19,7 +19,10 @@ def _repo_age_days(created_at: str) -> int | None:
         return None
 
 
-def search_github(seen: set[str]) -> list[dict]:
+def search_github(
+    seen: set[str],
+    max_results: int | None = None,
+) -> list[dict]:
     """Search GitHub for new PoC/exploit repositories.
 
     Mutates `seen` to include newly-reported keys.
@@ -71,4 +74,7 @@ def search_github(seen: set[str]) -> list[dict]:
                 'age_days': age_days or 0,
             })
 
+    results.sort(key=lambda x: x.get('stars', 0), reverse=True)
+    if max_results is not None:
+        results = results[:max_results]
     return results

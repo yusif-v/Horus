@@ -1,5 +1,6 @@
 # State files
 state/seen_items.json
+state/last_run.json
 
 # Python
 __pycache__/

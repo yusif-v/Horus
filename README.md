@@ -1,6 +1,6 @@
 # Horus
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 
 Daily PoC research scanner. Searches GitHub and NVD for new vulnerability disclosures with proof-of-concept exploits.
 
@@ -17,9 +17,27 @@ Daily PoC research scanner. Searches GitHub and NVD for new vulnerability disclo
 # Run manually
 python3 -m horus
 
+# Common options
+python3 -m horus --min-cvss 7.0          # NVD: only High/Critical
+python3 -m horus --max-results 10         # cap items per source
+python3 -m horus --format md              # markdown output (e.g. for Telegram)
+python3 -m horus --quiet                  # suppress progress on stderr
+
 # Run via cron (daily at 09:00 UTC)
 # Cron ID: f68b886451d7
 ```
+
+### Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--min-cvss FLOAT` | Drop NVD items below this CVSS base score |
+| `--max-results N` | Cap items per source after sorting |
+| `--format {text,md}` | Output format (markdown for chat delivery) |
+| `--quiet` | Send progress lines to stderr only |
+| `--version` | Print version and exit |
+
+Progress messages now go to **stderr**, so `python3 -m horus --format md > report.md` produces clean markdown.
 
 ## Output
 
@@ -67,7 +85,8 @@ Horus/
 │       ├── github.py     # GitHub repo search
 │       └── nvd.py        # NVD CVE feed
 ├── state/
-│   └── seen_items.json   # Deduplication state
+│   ├── seen_items.json   # Deduplication state
+│   └── last_run.json     # Per-source last-run timestamps
 ├── README.md
 └── CHANGELOG.md
 ```

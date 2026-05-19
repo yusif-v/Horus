@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime, timedelta
 
-from ..config import NVD_LOOKBACK_DAYS
+from ..config import NVD_LOOKBACK_DAYS, NVD_MAX_LOOKBACK_DAYS
 from ..filters import is_fresh_poc
 from ..http import fetch_json
 
@@ -23,18 +23,38 @@ def _extract_cvss(metrics: dict) -> tuple[float | None, str | None]:
     return None, None
 
 
-def fetch_recent_cves(seen: set[str]) -> list[dict]:
+def _resolve_start(now: datetime, last_run_iso: str | None) -> datetime:
+    """Pick an adaptive lookback window based on last successful run."""
+    default_start = now - timedelta(days=NVD_LOOKBACK_DAYS)
+    if not last_run_iso:
+        return default_start
+    try:
+        last = datetime.strptime(last_run_iso, '%Y-%m-%dT%H:%M:%SZ')
+    except ValueError:
+        return default_start
+    # Pull a little earlier than last run to catch stragglers, but cap it.
+    candidate = last - timedelta(hours=6)
+    floor = now - timedelta(days=NVD_MAX_LOOKBACK_DAYS)
+    return max(candidate, floor)
+
+
+def fetch_recent_cves(
+    seen: set[str],
+    last_run_iso: str | None = None,
+    min_cvss: float | None = None,
+    max_results: int | None = None,
+) -> list[dict]:
     """Fetch recently published CVEs from NVD that mention a PoC.
 
     Mutates `seen` to include newly-reported keys.
     """
-    today = datetime.utcnow()
-    start = (today - timedelta(days=NVD_LOOKBACK_DAYS)).strftime('%Y-%m-%dT%H:%M:%S.000')
-    end = today.strftime('%Y-%m-%dT%H:%M:%S.000')
+    now = datetime.utcnow()
+    start = _resolve_start(now, last_run_iso).strftime('%Y-%m-%dT%H:%M:%S.000')
+    end = now.strftime('%Y-%m-%dT%H:%M:%S.000')
 
     url = (
         f'https://services.nvd.nist.gov/rest/json/cves/2.0'
-        f'?pubStartDate={start}&pubEndDate={end}&resultsPerPage=20'
+        f'?pubStartDate={start}&pubEndDate={end}&resultsPerPage=50'
     )
 
     try:
@@ -57,12 +77,15 @@ def fetch_recent_cves(seen: set[str]) -> list[dict]:
         if not is_fresh_poc(desc):
             continue
 
+        score, severity = _extract_cvss(cve.get('metrics', {}))
+
+        if min_cvss is not None and (score is None or score < min_cvss):
+            continue
+
         key = f'nvd:{cve_id}'
         if key in seen:
             continue
         seen.add(key)
-
-        score, severity = _extract_cvss(cve.get('metrics', {}))
 
         results.append({
             'source': 'NVD',
@@ -72,4 +95,7 @@ def fetch_recent_cves(seen: set[str]) -> list[dict]:
             'severity': severity,
         })
 
+    results.sort(key=lambda x: x.get('cvss_score') or 0, reverse=True)
+    if max_results is not None:
+        results = results[:max_results]
     return results

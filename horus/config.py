@@ -27,10 +27,12 @@ LOW_VALUE_KEYWORDS = [
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = PROJECT_ROOT / 'state'
 STATE_FILE = STATE_DIR / 'seen_items.json'
+LAST_RUN_FILE = STATE_DIR / 'last_run.json'
 
 MAX_REPO_AGE_DAYS = 30
 MIN_REPO_STARS = 10
 NVD_LOOKBACK_DAYS = 2
+NVD_MAX_LOOKBACK_DAYS = 14  # cap when using last-run timestamp
 HTTP_TIMEOUT = 15
 
 USER_AGENT = 'Mozilla/5.0 (compatible; Horus-PoC-Scanner/0.2)'
