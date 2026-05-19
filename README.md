@@ -1,5 +1,7 @@
 # Horus
 
+**Version:** 0.1.0
+
 Daily PoC research scanner. Searches GitHub and NVD for new vulnerability disclosures with proof-of-concept exploits.
 
 ## What it does
@@ -50,9 +52,20 @@ Total: 24 items | GitHub: 9 | NVD: 15
 | NVD API | None | Free | Recent CVEs with CVSS |
 | X/Twitter | xurl + API key | Pay-per-use | Early disclosures |
 
-## State
+## Project Structure
 
-Seen items are stored in `~/.hermes/poc-research/seen_items.json` for deduplication.
+```
+Horus/
+├── horus.py          # Main scanner script
+├── README.md         # This file
+├── CHANGELOG.md      # Version history
+└── state/
+    └── seen_items.json   # Deduplication state
+```
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## Cron
 

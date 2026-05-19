@@ -1,0 +1,27 @@
+# Changelog
+
+All notable changes to Horus will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.1.0] - 2026-05-19
+
+### Added
+- GitHub PoC repo scanner with smart filtering (<30d old, >10 stars, fresh PoC keywords)
+- NVD CVE feed integration with CVSS scores and severity levels
+- Deduplication system to avoid reporting previously seen items
+- Telegram delivery integration via Hermes cron job
+- Optional xurl backend for X/Twitter search (pay-per-use)
+- State persistence in `state/seen_items.json`
+- README with usage documentation
+
+### Data Sources
+- GitHub API (free, no auth) — new PoC repositories
+- NVD API (free, no auth) — recent CVEs with CVSS scores
+- X/Twitter via xurl (pay-per-use) — early vulnerability disclosures
+
+### Known Limitations
+- X/Twitter search requires paid X API (no free tier for new users)
+- Nitter mirrors unreliable for web scraping
+- GitHub search limited to public repositories

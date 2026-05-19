@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-Daily PoC Research Scanner
-Searches GitHub and NVD for new vulnerability disclosures with PoC links.
-X/Twitter search requires API access (xurl) — GitHub + NVD provide excellent coverage.
+Horus — Daily PoC Research Scanner
+Version: 0.1.0
+
+Searches GitHub and NVD for new vulnerability disclosures with proof-of-concept exploits.
 Runs as a daily cron job, outputs findings to stdout (delivered via cron).
 """
+
+__version__ = "0.1.0"
 
 import json
 import re
