@@ -1,6 +1,6 @@
 # Horus
 
-**Version:** 0.3.0
+**Version:** 0.3.1
 
 Daily PoC research scanner. Searches GitHub and NVD for new vulnerability disclosures with proof-of-concept exploits.
 
@@ -38,6 +38,21 @@ python3 -m horus --quiet                  # suppress progress on stderr
 | `--version` | Print version and exit |
 
 Progress messages now go to **stderr**, so `python3 -m horus --format md > report.md` produces clean markdown.
+
+### GitHub authentication
+
+Horus auto-detects a GitHub token in this order — no config needed:
+
+1. `GITHUB_TOKEN` env var
+2. `GH_TOKEN` env var
+3. `gh auth token` (GitHub CLI keyring)
+
+With a token, the rate limit jumps from 60 → 5000 requests/hour. Check status with:
+
+```bash
+python3 -m horus --auth-status
+# GitHub auth: OK (token ...Xq7Z, limit 5000/hr)
+```
 
 ## Output
 

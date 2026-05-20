@@ -4,6 +4,7 @@ import sys
 import urllib.parse
 from datetime import datetime
 
+from ..auth import github_token
 from ..config import GITHUB_QUERIES, MAX_REPO_AGE_DAYS, MIN_REPO_STARS
 from ..filters import extract_cves, is_fresh_poc
 from ..http import fetch_json
@@ -28,6 +29,8 @@ def search_github(
     Mutates `seen` to include newly-reported keys.
     """
     results: list[dict] = []
+    token = github_token()
+    auth_headers = {'Authorization': f'Bearer {token}'} if token else None
 
     for query in GITHUB_QUERIES:
         encoded = urllib.parse.quote(query)
@@ -37,7 +40,11 @@ def search_github(
         )
 
         try:
-            data = fetch_json(url, accept='application/vnd.github.v3+json')
+            data = fetch_json(
+                url,
+                accept='application/vnd.github.v3+json',
+                headers=auth_headers,
+            )
         except Exception as e:
             print(f'  [WARN] GitHub search failed for "{query}": {e}', file=sys.stderr)
             continue

@@ -4,6 +4,7 @@ import argparse
 import sys
 
 from . import __version__
+from .auth import github_token
 from .report import print_report
 from .sources.github import search_github
 from .sources.nvd import fetch_recent_cves
@@ -32,6 +33,10 @@ def _build_parser() -> argparse.ArgumentParser:
         '--quiet', action='store_true',
         help='Suppress progress lines on stderr; only print the report.',
     )
+    p.add_argument(
+        '--auth-status', action='store_true',
+        help='Print GitHub auth status and exit.',
+    )
     return p
 
 
@@ -42,6 +47,14 @@ def _log(quiet: bool, msg: str) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     args = _build_parser().parse_args(argv)
+
+    if args.auth_status:
+        tok = github_token()
+        if tok:
+            print(f'GitHub auth: OK (token ...{tok[-4:]}, limit 5000/hr)')
+        else:
+            print('GitHub auth: none (unauthenticated, limit 60/hr)')
+        return
 
     seen = load_seen()
     last_run = load_last_run()
