@@ -4,8 +4,63 @@ import sys
 from datetime import datetime, timedelta
 
 from ..config import NVD_LOOKBACK_DAYS, NVD_MAX_LOOKBACK_DAYS
-from ..filters import is_fresh_poc
-from ..http import fetch_json
+from ..core.filters import is_fresh_poc
+from .http import fetch_json
+
+
+def _extract_cwes(weaknesses: list) -> list[str]:
+    out: set[str] = set()
+    for w in weaknesses or []:
+        for d in w.get('description', []):
+            val = d.get('value', '')
+            if val.startswith('CWE-'):
+                out.add(val)
+    return sorted(out)
+
+
+def _extract_affected(configurations: list) -> list[dict]:
+    """Pull vendor/product/version-range triples from CPE 2.3 entries.
+
+    A CPE URI looks like: cpe:2.3:a:nginx:nginx:1.25.2:*:*:*:*:*:*:*
+                                  ^  ^      ^      ^
+                                  |  vendor product version
+                                  part
+    """
+    out: dict[tuple[str, str], dict] = {}
+    for cfg in configurations or []:
+        for node in cfg.get('nodes', []):
+            for match in node.get('cpeMatch', []):
+                cpe = match.get('criteria', '')
+                parts = cpe.split(':')
+                if len(parts) < 6 or parts[0] != 'cpe':
+                    continue
+                vendor, product, version = parts[3], parts[4], parts[5]
+                key = (vendor, product)
+                bucket = out.setdefault(key, {
+                    'vendor': vendor, 'product': product, 'versions': [],
+                })
+                # Prefer the explicit range fields over the version slot.
+                start_incl = match.get('versionStartIncluding')
+                start_excl = match.get('versionStartExcluding')
+                end_incl = match.get('versionEndIncluding')
+                end_excl = match.get('versionEndExcluding')
+                if any([start_incl, start_excl, end_incl, end_excl]):
+                    lo = start_incl or start_excl
+                    hi = end_incl or end_excl
+                    lo_op = '>=' if start_incl else '>'
+                    hi_op = '<=' if end_incl else '<'
+                    parts_range = []
+                    if lo:
+                        parts_range.append(f'{lo_op} {lo}')
+                    if hi:
+                        parts_range.append(f'{hi_op} {hi}')
+                    bucket['versions'].append(', '.join(parts_range))
+                elif version not in ('*', '-', ''):
+                    bucket['versions'].append(version)
+    # Dedupe versions per entry
+    for b in out.values():
+        b['versions'] = sorted(set(b['versions']))
+    return list(out.values())
 
 
 def _extract_cvss(metrics: dict) -> tuple[float | None, str | None]:
@@ -87,12 +142,25 @@ def fetch_recent_cves(
             continue
         seen.add(key)
 
+        published_iso = cve.get('published')
+        published_at = None
+        if published_iso:
+            try:
+                published_at = datetime.strptime(
+                    published_iso[:19], '%Y-%m-%dT%H:%M:%S',
+                )
+            except ValueError:
+                pass
+
         results.append({
             'source': 'NVD',
             'cve': cve_id,
             'description': desc[:300],
             'cvss_score': score,
             'severity': severity,
+            'cwe_ids': _extract_cwes(cve.get('weaknesses', [])),
+            'affected': _extract_affected(cve.get('configurations', [])),
+            'published_at': published_at,
         })
 
     results.sort(key=lambda x: x.get('cvss_score') or 0, reverse=True)

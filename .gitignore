@@ -1,13 +1,28 @@
 # State files
 state/seen_items.json
 state/last_run.json
+state/*.bak
+
+# Generated reports
+reports/
 
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
 .venv/
 venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # macOS
 .DS_Store

@@ -3,7 +3,7 @@
 import json
 import urllib.request
 
-from .config import HTTP_TIMEOUT, USER_AGENT
+from ..config import HTTP_TIMEOUT, USER_AGENT
 
 
 def fetch_json(

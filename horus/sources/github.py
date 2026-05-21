@@ -4,10 +4,10 @@ import sys
 import urllib.parse
 from datetime import datetime
 
-from ..auth import github_token
 from ..config import GITHUB_QUERIES, MAX_REPO_AGE_DAYS, MIN_REPO_STARS
-from ..filters import extract_cves, is_fresh_poc
-from ..http import fetch_json
+from ..core.filters import extract_cves, is_fresh_poc
+from .auth import github_token
+from .http import fetch_json
 
 
 def _repo_age_days(created_at: str) -> int | None:

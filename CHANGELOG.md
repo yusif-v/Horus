@@ -5,6 +5,27 @@ All notable changes to Horus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-05-21
+
+### Added
+- Typed domain model (`horus/model.py`): `CVE`, `PoC`, `AffectedProduct`
+- Closed vocabularies (`horus/vocab.py`): 21 attack tags, 18 product categories, CWE→tag and product→category lookup tables
+- Classifier (`horus/classify.py`): CWE-priority + keyword-fallback attack tagging; substring-based product categorisation
+- Merge layer (`horus/merge.py`): folds raw NVD + GitHub results into typed CVE/PoC objects; derives PoC↔CVE links
+- NVD source now extracts CWE IDs and CPE-derived affected vendor/product/version ranges
+- Reports group CVEs by product category and show attack tags, affected products, and linked PoCs inline
+- Standalone PoCs (GitHub repos with no matching CVE in the run) appear in their own section
+
+### Changed
+- `print_report` signature is now `(cves, pocs, links, fmt)` — operates on the typed model rather than raw dicts
+- Report ordering: CVEs grouped by category (alphabetical, `unknown` last), within each group sorted by CVSS descending
+- **Restructured package layout** into four subpackages with single responsibilities:
+  - `horus.core` — pure domain (model, vocab, classify, filters, merge)
+  - `horus.sources` — network ingestion (http, auth, github, nvd)
+  - `horus.storage` — local persistence (state)
+  - `horus.render` — output formatting (report)
+  No public CLI changes; `python3 -m horus` works as before.
+
 ## [0.3.1] - 2026-05-20
 
 ### Added

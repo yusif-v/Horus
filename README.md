@@ -1,13 +1,15 @@
 # Horus
 
-**Version:** 0.3.1
+**Version:** 0.4.0
 
 Daily PoC research scanner. Searches GitHub and NVD for new vulnerability disclosures with proof-of-concept exploits.
 
 ## What it does
 
 - **GitHub**: Searches for new PoC/exploit repositories (filtered: <30d old, >10 stars, fresh PoC keywords)
-- **NVD**: Fetches recently published CVEs with CVSS scores
+- **NVD**: Fetches recently published CVEs with CVSS scores, CWE IDs, and affected vendor/product/version ranges
+- **Classification**: Tags each CVE with an attack type (rce, sql-injection, lpe, …) and product category (web-server, database, kernel, …) from a locked vocabulary
+- **PoC linking**: GitHub repos that reference known CVE IDs are attached to that CVE; everything else surfaces as a standalone PoC
 - **Deduplication**: Tracks seen items in `state/seen_items.json` to avoid reporting duplicates
 - **Delivery**: Designed to run as a daily cron job, outputs to stdout
 
@@ -92,13 +94,21 @@ Horus/
 │   ├── __main__.py       # `python3 -m horus` entry
 │   ├── cli.py            # Orchestration
 │   ├── config.py         # Queries, keywords, thresholds, paths
-│   ├── filters.py        # PoC relevance + CVE extraction
-│   ├── http.py           # Shared HTTP/JSON helper
-│   ├── report.py         # Output formatting
-│   ├── state.py          # Deduplication state
-│   └── sources/
-│       ├── github.py     # GitHub repo search
-│       └── nvd.py        # NVD CVE feed
+│   ├── core/             # Pure domain — no I/O
+│   │   ├── model.py      #   CVE, PoC, AffectedProduct dataclasses
+│   │   ├── vocab.py      #   Closed vocabularies (tags, categories)
+│   │   ├── classify.py   #   Attack-tag + product-category classifiers
+│   │   ├── filters.py    #   PoC relevance + CVE extraction
+│   │   └── merge.py      #   Raw dicts → typed model + PoC↔CVE links
+│   ├── sources/          # Data ingestion (network)
+│   │   ├── http.py       #   Shared HTTP/JSON helper
+│   │   ├── auth.py       #   GitHub token resolution
+│   │   ├── github.py     #   GitHub repo search
+│   │   └── nvd.py        #   NVD CVE feed (CWE + CPE extraction)
+│   ├── storage/          # Local persistence
+│   │   └── state.py      #   Deduplication + last-run timestamps
+│   └── render/           # Output formatting
+│       └── report.py     #   Text / markdown renderer
 ├── state/
 │   ├── seen_items.json   # Deduplication state
 │   └── last_run.json     # Per-source last-run timestamps

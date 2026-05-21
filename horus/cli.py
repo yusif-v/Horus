@@ -4,11 +4,15 @@ import argparse
 import sys
 
 from . import __version__
-from .auth import github_token
-from .report import print_report
+from .core.merge import link_pocs_to_cves, merge_findings
+from .render.persist import save_report
+from .render.report import render_report
+from .sources.auth import github_token
 from .sources.github import search_github
 from .sources.nvd import fetch_recent_cves
-from .state import load_last_run, load_seen, mark_run, save_last_run, save_seen
+from .storage.state import (
+    load_last_run, load_seen, mark_run, save_last_run, save_seen,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -37,6 +41,10 @@ def _build_parser() -> argparse.ArgumentParser:
         '--auth-status', action='store_true',
         help='Print GitHub auth status and exit.',
     )
+    p.add_argument(
+        '--no-save', action='store_true',
+        help='Skip writing the markdown report to reports/.',
+    )
     return p
 
 
@@ -60,23 +68,34 @@ def main(argv: list[str] | None = None) -> None:
     last_run = load_last_run()
 
     _log(args.quiet, '[1/2] Searching GitHub for new PoC repos...')
-    gh_results = search_github(seen, max_results=args.max_results)
+    github_raw = search_github(seen, max_results=args.max_results)
     mark_run(last_run, 'github')
-    _log(args.quiet, f'  Found {len(gh_results)} relevant repos')
+    _log(args.quiet, f'  Found {len(github_raw)} relevant repos')
 
     _log(args.quiet, '[2/2] Fetching recent CVEs from NVD...')
-    nvd_results = fetch_recent_cves(
+    nvd_raw = fetch_recent_cves(
         seen,
         last_run_iso=last_run.get('nvd'),
         min_cvss=args.min_cvss,
         max_results=args.max_results,
     )
     mark_run(last_run, 'nvd')
-    _log(args.quiet, f'  Found {len(nvd_results)} relevant CVEs')
+    _log(args.quiet, f'  Found {len(nvd_raw)} relevant CVEs')
 
     save_seen(seen)
     save_last_run(last_run)
-    print_report(gh_results + nvd_results, fmt=args.format)
+
+    cves, pocs = merge_findings(nvd_raw, github_raw)
+    links = link_pocs_to_cves(cves, pocs)
+
+    print(render_report(cves, pocs, links, fmt=args.format), end='')
+
+    if not args.no_save:
+        path = save_report(
+            render_report(cves, pocs, links, fmt='md'),
+            fmt='md',
+        )
+        _log(args.quiet, f'  Report saved → {path}')
 
 
 if __name__ == '__main__':

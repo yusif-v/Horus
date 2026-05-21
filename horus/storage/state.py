@@ -3,7 +3,7 @@
 import json
 from datetime import datetime
 
-from .config import LAST_RUN_FILE, STATE_DIR, STATE_FILE
+from ..config import LAST_RUN_FILE, STATE_DIR, STATE_FILE
 
 
 def load_seen() -> set[str]:

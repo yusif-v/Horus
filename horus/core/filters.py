@@ -2,7 +2,7 @@
 
 import re
 
-from .config import FRESH_POC_KEYWORDS, LOW_VALUE_KEYWORDS
+from ..config import FRESH_POC_KEYWORDS, LOW_VALUE_KEYWORDS
 
 _CVE_RE = re.compile(r'CVE-\d{4}-\d{4,}', re.IGNORECASE)
 
