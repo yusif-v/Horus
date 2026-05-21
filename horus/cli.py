@@ -5,14 +5,13 @@ import sys
 
 from . import __version__
 from .core.merge import link_pocs_to_cves, merge_findings
+from .render.graph import save_graph
 from .render.persist import save_report
 from .render.report import render_report
 from .sources.auth import github_token
 from .sources.github import search_github
 from .sources.nvd import fetch_recent_cves
-from .storage.state import (
-    load_last_run, load_seen, mark_run, save_last_run, save_seen,
-)
+from .storage import db
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -45,6 +44,10 @@ def _build_parser() -> argparse.ArgumentParser:
         '--no-save', action='store_true',
         help='Skip writing the markdown report to reports/.',
     )
+    p.add_argument(
+        '--no-graph', action='store_true',
+        help='Skip writing the interactive graph HTML to reports/.',
+    )
     return p
 
 
@@ -64,29 +67,44 @@ def main(argv: list[str] | None = None) -> None:
             print('GitHub auth: none (unauthenticated, limit 60/hr)')
         return
 
-    seen = load_seen()
-    last_run = load_last_run()
+    cves_migrated, pocs_migrated = db.initialize()
+    if cves_migrated or pocs_migrated:
+        _log(
+            args.quiet,
+            f'  Migrated {cves_migrated} CVEs and {pocs_migrated} PoCs'
+            ' from legacy JSON state',
+        )
+
+    with db.connect() as conn:
+        known_cve_ids = db.list_known_cve_ids(conn)
+        known_poc_urls = db.list_known_poc_urls(conn)
+        last_run_nvd = db.get_last_run(conn, 'nvd')
 
     _log(args.quiet, '[1/2] Searching GitHub for new PoC repos...')
-    github_raw = search_github(seen, max_results=args.max_results)
-    mark_run(last_run, 'github')
+    github_raw = search_github(known_poc_urls, max_results=args.max_results)
     _log(args.quiet, f'  Found {len(github_raw)} relevant repos')
 
     _log(args.quiet, '[2/2] Fetching recent CVEs from NVD...')
     nvd_raw = fetch_recent_cves(
-        seen,
-        last_run_iso=last_run.get('nvd'),
+        known_cve_ids,
+        last_run_iso=last_run_nvd,
         min_cvss=args.min_cvss,
         max_results=args.max_results,
     )
-    mark_run(last_run, 'nvd')
     _log(args.quiet, f'  Found {len(nvd_raw)} relevant CVEs')
-
-    save_seen(seen)
-    save_last_run(last_run)
 
     cves, pocs = merge_findings(nvd_raw, github_raw)
     links = link_pocs_to_cves(cves, pocs)
+
+    with db.connect() as conn:
+        for cve in cves:
+            db.persist_cve(conn, cve)
+        for poc in pocs:
+            db.persist_poc(conn, poc)
+            for ref in poc.cve_refs:
+                db.link_poc_to_cve(conn, poc.url, ref)
+        db.mark_run(conn, 'github')
+        db.mark_run(conn, 'nvd')
 
     print(render_report(cves, pocs, links, fmt=args.format), end='')
 
@@ -96,6 +114,11 @@ def main(argv: list[str] | None = None) -> None:
             fmt='md',
         )
         _log(args.quiet, f'  Report saved → {path}')
+
+    if not args.no_graph:
+        with db.connect() as conn:
+            graph_path = save_graph(conn)
+        _log(args.quiet, f'  Graph saved  → {graph_path}')
 
 
 if __name__ == '__main__':

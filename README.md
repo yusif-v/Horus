@@ -1,6 +1,6 @@
 # Horus
 
-**Version:** 0.4.0
+**Version:** 0.5.0
 
 Daily PoC research scanner. Searches GitHub and NVD for new vulnerability disclosures with proof-of-concept exploits.
 
@@ -10,7 +10,8 @@ Daily PoC research scanner. Searches GitHub and NVD for new vulnerability disclo
 - **NVD**: Fetches recently published CVEs with CVSS scores, CWE IDs, and affected vendor/product/version ranges
 - **Classification**: Tags each CVE with an attack type (rce, sql-injection, lpe, …) and product category (web-server, database, kernel, …) from a locked vocabulary
 - **PoC linking**: GitHub repos that reference known CVE IDs are attached to that CVE; everything else surfaces as a standalone PoC
-- **Deduplication**: Tracks seen items in `state/seen_items.json` to avoid reporting duplicates
+- **Persistence**: SQLite at `state/horus.db` — normalized schema (CVE, PoC, Product, AttackTag, CWE + join tables for graph edges)
+- **Reports**: Markdown (`reports/YYYY/MM/YYYY-MM-DD.md`) and interactive graph (`reports/YYYY/MM/YYYY-MM-DD.graph.html`) written every run
 - **Delivery**: Designed to run as a daily cron job, outputs to stdout
 
 ## Usage
@@ -40,6 +41,22 @@ python3 -m horus --quiet                  # suppress progress on stderr
 | `--version` | Print version and exit |
 
 Progress messages now go to **stderr**, so `python3 -m horus --format md > report.md` produces clean markdown.
+
+### Interactive graph
+
+Each run writes `reports/YYYY/MM/YYYY-MM-DD.graph.html` — a single self-contained file with Cytoscape.js (loaded via CDN). Open it directly in a browser:
+
+```bash
+open reports/2026/05/2026-05-21.graph.html   # macOS
+xdg-open reports/2026/05/2026-05-21.graph.html  # Linux
+```
+
+- **Red circles** — CVEs (size = CVSS)
+- **Green diamonds** — PoCs (size = stars)
+- **Blue rectangles** — affected products
+- **Orange hexagons** — attack tags
+
+Click any node to highlight its neighborhood and view details. Skip with `--no-graph`.
 
 ### GitHub authentication
 
@@ -105,13 +122,15 @@ Horus/
 │   │   ├── auth.py       #   GitHub token resolution
 │   │   ├── github.py     #   GitHub repo search
 │   │   └── nvd.py        #   NVD CVE feed (CWE + CPE extraction)
-│   ├── storage/          # Local persistence
-│   │   └── state.py      #   Deduplication + last-run timestamps
+│   ├── storage/          # Local persistence (SQLite)
+│   │   ├── schema.sql    #   Idempotent DDL
+│   │   └── db.py         #   Schema init, vocab seeding, migration, CRUD
 │   └── render/           # Output formatting
-│       └── report.py     #   Text / markdown renderer
+│       ├── report.py     #   Text / markdown renderer
+│       ├── persist.py    #   Save markdown report to disk
+│       └── graph.py      #   Interactive Cytoscape.js HTML graph
 ├── state/
-│   ├── seen_items.json   # Deduplication state
-│   └── last_run.json     # Per-source last-run timestamps
+│   └── horus.db          # SQLite — all persistent state
 ├── README.md
 └── CHANGELOG.md
 ```

@@ -5,6 +5,35 @@ All notable changes to Horus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-21
+
+### Added
+- Interactive graph viewer (`horus/render/graph.py`) — single self-contained HTML file per run, written to `reports/YYYY/MM/YYYY-MM-DD.graph.html`
+- Cytoscape.js (loaded via CDN) for force-directed layout
+- Node types: CVE (size by CVSS), PoC (size by stars), Product, AttackTag — distinct shapes and colors
+- Edge types: `tagged` (CVE→tag), `affects` (CVE→product), `references` (PoC→CVE)
+- Click a node to highlight its neighborhood and view details in a side panel
+- Floating/orphan nodes filtered out so the graph stays readable
+- `--no-graph` flag to skip generation
+- All untrusted strings (descriptions, URLs) rendered via `textContent` / DOM construction — no `innerHTML` for user data
+
+## [0.4.1] - 2026-05-21
+
+### Added
+- SQLite storage layer at `state/horus.db` — full normalized schema (CVE, PoC, Product, AttackTag, CWE + 5 join tables for graph edges)
+- `horus/storage/db.py` — schema init, vocab seeding, JSON migration, CRUD
+- `horus/storage/schema.sql` — DDL, idempotent (`CREATE TABLE IF NOT EXISTS`)
+- One-shot migration on first run: imports `seen_items.json` (CVE stubs + PoCs) and `last_run.json` (into `meta` table), then renames originals to `.migrated`
+
+### Changed
+- Source modules now dedupe on the actual key (CVE id, PoC URL) rather than prefixed strings — cleaner signature
+- Last-run timestamps moved from JSON file to the `meta` table
+- Strict PoC↔CVE linking: edges only created when the referenced CVE exists in the table
+
+### Removed
+- `horus/storage/state.py` — superseded by `db.py`
+- JSON state files (`state/seen_items.json`, `state/last_run.json`) — migrated and renamed
+
 ## [0.4.0] - 2026-05-21
 
 ### Added

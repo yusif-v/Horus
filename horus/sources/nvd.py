@@ -94,14 +94,14 @@ def _resolve_start(now: datetime, last_run_iso: str | None) -> datetime:
 
 
 def fetch_recent_cves(
-    seen: set[str],
+    known_cve_ids: set[str],
     last_run_iso: str | None = None,
     min_cvss: float | None = None,
     max_results: int | None = None,
 ) -> list[dict]:
     """Fetch recently published CVEs from NVD that mention a PoC.
 
-    Mutates `seen` to include newly-reported keys.
+    Mutates `known_cve_ids` to include every CVE we report this run.
     """
     now = datetime.utcnow()
     start = _resolve_start(now, last_run_iso).strftime('%Y-%m-%dT%H:%M:%S.000')
@@ -137,10 +137,9 @@ def fetch_recent_cves(
         if min_cvss is not None and (score is None or score < min_cvss):
             continue
 
-        key = f'nvd:{cve_id}'
-        if key in seen:
+        if cve_id in known_cve_ids:
             continue
-        seen.add(key)
+        known_cve_ids.add(cve_id)
 
         published_iso = cve.get('published')
         published_at = None

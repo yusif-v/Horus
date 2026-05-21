@@ -21,12 +21,13 @@ def _repo_age_days(created_at: str) -> int | None:
 
 
 def search_github(
-    seen: set[str],
+    known_urls: set[str],
     max_results: int | None = None,
 ) -> list[dict]:
     """Search GitHub for new PoC/exploit repositories.
 
-    Mutates `seen` to include newly-reported keys.
+    Mutates `known_urls` to include every repo we report this run so the
+    same repo isn't double-counted across multiple queries.
     """
     results: list[dict] = []
     token = github_token()
@@ -34,14 +35,14 @@ def search_github(
 
     for query in GITHUB_QUERIES:
         encoded = urllib.parse.quote(query)
-        url = (
+        search_url = (
             f'https://api.github.com/search/repositories'
             f'?q={encoded}&sort=created&order=desc&per_page=15'
         )
 
         try:
             data = fetch_json(
-                url,
+                search_url,
                 accept='application/vnd.github.v3+json',
                 headers=auth_headers,
             )
@@ -51,9 +52,13 @@ def search_github(
 
         for item in data.get('items', []):
             repo_name = item.get('full_name', '')
+            html_url = item.get('html_url', '')
             description = item.get('description') or ''
             created_at = item.get('created_at', '')
             stars = item.get('stargazers_count', 0)
+
+            if not html_url or html_url in known_urls:
+                continue
 
             age_days = _repo_age_days(created_at)
             if age_days is not None and age_days > MAX_REPO_AGE_DAYS:
@@ -65,15 +70,12 @@ def search_github(
             if not is_fresh_poc(combined):
                 continue
 
-            key = f'github:{repo_name}'
-            if key in seen:
-                continue
-            seen.add(key)
+            known_urls.add(html_url)
 
             results.append({
                 'source': 'GitHub',
                 'repo': repo_name,
-                'url': item.get('html_url', ''),
+                'url': html_url,
                 'description': description[:300],
                 'cves': extract_cves(combined),
                 'stars': stars,

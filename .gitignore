@@ -1,7 +1,12 @@
 # State files
+state/horus.db
+state/horus.db-journal
+state/horus.db-wal
+state/horus.db-shm
 state/seen_items.json
 state/last_run.json
 state/*.bak
+state/*.migrated
 
 # Generated reports
 reports/
