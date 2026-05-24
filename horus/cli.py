@@ -11,13 +11,14 @@ from .render.report import render_report
 from .sources.auth import github_token
 from .sources.github import search_github
 from .sources.nvd import fetch_recent_cves
+from .sources.twitter import fetch_twitter_pocs
 from .storage import db
 
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog='horus',
-        description='Daily PoC research scanner (GitHub + NVD).',
+        description='Daily PoC research scanner (GitHub + NVD + Twitter).',
     )
     p.add_argument('--version', action='version', version=f'horus {__version__}')
     p.add_argument(
@@ -47,6 +48,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         '--no-graph', action='store_true',
         help='Skip writing the interactive graph HTML to reports/.',
+    )
+    p.add_argument(
+        '--no-twitter', action='store_true',
+        help='Skip the X/Twitter PoC source.',
     )
     return p
 
@@ -80,11 +85,11 @@ def main(argv: list[str] | None = None) -> None:
         known_poc_urls = db.list_known_poc_urls(conn)
         last_run_nvd = db.get_last_run(conn, 'nvd')
 
-    _log(args.quiet, '[1/2] Searching GitHub for new PoC repos...')
+    _log(args.quiet, '[1/3] Searching GitHub for new PoC repos...')
     github_raw = search_github(known_poc_urls, max_results=args.max_results)
     _log(args.quiet, f'  Found {len(github_raw)} relevant repos')
 
-    _log(args.quiet, '[2/2] Fetching recent CVEs from NVD...')
+    _log(args.quiet, '[2/3] Fetching recent CVEs from NVD...')
     nvd_raw = fetch_recent_cves(
         known_cve_ids,
         last_run_iso=last_run_nvd,
@@ -93,7 +98,13 @@ def main(argv: list[str] | None = None) -> None:
     )
     _log(args.quiet, f'  Found {len(nvd_raw)} relevant CVEs')
 
-    cves, pocs = merge_findings(nvd_raw, github_raw)
+    twitter_raw = None
+    if not args.no_twitter:
+        _log(args.quiet, '[3/3] Searching X/Twitter for CVE PoCs...')
+        twitter_raw = fetch_twitter_pocs(known_poc_urls, max_results=args.max_results)
+        _log(args.quiet, f'  Found {len(twitter_raw)} relevant tweets')
+
+    cves, pocs = merge_findings(nvd_raw, github_raw, twitter_raw)
     links = link_pocs_to_cves(cves, pocs)
 
     with db.connect() as conn:
@@ -105,6 +116,8 @@ def main(argv: list[str] | None = None) -> None:
                 db.link_poc_to_cve(conn, poc.url, ref)
         db.mark_run(conn, 'github')
         db.mark_run(conn, 'nvd')
+        if twitter_raw is not None:
+            db.mark_run(conn, 'twitter')
 
     print(render_report(cves, pocs, links, fmt=args.format), end='')
 
@@ -113,12 +126,12 @@ def main(argv: list[str] | None = None) -> None:
             render_report(cves, pocs, links, fmt='md'),
             fmt='md',
         )
-        _log(args.quiet, f'  Report saved → {path}')
+        _log(args.quiet, f'  Report saved -> {path}')
 
     if not args.no_graph:
         with db.connect() as conn:
             graph_path = save_graph(conn)
-        _log(args.quiet, f'  Graph saved  → {graph_path}')
+        _log(args.quiet, f'  Graph saved  -> {graph_path}')
 
 
 if __name__ == '__main__':

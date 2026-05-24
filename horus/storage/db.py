@@ -11,12 +11,16 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from ..config import LAST_RUN_FILE, STATE_DIR, STATE_FILE
+from ..config import STATE_DIR
 from ..core.model import CVE, PoC
 from ..core.vocab import ATTACK_TAGS, CWE_TO_TAG
 
 DB_PATH = STATE_DIR / 'horus.db'
 SCHEMA_PATH = Path(__file__).parent / 'schema.sql'
+
+# Legacy JSON file paths — kept here for migration only.
+STATE_FILE = STATE_DIR / 'seen_items.json'
+LAST_RUN_FILE = STATE_DIR / 'last_run.json'
 
 
 def _now() -> str:

@@ -38,6 +38,22 @@ def _standalone_pocs(pocs: list[PoC], cves: list[CVE]) -> list[PoC]:
     ]
 
 
+def _poc_label(poc: PoC) -> str:
+    """Return a display label for a PoC, including Twitter attribution."""
+    if poc.source == 'twitter':
+        return f'{poc.url} [tweet]'
+    return poc.url
+
+
+def _poc_detail(poc: PoC) -> str:
+    """Return detail line for a standalone PoC."""
+    parts = [f'{poc.stars or 0}', f'{poc.age_days or 0}d']
+    if poc.source == 'twitter':
+        parts.append('tweet')
+    label = f'({" ".join(parts)})'
+    return label
+
+
 # ---------------------------------------------------------------------------
 # Plain text
 # ---------------------------------------------------------------------------
@@ -49,7 +65,7 @@ def _render_text(cves: list[CVE], pocs: list[PoC], links: dict[str, list[PoC]]) 
         out.write(s + '\n')
 
     today = datetime.now().strftime('%Y-%m-%d')
-    w(f'=== Daily PoC Research Report — {today} ===')
+    w(f'=== Daily PoC Research Report - {today} ===')
     standalone = _standalone_pocs(pocs, cves)
     w()
     w('=' * 60)
@@ -74,13 +90,13 @@ def _render_text(cves: list[CVE], pocs: list[PoC], links: dict[str, list[PoC]]) 
                 ver = f' ({"; ".join(ap.versions[:2])})' if ap.versions else ''
                 w(f'    affects: {ap.vendor}/{ap.product}{ver}')
             for poc in links.get(cve.id.upper(), []):
-                w(f'    PoC: {poc.url} ({poc.stars or 0}★)')
+                w(f'    PoC: {_poc_label(poc)} ({poc.stars or 0}*)')
 
     if standalone:
         w(f'\n--- Standalone PoCs ({len(standalone)}) ---')
         for poc in sorted(standalone, key=lambda p: p.stars or 0, reverse=True):
             refs = f' (refs: {", ".join(poc.cve_refs)})' if poc.cve_refs else ''
-            w(f'\n  {poc.url} ({poc.stars or 0}★, {poc.age_days or 0}d old){refs}')
+            w(f'\n  {_poc_label(poc)} {_poc_detail(poc)}{refs}')
             if poc.description:
                 w(f'    {poc.description[:200]}')
 
@@ -99,8 +115,8 @@ def _render_markdown(cves: list[CVE], pocs: list[PoC], links: dict[str, list[PoC
 
     today = datetime.now().strftime('%Y-%m-%d')
     standalone = _standalone_pocs(pocs, cves)
-    w(f'# Daily PoC Research Report — {today}\n')
-    w(f'**CVEs:** {len(cves)} · **Standalone PoCs:** {len(standalone)}')
+    w(f'# Daily PoC Research Report - {today}\n')
+    w(f'**CVEs:** {len(cves)} **Standalone PoCs:** {len(standalone)}')
 
     if not cves and not standalone:
         w('\n_No new findings today._')
@@ -110,22 +126,26 @@ def _render_markdown(cves: list[CVE], pocs: list[PoC], links: dict[str, list[PoC
         w(f'\n## {category} ({len(group)})\n')
         for cve in group:
             score = cve.cvss_score
-            score_str = f' · **CVSS {score} {cve.cvss_severity or ""}**' if score else ''
+            score_str = f' **CVSS {score} {cve.cvss_severity or ""}**' if score else ''
             w(f'- **{cve.id}**{score_str}')
             w(f'  > {cve.description[:200]}')
             if cve.attack_tags:
-                w(f'  · tags: `{"`, `".join(cve.attack_tags)}`')
+                w(f'  tags: `{"`, `".join(cve.attack_tags)}`')
             for ap in cve.affected[:3]:
                 ver = f' ({"; ".join(ap.versions[:2])})' if ap.versions else ''
-                w(f'  · affects: *{ap.vendor}/{ap.product}*{ver}')
+                w(f'  affects: *{ap.vendor}/{ap.product}*{ver}')
             for poc in links.get(cve.id.upper(), []):
-                w(f'  · PoC: [{poc.url}]({poc.url}) · {poc.stars or 0}★')
+                if poc.source == 'twitter':
+                    w(f'  PoC: [{poc.url}]({poc.url}) {poc.stars or 0}* [tweet]')
+                else:
+                    w(f'  PoC: [{poc.url}]({poc.url}) {poc.stars or 0}*')
 
     if standalone:
         w(f'\n## Standalone PoCs ({len(standalone)})\n')
         for poc in sorted(standalone, key=lambda p: p.stars or 0, reverse=True):
-            refs = f' — refs: {", ".join(poc.cve_refs)}' if poc.cve_refs else ''
-            w(f'- [{poc.url}]({poc.url}) · {poc.stars or 0}★ · {poc.age_days or 0}d old{refs}')
+            refs = f' -- refs: {", ".join(poc.cve_refs)}' if poc.cve_refs else ''
+            src_tag = ' [tweet]' if poc.source == 'twitter' else ''
+            w(f'- [{poc.url}]({poc.url}) {poc.stars or 0}* {poc.age_days or 0}d{refs}{src_tag}')
             if poc.description:
                 w(f'  > {poc.description[:200]}')
 

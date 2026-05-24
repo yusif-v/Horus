@@ -20,7 +20,7 @@ class AffectedProduct:
 @dataclass
 class PoC:
     url: str
-    source: str                  # "github" | "gitlab" | "exploit-db"
+    source: str                  # "github" | "gitlab" | "exploit-db" | "twitter"
     stars: int | None = None
     age_days: int | None = None
     description: str | None = None

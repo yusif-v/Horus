@@ -60,9 +60,23 @@ def poc_from_github(raw: dict) -> PoC:
     )
 
 
+def poc_from_twitter(raw: dict) -> PoC:
+    """Build a PoC from one Twitter result dict (see sources/twitter.py)."""
+    text = raw.get('description', '') or ''
+    return PoC(
+        url=raw.get('url', ''),
+        source='twitter',
+        stars=raw.get('stars'),
+        age_days=raw.get('age_days'),
+        description=text[:300],
+        cve_refs=raw.get('cves') or extract_cves(text),
+    )
+
+
 def merge_findings(
     nvd_raw: list[dict],
     github_raw: list[dict],
+    twitter_raw: list[dict] | None = None,
 ) -> tuple[list[CVE], list[PoC]]:
     """Convert raw results to CVE + PoC lists. No CVEs are synthesized from
     GitHub-only findings — those live as standalone PoCs with cve_refs that
@@ -70,11 +84,13 @@ def merge_findings(
     """
     cves = [cve_from_nvd(r) for r in nvd_raw]
     pocs = [poc_from_github(r) for r in github_raw]
+    if twitter_raw:
+        pocs += [poc_from_twitter(r) for r in twitter_raw]
     return cves, pocs
 
 
 def link_pocs_to_cves(cves: list[CVE], pocs: list[PoC]) -> dict[str, list[PoC]]:
-    """Return CVE id → list of PoCs that reference it.
+    """Return CVE id -> list of PoCs that reference it.
 
     Pure derivation from `PoC.cve_refs` ∩ {cve.id for cve in cves}.
     """
