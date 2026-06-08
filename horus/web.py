@@ -429,7 +429,7 @@ td .id { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; }
   </form>
 </nav>
 <div class="container">
-{{ content }}
+{{ content|safe }}
 </div>
 </body>
 </html>"""
