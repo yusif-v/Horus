@@ -1,49 +1,69 @@
 """Enricher — EPSS (Exploit Prediction Scoring System).
 
-Fetches EPSS scores from FIRST.org and enriches CVEs.
+Fetches EPSS scores from the daily CSV dump and enriches CVEs.
+The CSV is ~5MB compressed, downloaded once per run.
 """
 
 from __future__ import annotations
 
-from ..sources.http import fetch_json
+import gzip
+import io
+import sys
+import urllib.request
 
 
 NAME = "EPSS Scores"
 DEFAULT_ENABLED = True
 
-EPSS_API_URL = "https://api.first.org/epss/v2/"
-EPSS_BATCH_SIZE = 15
+# EPSS daily CSV dump (compressed, ~5MB)
+EPSS_CSV_URL = "https://epss.cyentia.com/epss_scores-current.csv.gz"
 
 
 def enrich(cves, pocs, args, **kwargs) -> None:
     """Enrich CVEs with EPSS scores. Mutates CVEs in-place."""
-    cve_ids = [c.id for c in cves if c.id]
+    cve_ids = {c.id.upper() for c in cves if c.id}
     if not cve_ids:
         return
 
+    # Download the CSV dump
+    try:
+        req = urllib.request.Request(EPSS_CSV_URL, headers={
+            "User-Agent": "Horus-PoC-Scanner/0.7",
+        })
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read()
+    except Exception as e:
+        print(f"  [WARN] EPSS: cannot download CSV: {e}", file=sys.stderr)
+        return
+
+    # Decompress and parse
+    try:
+        csv_text = gzip.decompress(raw).decode("utf-8", errors="replace")
+    except Exception:
+        # Maybe it's not compressed
+        csv_text = raw.decode("utf-8", errors="replace")
+
+    # Build score lookup: cve_id -> epss_score
     scores: dict[str, float] = {}
-    for i in range(0, len(cve_ids), EPSS_BATCH_SIZE):
-        batch = cve_ids[i : i + EPSS_BATCH_SIZE]
-        url = f"{EPSS_API_URL}?cve={','.join(batch)}"
-        try:
-            data = fetch_json(url)
-        except Exception as e:
-            print(f"  [WARN] EPSS fetch failed: {e}", file=__import__("sys").stderr)
+    for line in csv_text.splitlines():
+        # CSV format: cve,epss,percentile
+        # Skip header lines starting with #
+        if line.startswith("#") or not line.strip():
             continue
-        for entry in data.get("data", []):
-            cve = entry.get("cve", "").upper()
-            epss = entry.get("epss")
-            if cve and epss is not None:
-                try:
-                    scores[cve] = float(epss)
-                except (ValueError, TypeError):
-                    pass
+        parts = line.split(",", 2)
+        if len(parts) >= 2:
+            cve = parts[0].strip().upper()
+            try:
+                epss = float(parts[1].strip())
+                scores[cve] = epss
+            except ValueError:
+                continue
 
     count = 0
     for cve in cves:
-        if cve.id in scores:
-            cve.epss_score = scores[cve.id]
+        if cve.id.upper() in scores:
+            cve.epss_score = scores[cve.id.upper()]
             count += 1
 
     if count:
-        print(f"  EPSS: {count} CVEs enriched", file=__import__("sys").stderr)
+        print(f"  EPSS: {count}/{len(cves)} CVEs enriched", file=sys.stderr)

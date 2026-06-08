@@ -93,18 +93,30 @@ class XSearchError(Exception):
 
 def _get_encryption_key() -> bytes:
     """Get Chrome's safe storage key from macOS keychain."""
-    result = subprocess.run(
+    attempts = [
         ["security", "find-generic-password", "-w",
          "-s", "Chrome Safe Storage", "-a", "Chrome"],
-        capture_output=True, text=True, timeout=10,
+        ["security", "find-generic-password", "-w",
+         "-s", "Chrome Safe Storage"],
+        ["security", "find-generic-password", "-w",
+         "-s", "Chromium Safe Storage", "-a", "Chromium"],
+    ]
+    for cmd in attempts:
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True, text=True, timeout=15,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                password = result.stdout.strip().encode()
+                return hashlib.pbkdf2_hmac("sha1", password, b"saltysalt", 1003, dklen=16)
+        except Exception:
+            continue
+
+    raise XAuthError(
+        "Cannot read Chrome Safe Storage key from macOS Keychain. "
+        "Try running from an interactive terminal, or set X_AUTH_TOKEN and X_CT0 env vars."
     )
-    if result.returncode != 0 or not result.stdout.strip():
-        raise XAuthError(
-            "Cannot read Chrome Safe Storage key from macOS Keychain. "
-            "Allow Terminal to access Keychain when prompted."
-        )
-    password = result.stdout.strip().encode()
-    return hashlib.pbkdf2_hmac("sha1", password, b"saltysalt", 1003, dklen=16)
 
 
 def _decrypt_cookie(enc: bytes, key: bytes) -> str:
@@ -185,13 +197,34 @@ def _extract_x_cookies() -> dict:
 
 
 def get_x_cookies() -> dict:
-    """Get X auth cookies from Chrome or environment."""
+    """Get X auth cookies from cache, Chrome, or environment."""
     # Allow env var override
     auth_token = os.environ.get("X_AUTH_TOKEN")
     ct0 = os.environ.get("X_CT0")
     if auth_token and ct0:
         return {"auth_token": auth_token, "ct0": ct0}
-    return _extract_x_cookies()
+
+    # Check cache file (~/.horus_x_cookies.json)
+    cache_path = Path.home() / ".horus_x_cookies.json"
+    if cache_path.exists():
+        try:
+            data = json.loads(cache_path.read_text())
+            if data.get("auth_token") and data.get("ct0"):
+                return data
+        except Exception:
+            pass
+
+    # Extract from Chrome
+    cookies = _extract_x_cookies()
+
+    # Cache for future runs
+    try:
+        cache_path.write_text(json.dumps(cookies))
+        os.chmod(cache_path, 0o600)  # user-only read
+    except Exception:
+        pass
+
+    return cookies
 
 
 # ── Query ID discovery ──────────────────────────────────────────────────────
