@@ -207,7 +207,7 @@ BASE_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{% block title %}Horus{% endblock %}</title>
+<title>{{ title }} — Horus</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -314,14 +314,12 @@ td .id { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; }
   </form>
 </nav>
 <div class="container">
-{% block content %}{% endblock %}
+{{ content }}
 </div>
 </body>
 </html>"""
 
-DASHBOARD_TEMPLATE = """{% extends "base" %}
-{% block title %}Dashboard — Horus{% endblock %}
-{% block content %}
+DASHBOARD_TEMPLATE = """
 <div class="stats">
   <div class="stat"><div class="label">Total CVEs</div><div class="value">{{ stats.cve_count }}</div></div>
   <div class="stat"><div class="label">Total PoCs</div><div class="value orange">{{ stats.poc_count }}</div></div>
@@ -380,11 +378,9 @@ DASHBOARD_TEMPLATE = """{% extends "base" %}
   </div>
 </div>
 {% endif %}
-{% endblock %}"""
+"""
 
-SEARCH_TEMPLATE = """{% extends "base" %}
-{% block title %}Search: {{ query }} — Horus{% endblock %}
-{% block content %}
+SEARCH_TEMPLATE = """
 <h2 style="margin-bottom:1rem;">Search results for "{{ query }}" <span style="color:var(--text-dim);font-weight:400;">({{ total }} found)</span></h2>
 
 {% if results %}
@@ -411,11 +407,9 @@ SEARCH_TEMPLATE = """{% extends "base" %}
 {% else %}
 <p style="color:var(--text-dim);">No CVEs found matching "{{ query }}".</p>
 {% endif %}
-{% endblock %}"""
+"""
 
-CVE_DETAIL_TEMPLATE = """{% extends "base" %}
-{% block title %}{{ data.cve.id }} — Horus{% endblock %}
-{% block content %}
+CVE_DETAIL_TEMPLATE = """
 <div class="cve-header">
   <div>
     <div class="cve-id">{{ data.cve.id }}</div>
@@ -504,11 +498,9 @@ CVE_DETAIL_TEMPLATE = """{% extends "base" %}
   </table>
 </div>
 {% endif %}
-{% endblock %}"""
+"""
 
-LIST_TEMPLATE = """{% extends "base" %}
-{% block title %}{{ title }} — Horus{% endblock %}
-{% block content %}
+LIST_TEMPLATE = """
 <h2 style="margin-bottom:1rem;">{{ title }} <span style="color:var(--text-dim);font-weight:400;">({{ total }})</span></h2>
 
 {% if filters %}
@@ -556,7 +548,7 @@ LIST_TEMPLATE = """{% extends "base" %}
 {% else %}
 <p style="color:var(--text-dim);">No results found.</p>
 {% endif %}
-{% endblock %}"""
+"""
 
 
 # ─── Routes ──────────────────────────────────────────────────────────────────
@@ -564,9 +556,11 @@ LIST_TEMPLATE = """{% extends "base" %}
 @app.route("/")
 def dashboard():
     stats = get_stats()
+    page_html = render_template_string(DASHBOARD_TEMPLATE, stats=stats)
     return render_template_string(
-        BASE_TEMPLATE + DASHBOARD_TEMPLATE,
-        stats=stats,
+        BASE_TEMPLATE,
+        title="Dashboard",
+        content=page_html,
         active="dashboard",
         search_query="",
     )
@@ -579,13 +573,15 @@ def search():
     if not query:
         return redirect(url_for("dashboard"))
     results, total = search_cves(query, page=page)
+    page_html = render_template_string(
+        SEARCH_TEMPLATE,
+        query=query, results=results, total=total,
+        page=page, per_page=20,
+    )
     return render_template_string(
-        BASE_TEMPLATE + SEARCH_TEMPLATE,
-        query=query,
-        results=results,
-        total=total,
-        page=page,
-        per_page=20,
+        BASE_TEMPLATE,
+        title=f"Search: {query}",
+        content=page_html,
         active="",
         search_query=query,
     )
@@ -595,15 +591,19 @@ def search():
 def cve_detail(cve_id):
     data = get_cve_detail(cve_id)
     if not data:
+        not_found = f'<h2>CVE not found</h2><p>The CVE <code>{cve_id}</code> was not found in the database. <a href="/search?q={cve_id}">Search for it?</a></p>'
         return render_template_string(
-            BASE_TEMPLATE + "<h2>CVE not found</h2><p>The CVE <code>{{ cve_id }}</code> was not found in the database. <a href=\"/search?q={{ cve_id }}\">Search for it?</a></p>",
-            cve_id=cve_id,
+            BASE_TEMPLATE,
+            title=f"CVE Not Found",
+            content=not_found,
             active="",
             search_query="",
         ), 404
+    page_html = render_template_string(CVE_DETAIL_TEMPLATE, data=data)
     return render_template_string(
-        BASE_TEMPLATE + CVE_DETAIL_TEMPLATE,
-        data=data,
+        BASE_TEMPLATE,
+        title=data["cve"]["id"],
+        content=page_html,
         active="",
         search_query="",
     )
@@ -649,18 +649,17 @@ def list_cves():
         {"type": "plain", "key": "published_at"},
     ]
 
-    return render_template_string(
-        BASE_TEMPLATE + LIST_TEMPLATE,
-        title="CVEs",
-        rows=rows,
-        total=total,
-        page=page,
-        per_page=20,
-        filters=filters,
-        columns=columns,
-        cells=cells,
+    page_html = render_template_string(
+        LIST_TEMPLATE,
+        title="CVEs", rows=rows, total=total, page=page, per_page=20,
+        filters=filters, columns=columns, cells=cells,
         prev_url=f"/cves?page={page - 1}{'&severity=' + severity if severity else ''}{'&kev=1' if kev_only else ''}" if page > 1 else None,
         next_url=f"/cves?page={page + 1}{'&severity=' + severity if severity else ''}{'&kev=1' if kev_only else ''}" if page * 20 < total else None,
+    )
+    return render_template_string(
+        BASE_TEMPLATE,
+        title="CVEs",
+        content=page_html,
         active="cves",
         search_query="",
     )
@@ -689,18 +688,17 @@ def list_pocs():
         {"type": "truncate", "key": "description"},
     ]
 
-    return render_template_string(
-        BASE_TEMPLATE + LIST_TEMPLATE,
-        title="Proof of Concepts",
-        rows=rows,
-        total=total,
-        page=page,
-        per_page=20,
-        filters=filters,
-        columns=columns,
-        cells=cells,
+    page_html = render_template_string(
+        LIST_TEMPLATE,
+        title="Proof of Concepts", rows=rows, total=total, page=page, per_page=20,
+        filters=filters, columns=columns, cells=cells,
         prev_url=f"/pocs?page={page - 1}{'&source=' + source if source else ''}" if page > 1 else None,
         next_url=f"/pocs?page={page + 1}{'&source=' + source if source else ''}" if page * 20 < total else None,
+    )
+    return render_template_string(
+        BASE_TEMPLATE,
+        title="Proof of Concepts",
+        content=page_html,
         active="pocs",
         search_query="",
     )
