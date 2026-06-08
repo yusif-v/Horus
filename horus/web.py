@@ -52,15 +52,43 @@ def _safe_int(value: str, default: int = 1, min_val: int = 1, max_val: int = 100
         return default
 
 
+def _rail_stats() -> dict:
+    """Cheap counts for the status rail at the top of every page."""
+    try:
+        with _db() as conn:
+            cve_n = conn.execute("SELECT COUNT(*) FROM cve").fetchone()[0]
+            poc_n = conn.execute("SELECT COUNT(*) FROM poc").fetchone()[0]
+            last = conn.execute("SELECT MAX(first_seen) FROM cve").fetchone()[0]
+        return {"cve_n": cve_n, "poc_n": poc_n, "last": last}
+    except Exception:
+        return {"cve_n": "—", "poc_n": "—", "last": None}
+
+
+def _error_page(message: str, active: str = "", search_query: str = "") -> str:
+    """Render an error within the standard page chrome."""
+    return render_page(
+        '<div class="eyebrow" style="color:var(--critical);">System error</div>'
+        '<h1 class="page-title">Something went wrong.</h1>'
+        '<div class="panel"><div class="panel-body" style="font-family:var(--mono);font-size:13px;color:var(--text-mid);white-space:pre-wrap;">{{ msg }}</div></div>',
+        title="Error", active=active, msg=message, search_query=search_query,
+    )
+
+
 def render_page(template: str, title: str, active: str = "", **context) -> str:
     """Render a page template inside the base template."""
+    context.setdefault("title", title)
     page_html = render_template_string(template, **context)
+    rail = _rail_stats()
     return render_template_string(
         BASE_TEMPLATE,
         title=title,
         content=page_html,
         active=active,
         search_query=context.get("search_query", ""),
+        db_cve_count=rail["cve_n"],
+        db_poc_count=rail["poc_n"],
+        db_last_update=rail["last"] or "",
+        now=datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
     )
 
 
@@ -144,6 +172,25 @@ def get_stats() -> dict:
             GROUP BY month ORDER BY month
         """).fetchall())
 
+        # Actionable threat metrics — what a security pro actually triages on
+        weaponized = conn.execute("""
+            SELECT COUNT(DISTINCT c.id) FROM cve c
+            JOIN poc_cve pc ON pc.cve_id = c.id
+            WHERE c.cvss_score >= 9
+        """).fetchone()[0]
+        imminent = conn.execute(
+            "SELECT COUNT(*) FROM cve WHERE epss_score >= 0.5"
+        ).fetchone()[0]
+        actionable = conn.execute("""
+            SELECT COUNT(DISTINCT c.id) FROM cve c
+            LEFT JOIN poc_cve pc ON pc.cve_id = c.id
+            WHERE c.kev = 1
+               OR (c.epss_score >= 0.5 AND pc.cve_id IS NOT NULL)
+        """).fetchone()[0]
+        latest_update = conn.execute(
+            "SELECT MAX(first_seen) FROM cve"
+        ).fetchone()[0]
+
     return {
         "cve_count": cve_count,
         "poc_count": poc_count,
@@ -163,6 +210,10 @@ def get_stats() -> dict:
         "highest_epss": highest_epss,
         "kev_cves": kev_cves,
         "monthly_cves": monthly_cves,
+        "weaponized": weaponized,
+        "imminent": imminent,
+        "actionable": actionable,
+        "latest_update": latest_update,
     }
 
 
@@ -287,145 +338,591 @@ BASE_TEMPLATE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ title }} — Horus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #0d1117; --surface: #161b22; --border: #30363d;
-  --text: #c9d1d9; --text-dim: #8b949e; --accent: #58a6ff;
-  --red: #f85149; --orange: #d29922; --green: #3fb950; --purple: #bc8cff;
-  --critical: #f85149; --high: #d29922; --medium: #d2992266; --low: #3fb95066;
+  --bg:        #0a0d0c;
+  --bg-deep:   #07090a;
+  --surface:   #11161a;
+  --surface-2: #161c21;
+  --border:    #1f2a30;
+  --border-hi: #2c3a42;
+  --text:      #d8dcd9;
+  --text-mid:  #8a9590;
+  --text-dim:  #586460;
+  --accent:    #ffb627;        /* operational amber */
+  --info:      #7eddd3;        /* terminal teal */
+  --critical:  #ff3b3b;
+  --high:      #ff8a3b;
+  --medium:    #f0c419;
+  --low:       #6bbf8a;
+  --kev-bg:    #2a0e0e;
+  --shadow:    0 0 0 1px rgba(255,182,39,.06), 0 24px 60px -30px rgba(0,0,0,.6);
+  --serif:     'Instrument Serif', Georgia, serif;
+  --sans:      'IBM Plex Sans', system-ui, sans-serif;
+  --display:   'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif;
+  --mono:      'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
 }
-body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
+html, body { height: 100%; }
+body {
+  background:
+    radial-gradient(1200px 600px at 75% -200px, rgba(255,182,39,.04), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(126,221,211,.03), transparent 60%),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.55;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 100;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px);
+  mix-blend-mode: overlay;
+}
+a { color: var(--text); text-decoration: none; }
+a:hover { color: var(--accent); }
+::selection { background: var(--accent); color: #0a0d0c; }
 
-/* Nav */
-.nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; gap: 2rem; height: 56px; }
-.nav .logo { font-weight: 700; font-size: 1.2rem; color: var(--text); }
-.nav .logo span { color: var(--accent); }
-.nav a { color: var(--text-dim); font-size: .9rem; }
-.nav a:hover, .nav a.active { color: var(--text); text-decoration: none; }
-.nav .search { margin-left: auto; }
-.nav .search input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: .4rem .8rem; border-radius: 6px; width: 260px; font-size: .85rem; }
-.nav .search input:focus { outline: none; border-color: var(--accent); }
+/* ── Top status rail ─────────────────────────────────── */
+.rail {
+  display: flex; align-items: center; gap: 1.5rem;
+  height: 28px; padding: 0 1.5rem;
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10.5px; letter-spacing: .08em;
+  color: var(--text-dim); text-transform: uppercase;
+}
+.rail .pulse {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--low); box-shadow: 0 0 0 0 rgba(107,191,138,.6);
+  animation: pulse 2.4s infinite;
+}
+.rail .pulse.warn { background: var(--accent); box-shadow: 0 0 0 0 rgba(255,182,39,.6); }
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(107,191,138,.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(107,191,138,0); }
+  100% { box-shadow: 0 0 0 0 rgba(107,191,138,0); }
+}
+.rail .sep { color: var(--border-hi); }
+.rail .right { margin-left: auto; display: flex; gap: 1.25rem; }
 
-/* Layout */
-.container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+/* ── Nav ──────────────────────────────────────────────── */
+.nav {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 1.5rem;
+  display: flex; align-items: center; gap: 2rem;
+  height: 64px;
+}
+.nav .logo {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.7rem;
+  letter-spacing: -.01em;
+  color: var(--text);
+  display: flex; align-items: baseline; gap: .35rem;
+}
+.nav .logo .dot { color: var(--accent); font-style: normal; }
+.nav .logo .sub {
+  font-family: var(--mono); font-style: normal;
+  font-size: 9.5px; letter-spacing: .25em;
+  color: var(--text-dim); text-transform: uppercase;
+  align-self: center; padding-left: .5rem;
+  border-left: 1px solid var(--border);
+}
+.nav .links { display: flex; gap: .25rem; margin-left: 1rem; }
+.nav .links a {
+  font-family: var(--mono);
+  font-size: 11.5px; letter-spacing: .12em;
+  color: var(--text-mid); text-transform: uppercase;
+  padding: .45rem .85rem;
+  border-radius: 2px;
+  position: relative;
+  transition: color .15s;
+}
+.nav .links a:hover { color: var(--text); background: var(--surface-2); }
+.nav .links a.active { color: var(--accent); }
+.nav .links a.active::after {
+  content: ""; position: absolute; left: .85rem; right: .85rem; bottom: -.45rem;
+  height: 2px; background: var(--accent);
+}
+.nav .search { margin-left: auto; position: relative; }
+.nav .search input {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  padding: .55rem .85rem .55rem 2rem;
+  width: 320px; font-size: 12px;
+  border-radius: 2px;
+  letter-spacing: .02em;
+}
+.nav .search input::placeholder { color: var(--text-dim); letter-spacing: .08em; }
+.nav .search input:focus { outline: none; border-color: var(--accent); background: var(--bg); }
+.nav .search::before {
+  content: "/"; position: absolute; left: .75rem; top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono); color: var(--text-dim); font-size: 12px;
+  pointer-events: none;
+}
 
-/* Stats grid */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; }
-.stat .label { font-size: .8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; }
-.stat .value { font-size: 1.75rem; font-weight: 700; margin-top: .25rem; }
-.stat .value.red { color: var(--red); }
-.stat .value.orange { color: var(--orange); }
-.stat .value.green { color: var(--green); }
-.stat .value.purple { color: var(--purple); }
-.stat .sub { font-size: .75rem; color: var(--text-dim); margin-top: .25rem; }
+/* ── Layout ───────────────────────────────────────────── */
+.container { max-width: 1320px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
 
-/* Cards */
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem; }
-.card-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); font-weight: 600; font-size: .95rem; }
-.card-body { padding: 1.25rem; }
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px; letter-spacing: .22em;
+  color: var(--text-dim); text-transform: uppercase;
+  display: flex; align-items: center; gap: .6rem;
+  margin-bottom: 1rem;
+}
+.eyebrow::before {
+  content: ""; width: 18px; height: 1px; background: var(--accent);
+}
 
-/* Tables */
-table { width: 100%; border-collapse: collapse; }
-th { text-align: left; padding: .6rem .75rem; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); border-bottom: 1px solid var(--border); }
-td { padding: .6rem .75rem; border-bottom: 1px solid var(--border); font-size: .85rem; }
-tr:hover td { background: rgba(88,166,255,.03); }
-td .id { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; }
+.page-title {
+  font-family: var(--display);
+  font-size: 2.2rem; font-weight: 600;
+  letter-spacing: -.015em;
+  line-height: 1.05;
+  margin-bottom: .35rem;
+}
+.page-title em {
+  font-family: var(--serif); font-style: italic; font-weight: 400;
+  color: var(--accent);
+}
+.page-subtitle {
+  color: var(--text-mid); font-size: 13px; max-width: 60ch;
+  margin-bottom: 2rem;
+}
 
-/* Badges */
-.badge { display: inline-block; padding: .15rem .5rem; border-radius: 12px; font-size: .7rem; font-weight: 600; text-transform: uppercase; }
-.badge-critical { background: var(--critical); color: #fff; }
-.badge-high { background: var(--high); color: #fff; }
-.badge-medium { background: var(--medium); color: var(--text); }
-.badge-low { background: var(--low); color: var(--text); }
-.badge-kev { background: var(--red); color: #fff; }
-.badge-epss { background: var(--purple); color: #fff; }
-.badge-source { background: var(--border); color: var(--text-dim); }
-.badge-tag { background: rgba(88,166,255,.15); color: var(--accent); }
+/* ── Hero threat-posture grid ────────────────────────── */
+.posture {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 2.5rem;
+  box-shadow: var(--shadow);
+}
+.posture .cell {
+  padding: 1.5rem 1.5rem 1.4rem;
+  border-right: 1px solid var(--border);
+  position: relative;
+  display: flex; flex-direction: column; gap: .4rem;
+  min-height: 150px;
+}
+.posture .cell:last-child { border-right: none; }
+.posture .cell .k {
+  font-family: var(--mono);
+  font-size: 10px; letter-spacing: .22em;
+  color: var(--text-dim); text-transform: uppercase;
+}
+.posture .cell .v {
+  font-family: var(--serif);
+  font-size: 4.2rem; line-height: .95; letter-spacing: -.02em;
+  font-weight: 400;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  margin-top: .25rem;
+}
+.posture .cell .v.danger { color: var(--critical); }
+.posture .cell .v.warn   { color: var(--accent);   }
+.posture .cell .v.info   { color: var(--info);     }
+.posture .cell .meta {
+  font-family: var(--mono);
+  font-size: 11px; color: var(--text-mid);
+  margin-top: auto;
+  display: flex; align-items: baseline; gap: .35rem;
+}
+.posture .cell .meta strong { color: var(--text); font-weight: 500; }
+.posture .cell .tick {
+  position: absolute; top: 1.5rem; right: 1.5rem;
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text-dim); letter-spacing: .15em;
+}
 
-/* Bar chart */
-.bar-chart { display: flex; flex-direction: column; gap: .5rem; }
-.bar-row { display: flex; align-items: center; gap: .75rem; }
-.bar-label { min-width: 140px; font-size: .8rem; color: var(--text-dim); text-align: right; flex-shrink: 0; }
-.bar-track { flex: 1; height: 20px; background: var(--bg); border-radius: 4px; overflow: hidden; position: relative; }
-.bar-fill { height: 100%; border-radius: 4px; transition: width .3s ease; min-width: 2px; }
-.bar-fill.critical { background: var(--critical); }
-.bar-fill.high { background: var(--high); }
-.bar-fill.medium { background: #d2992266; }
-.bar-fill.low { background: #3fb95066; }
-.bar-fill.epss-vhigh { background: var(--purple); }
-.bar-fill.epss-high { background: var(--accent); }
-.bar-fill.epss-med { background: var(--orange); }
-.bar-fill.epss-low { background: var(--green); }
-.bar-fill.kev { background: var(--red); }
-.bar-fill.monthly { background: var(--accent); }
-.bar-value { min-width: 40px; font-size: .8rem; font-weight: 600; color: var(--text); flex-shrink: 0; }
+/* ── Section ──────────────────────────────────────────── */
+.section { margin: 2.5rem 0; }
+.section-head {
+  display: flex; align-items: baseline; gap: 1rem;
+  padding-bottom: .75rem; margin-bottom: 1.25rem;
+  border-bottom: 1px dashed var(--border);
+}
+.section-head h2 {
+  font-family: var(--display);
+  font-size: 1.25rem; font-weight: 600;
+  letter-spacing: -.005em;
+}
+.section-head .count {
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: .15em;
+  color: var(--text-dim); text-transform: uppercase;
+}
+.section-head .actions { margin-left: auto; }
+.section-head .actions a {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text-mid); letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.section-head .actions a:hover { color: var(--accent); }
 
-/* EPSS bar */
-.epss-bar { display: inline-block; width: 60px; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; vertical-align: middle; margin-right: .25rem; }
-.epss-bar-fill { height: 100%; border-radius: 4px; background: var(--purple); }
+/* ── Card / Panel ─────────────────────────────────────── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.panel-head {
+  padding: .9rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: .75rem;
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--text-mid);
+}
+.panel-head .dot {
+  width: 6px; height: 6px; background: var(--accent); border-radius: 50%;
+}
+.panel-body { padding: 1.25rem; }
+.panel-body.flush { padding: 0; }
 
-/* Tag cloud */
-.tag-cloud { display: flex; flex-wrap: wrap; gap: .4rem; }
-.tag-cloud .badge-tag { font-size: .7rem; }
-.tag-cloud .badge-tag.large { font-size: .85rem; padding: .25rem .65rem; }
+/* ── Tables ──────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+thead th {
+  text-align: left;
+  padding: .65rem 1rem;
+  font-family: var(--mono);
+  font-size: 10px; letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  font-weight: 500;
+  background: var(--bg-deep);
+}
+tbody td {
+  padding: .7rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  vertical-align: middle;
+}
+tbody tr { position: relative; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: rgba(255,182,39,.025); }
+tbody tr.sev-CRITICAL td:first-child { box-shadow: inset 3px 0 0 var(--critical); }
+tbody tr.sev-HIGH td:first-child     { box-shadow: inset 3px 0 0 var(--high);     }
+tbody tr.sev-MEDIUM td:first-child   { box-shadow: inset 3px 0 0 var(--medium);   }
+tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);      }
+.cve-id-cell {
+  font-family: var(--mono); font-size: 12.5px;
+  color: var(--text); font-weight: 500; letter-spacing: -.01em;
+}
+.cve-id-cell:hover { color: var(--accent); }
+.num { font-family: var(--mono); font-size: 12px; }
+.num.strong { font-weight: 500; color: var(--text); }
+.desc-cell { color: var(--text-mid); max-width: 520px; }
 
-/* CVE detail */
-.cve-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-.cve-id { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1.5rem; font-weight: 700; }
-.cve-score { margin-left: auto; text-align: right; }
-.cve-score .score { font-size: 2rem; font-weight: 700; }
-.cve-score .severity { font-size: .8rem; }
-.section { margin-bottom: 1.5rem; }
-.section-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); margin-bottom: .75rem; }
-.description { color: var(--text-dim); line-height: 1.7; }
-.poc-item { display: flex; align-items: flex-start; gap: .75rem; padding: .75rem 0; border-bottom: 1px solid var(--border); }
+/* ── Badges ──────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .15rem .55rem;
+  font-family: var(--mono);
+  font-size: 9.5px; letter-spacing: .18em;
+  font-weight: 500;
+  text-transform: uppercase;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.badge-critical { background: rgba(255,59,59,.12);  color: var(--critical); border-color: rgba(255,59,59,.35); }
+.badge-high     { background: rgba(255,138,59,.1);  color: var(--high);     border-color: rgba(255,138,59,.3); }
+.badge-medium   { background: rgba(240,196,25,.08); color: var(--medium);   border-color: rgba(240,196,25,.25); }
+.badge-low      { background: rgba(107,191,138,.08);color: var(--low);      border-color: rgba(107,191,138,.25); }
+.badge-kev {
+  background: var(--kev-bg); color: var(--critical);
+  border-color: var(--critical); font-weight: 600;
+}
+.badge-kev::before { content: "⏵"; font-size: 10px; }
+.badge-epss     { background: rgba(126,221,211,.08); color: var(--info); border-color: rgba(126,221,211,.25); }
+.badge-source   { background: var(--surface-2); color: var(--text-mid); border-color: var(--border); }
+.badge-tag      { background: rgba(255,182,39,.06); color: var(--accent); border-color: rgba(255,182,39,.2); }
+
+/* ── Bar chart (horizontal) ──────────────────────────── */
+.bar-chart { display: flex; flex-direction: column; gap: .6rem; }
+.bar-row { display: grid; grid-template-columns: 150px 1fr 60px; align-items: center; gap: 1rem; }
+.bar-label {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text-mid); letter-spacing: .08em;
+  text-transform: uppercase; text-align: right;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bar-track {
+  height: 6px; background: var(--bg-deep);
+  border-radius: 2px; overflow: hidden;
+  position: relative;
+}
+.bar-fill { height: 100%; transition: width .6s cubic-bezier(.2,.7,.2,1); min-width: 2px; }
+.bar-fill.critical  { background: linear-gradient(90deg, var(--critical), #ff7060); }
+.bar-fill.high      { background: linear-gradient(90deg, var(--high), #ffb573); }
+.bar-fill.medium    { background: linear-gradient(90deg, var(--medium), #f5d96b); }
+.bar-fill.low       { background: linear-gradient(90deg, var(--low), #9fd8b5); }
+.bar-fill.epss-vhigh{ background: linear-gradient(90deg, var(--critical), var(--accent)); }
+.bar-fill.epss-high { background: linear-gradient(90deg, var(--accent), #ffd166); }
+.bar-fill.epss-med  { background: linear-gradient(90deg, var(--info), #a5e9e0); }
+.bar-fill.epss-low  { background: linear-gradient(90deg, var(--low), #9fd8b5); }
+.bar-fill.monthly   { background: linear-gradient(90deg, var(--accent), var(--info)); }
+.bar-value {
+  font-family: var(--mono); font-size: 12px;
+  color: var(--text); font-weight: 500;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── EPSS micro-bar ──────────────────────────────────── */
+.epss-bar {
+  display: inline-block; width: 50px; height: 4px;
+  background: var(--bg-deep); border-radius: 2px;
+  overflow: hidden; vertical-align: middle;
+  margin-right: .4rem;
+}
+.epss-bar-fill { height: 100%; background: linear-gradient(90deg, var(--info), var(--accent)); }
+.epss-text { font-family: var(--mono); font-size: 11px; color: var(--text-mid); }
+
+/* ── Tag cloud ───────────────────────────────────────── */
+.tag-cloud { display: flex; flex-wrap: wrap; gap: .35rem .4rem; }
+.tag-cloud .badge.large {
+  font-size: 11px; padding: .25rem .7rem;
+  background: rgba(255,182,39,.12); border-color: rgba(255,182,39,.4);
+}
+
+/* ── CVE detail ──────────────────────────────────────── */
+.cve-hero {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  position: relative; overflow: hidden;
+}
+.cve-hero::before {
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(600px 200px at 90% 0%, rgba(255,182,39,.06), transparent 60%);
+  pointer-events: none;
+}
+.cve-hero .id {
+  font-family: var(--mono);
+  font-size: 1.5rem; font-weight: 500;
+  letter-spacing: -.01em; color: var(--text);
+  margin-bottom: .75rem;
+}
+.cve-hero .meta-line {
+  display: flex; gap: .5rem; flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+.cve-hero .desc {
+  color: var(--text-mid); font-size: 14.5px;
+  max-width: 70ch; line-height: 1.65;
+  margin-bottom: 1rem;
+}
+.cve-hero .timeline {
+  display: flex; gap: 2rem; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text-dim); letter-spacing: .08em;
+  text-transform: uppercase;
+  padding-top: 1rem; border-top: 1px dashed var(--border);
+}
+.cve-hero .timeline strong { color: var(--text); font-weight: 500; }
+
+.gauges { display: flex; flex-direction: column; gap: 1.25rem; min-width: 220px; }
+.gauge { text-align: right; }
+.gauge .label {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text-dim); letter-spacing: .2em;
+  text-transform: uppercase; margin-bottom: .3rem;
+}
+.gauge .val {
+  font-family: var(--serif);
+  font-size: 2.6rem; line-height: 1; letter-spacing: -.02em;
+  color: var(--text); font-variant-numeric: tabular-nums;
+}
+.gauge .val.crit { color: var(--critical); }
+.gauge .val.hi   { color: var(--high);     }
+.gauge .val.md   { color: var(--medium);   }
+.gauge .val.lo   { color: var(--low);      }
+.gauge .val.info { color: var(--info);     }
+.gauge .track {
+  height: 3px; background: var(--bg-deep);
+  margin-top: .4rem; border-radius: 2px; overflow: hidden;
+}
+.gauge .track .f { height: 100%; background: var(--accent); transition: width .6s; }
+.gauge .track .f.crit { background: var(--critical); }
+.gauge .track .f.hi   { background: var(--high);     }
+.gauge .track .f.lo   { background: var(--low);      }
+.gauge .track .f.info { background: var(--info);     }
+
+.kv-grid {
+  display: grid; grid-template-columns: 140px 1fr;
+  row-gap: .55rem; column-gap: 1.25rem;
+  font-size: 13px;
+}
+.kv-grid dt {
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--text-dim); letter-spacing: .12em;
+  text-transform: uppercase; padding-top: .15rem;
+}
+.kv-grid dd { color: var(--text); }
+
+/* PoC list */
+.poc-list { display: flex; flex-direction: column; }
+.poc-item {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 1rem; padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  align-items: start;
+}
 .poc-item:last-child { border-bottom: none; }
-.poc-url { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; word-break: break-all; }
-.poc-meta { font-size: .75rem; color: var(--text-dim); margin-top: .25rem; }
-.poc-desc { font-size: .8rem; color: var(--text-dim); margin-top: .25rem; }
+.poc-url {
+  font-family: var(--mono); font-size: 12.5px;
+  word-break: break-all; color: var(--text);
+}
+.poc-url:hover { color: var(--accent); }
+.poc-meta {
+  display: flex; gap: .5rem; flex-wrap: wrap; align-items: center;
+  margin-top: .35rem;
+  font-family: var(--mono); font-size: 11px; color: var(--text-mid);
+}
+.poc-desc { color: var(--text-mid); font-size: 13px; margin-top: .5rem; max-width: 70ch; }
+.poc-stars {
+  font-family: var(--mono); font-size: 12px; color: var(--accent);
+  white-space: nowrap; text-align: right;
+}
 
-/* Pagination */
-.pagination { display: flex; align-items: center; gap: .5rem; margin-top: 1rem; justify-content: center; }
-.pagination a, .pagination span { padding: .4rem .75rem; border-radius: 6px; font-size: .85rem; }
-.pagination a { background: var(--surface); border: 1px solid var(--border); }
-.pagination a:hover { background: var(--border); text-decoration: none; }
-.pagination .current { background: var(--accent); color: #fff; }
+/* ── Filter bar ──────────────────────────────────────── */
+.filter-bar {
+  display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border);
+  padding: .75rem 1rem; border-radius: 3px;
+  margin-bottom: 1.5rem;
+}
+.filter-group { display: flex; gap: .35rem; align-items: center; flex-wrap: wrap; }
+.filter-group .label {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: .2em; color: var(--text-dim);
+  text-transform: uppercase; margin-right: .35rem;
+}
+.chip {
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: .3rem .7rem;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  background: var(--bg-deep);
+  color: var(--text-mid);
+  transition: all .15s;
+}
+.chip:hover { color: var(--text); border-color: var(--border-hi); }
+.chip.active { background: var(--accent); color: #0a0d0c; border-color: var(--accent); font-weight: 500; }
 
-/* Search results */
-.result-item { padding: 1rem 0; border-bottom: 1px solid var(--border); }
+/* ── Pagination ──────────────────────────────────────── */
+.pagination {
+  display: flex; align-items: center; gap: .5rem;
+  margin-top: 1.5rem; justify-content: center;
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: .1em; text-transform: uppercase;
+}
+.pagination a, .pagination span {
+  padding: .5rem .9rem;
+  border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-mid);
+  border-radius: 2px;
+}
+.pagination a:hover { color: var(--accent); border-color: var(--accent); }
+.pagination .current { background: var(--accent); color: #0a0d0c; border-color: var(--accent); }
+
+/* ── Search results ──────────────────────────────────── */
+.result-item {
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--border);
+}
 .result-item:last-child { border-bottom: none; }
-.result-id { font-family: 'SF Mono', 'Fira Code', monospace; font-weight: 600; font-size: 1rem; }
-.result-desc { font-size: .85rem; color: var(--text-dim); margin-top: .25rem; }
+.result-id {
+  font-family: var(--mono); font-size: 1.05rem;
+  font-weight: 500; color: var(--text);
+}
+.result-id:hover { color: var(--accent); }
+.result-meta {
+  display: flex; gap: .5rem; flex-wrap: wrap;
+  align-items: center; margin: .5rem 0;
+}
+.result-desc {
+  font-size: 13px; color: var(--text-mid);
+  max-width: 80ch; line-height: 1.6;
+}
 
-/* Two column layout */
+/* ── Layouts ─────────────────────────────────────────── */
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
+.three-col { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1.5rem; }
+.triage-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .nav { padding: 0 1rem; gap: 1rem; }
-  .nav .search input { width: 160px; }
-  .container { padding: 1rem; }
-  .cve-score { margin-left: 0; text-align: left; }
-  .two-col { grid-template-columns: 1fr; }
-  .three-col { grid-template-columns: 1fr; }
-  .bar-label { min-width: 80px; font-size: .7rem; }
+/* ── Responsive ──────────────────────────────────────── */
+@media (max-width: 960px) {
+  .posture { grid-template-columns: 1fr 1fr; }
+  .posture .cell:nth-child(2) { border-right: none; }
+  .posture .cell:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+  .two-col, .three-col { grid-template-columns: 1fr; }
+  .cve-hero { grid-template-columns: 1fr; }
+  .gauges { flex-direction: row; flex-wrap: wrap; }
+  .gauge { text-align: left; flex: 1 1 140px; }
+}
+@media (max-width: 640px) {
+  .nav { padding: 0 1rem; gap: 1rem; height: auto; flex-wrap: wrap; padding: .75rem 1rem; }
+  .nav .search { margin-left: 0; width: 100%; }
+  .nav .search input { width: 100%; }
+  .nav .links { margin-left: 0; flex-wrap: wrap; }
+  .container { padding: 1.25rem 1rem 3rem; }
+  .posture { grid-template-columns: 1fr; }
+  .posture .cell { border-right: none; border-bottom: 1px solid var(--border); }
+  .posture .cell:last-child { border-bottom: none; }
+  .bar-row { grid-template-columns: 100px 1fr 50px; gap: .6rem; }
 }
 </style>
 </head>
 <body>
+<div class="rail">
+  <span><span class="pulse"></span> SYSTEM ONLINE</span>
+  <span class="sep">│</span>
+  <span>DB · {{ db_cve_count|default('—') }} CVE / {{ db_poc_count|default('—') }} POC</span>
+  <span class="sep">│</span>
+  <span>LAST INGEST · {{ db_last_update[:16] if db_last_update else '—' }}</span>
+  <div class="right">
+    <span>BUILD · HORUS v0.5</span>
+    <span class="sep">│</span>
+    <span>{{ now }}</span>
+  </div>
+</div>
 <nav class="nav">
-  <a href="/" class="logo">Horus<span>.</span></a>
-  <a href="/" class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
-  <a href="/cves" class="{% if active == 'cves' %}active{% endif %}">CVEs</a>
-  <a href="/cves?sort=exploit" class="{% if active == 'priority' %}active{% endif %}">Priority</a>
-  <a href="/pocs" class="{% if active == 'pocs' %}active{% endif %}">PoCs</a>
+  <a href="/" class="logo">Horus<span class="dot">.</span><span class="sub">CVE INTEL</span></a>
+  <div class="links">
+    <a href="/" class="{% if active == 'dashboard' %}active{% endif %}">Overview</a>
+    <a href="/triage" class="{% if active == 'triage' %}active{% endif %}">Triage</a>
+    <a href="/cves" class="{% if active == 'cves' %}active{% endif %}">CVEs</a>
+    <a href="/pocs" class="{% if active == 'pocs' %}active{% endif %}">PoCs</a>
+  </div>
   <form class="search" action="/search" method="get">
-    <input type="text" name="q" placeholder="Search CVE..." value="{{ search_query|default('') }}">
+    <input type="text" name="q" placeholder="CVE-ID OR KEYWORD" value="{{ search_query|default('') }}" autocomplete="off">
   </form>
 </nav>
 <div class="container">
@@ -435,95 +932,128 @@ td .id { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; }
 </html>"""
 
 DASHBOARD_TEMPLATE = """
-<div class="stats">
-  <div class="stat"><div class="label">Total CVEs</div><div class="value">{{ stats.cve_count }}</div></div>
-  <div class="stat"><div class="label">Total PoCs</div><div class="value orange">{{ stats.poc_count }}</div><div class="sub">{{ stats.cves_with_pocs }} CVEs linked</div></div>
-  <div class="stat"><div class="label">KEV</div><div class="value red">{{ stats.kev_count }}</div><div class="sub">known exploited</div></div>
-  <div class="stat"><div class="label">With EPSS</div><div class="value purple">{{ stats.with_epss }}</div><div class="sub">avg: {{ "%.2f%%"|format(stats.avg_epss * 100) if stats.avg_epss else 'N/A' }}</div></div>
-  <div class="stat"><div class="label">Avg Exploitability</div><div class="value green">{{ "%.1f"|format(stats.avg_exploit) if stats.avg_exploit else 'N/A' }}<span style="font-size:.6em;">/10</span></div></div>
-</div>
+<div class="eyebrow">Threat posture · live</div>
+<h1 class="page-title">Operating <em>picture</em>.</h1>
+<p class="page-subtitle">Aggregated CVE and exploit intelligence from NVD, CISA KEV, EPSS, GitHub PoC, and Exploit-DB. Numbers reflect the current state of the local index.</p>
 
-<!-- Severity breakdown bar chart -->
-{% if stats.severity_breakdown %}
-<div class="card">
-  <div class="card-header">CVEs by Severity</div>
-  <div class="card-body">
-    <div class="bar-chart">
-    {% set sev_max = stats.severity_breakdown|map(attribute='cnt')|max %}
-    {% for sev in stats.severity_breakdown %}
-      <div class="bar-row">
-        <span class="bar-label">{{ sev.cvss_severity }}</span>
-        <div class="bar-track">
-          <div class="bar-fill {{ sev.cvss_severity|lower }}" style="width: {{ (sev.cnt / sev_max * 100)|int }}%;"></div>
-        </div>
-        <span class="bar-value">{{ sev.cnt }}</span>
-      </div>
-    {% endfor %}
-    </div>
+<div class="posture">
+  <div class="cell">
+    <div class="k">Actionable now</div>
+    <div class="v warn">{{ stats.actionable }}</div>
+    <div class="meta">KEV <strong>{{ stats.kev_count }}</strong> · EPSS≥0.5 with PoC <strong>{{ stats.imminent }}</strong></div>
+    <div class="tick">01</div>
+  </div>
+  <div class="cell">
+    <div class="k">Weaponized</div>
+    <div class="v danger">{{ stats.weaponized }}</div>
+    <div class="meta">CVSS≥9 with public PoC</div>
+    <div class="tick">02</div>
+  </div>
+  <div class="cell">
+    <div class="k">Imminent (EPSS≥0.5)</div>
+    <div class="v">{{ stats.imminent }}</div>
+    <div class="meta">avg EPSS <strong>{{ "%.2f%%"|format(stats.avg_epss * 100) if stats.avg_epss else '—' }}</strong></div>
+    <div class="tick">03</div>
+  </div>
+  <div class="cell">
+    <div class="k">PoCs linked</div>
+    <div class="v info">{{ stats.linked_pocs }}</div>
+    <div class="meta">across <strong>{{ stats.cves_with_pocs }}</strong> CVEs</div>
+    <div class="tick">04</div>
   </div>
 </div>
-{% endif %}
 
-<!-- EPSS distribution -->
-{% if stats.epss_buckets %}
-<div class="card">
-  <div class="card-header">EPSS Distribution</div>
-  <div class="card-body">
-    <div class="bar-chart">
-    {% set epss_max = stats.epss_buckets|map(attribute='cnt')|max %}
-    {% set epss_classes = {'Very High (≥0.5)': 'epss-vhigh', 'High (0.1-0.5)': 'epss-high', 'Medium (0.01-0.1)': 'epss-med', 'Low (<0.01)': 'epss-low'} %}
-    {% for bucket in stats.epss_buckets %}
-      <div class="bar-row">
-        <span class="bar-label">{{ bucket.bucket }}</span>
-        <div class="bar-track">
-          <div class="bar-fill {{ epss_classes.get(bucket.bucket, 'epss-low') }}" style="width: {{ (bucket.cnt / epss_max * 100)|int }}%;"></div>
-        </div>
-        <span class="bar-value">{{ bucket.cnt }}</span>
-      </div>
-    {% endfor %}
-    </div>
+{% if stats.kev_cves %}
+<div class="section">
+  <div class="section-head">
+    <h2>Known exploited <em style="font-family:var(--serif);font-style:italic;color:var(--critical);">/ kev</em></h2>
+    <span class="count">{{ stats.kev_count }} total</span>
+    <div class="actions"><a href="/triage?lens=kev">View all →</a></div>
   </div>
-</div>
-{% endif %}
-
-<div class="two-col">
-  <div class="card">
-    <div class="card-header">Recent CVEs</div>
-    <div class="card-body" style="padding:0;">
+  <div class="panel">
+    <div class="panel-body flush">
       <table>
-        <thead><tr><th>ID</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>Published</th></tr></thead>
+        <thead><tr><th>CVE</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>Vector summary</th></tr></thead>
         <tbody>
-        {% for cve in stats.recent_cves %}
-        <tr>
-          <td><a href="/cve/{{ cve.id }}" class="id">{{ cve.id }}</a></td>
-          <td>{{ cve.cvss_score or 'N/A' }}</td>
-          <td>{% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }}</span>{% else %}N/A{% endif %}</td>
-          <td>{% if cve.epss_score is not none %}
-            <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span>
-            {{ "%.1f%%"|format(cve.epss_score * 100) }}
-          {% else %}—{% endif %}</td>
-          <td>{{ cve.published_at[:10] if cve.published_at else 'N/A' }}</td>
+        {% for cve in stats.kev_cves %}
+        <tr class="sev-{{ cve.cvss_severity }}">
+          <td><a href="/cve/{{ cve.id }}" class="cve-id-cell">{{ cve.id }}</a></td>
+          <td><span class="num strong">{{ cve.cvss_score or '—' }}</span></td>
+          <td>{% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }}</span>{% else %}—{% endif %}</td>
+          <td>{% if cve.epss_score is not none %}<span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span><span class="epss-text">{{ "%.1f%%"|format(cve.epss_score * 100) }}</span>{% else %}—{% endif %}</td>
+          <td class="desc-cell" style="max-width:480px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ cve.description[:140] if cve.description else '—' }}</td>
         </tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
-  <div class="card">
-    <div class="card-header">Highest EPSS CVEs</div>
-    <div class="card-body" style="padding:0;">
+</div>
+{% endif %}
+
+<div class="two-col">
+  {% if stats.severity_breakdown %}
+  <div>
+    <div class="section-head">
+      <h2>Severity mix</h2>
+      <span class="count">{{ stats.cve_count }} indexed</span>
+    </div>
+    <div class="panel"><div class="panel-body">
+      <div class="bar-chart">
+      {% set sev_max = stats.severity_breakdown|map(attribute='cnt')|max %}
+      {% for sev in stats.severity_breakdown %}
+        <div class="bar-row">
+          <span class="bar-label">{{ sev.cvss_severity }}</span>
+          <div class="bar-track"><div class="bar-fill {{ sev.cvss_severity|lower }}" style="width: {{ (sev.cnt / sev_max * 100)|int }}%;"></div></div>
+          <span class="bar-value">{{ sev.cnt }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+
+  {% if stats.epss_buckets %}
+  <div>
+    <div class="section-head">
+      <h2>Exploit probability</h2>
+      <span class="count">EPSS · {{ stats.with_epss }} scored</span>
+    </div>
+    <div class="panel"><div class="panel-body">
+      <div class="bar-chart">
+      {% set epss_max = stats.epss_buckets|map(attribute='cnt')|max %}
+      {% set epss_classes = {'Very High (≥0.5)': 'epss-vhigh', 'High (0.1-0.5)': 'epss-high', 'Medium (0.01-0.1)': 'epss-med', 'Low (<0.01)': 'epss-low'} %}
+      {% for bucket in stats.epss_buckets %}
+        <div class="bar-row">
+          <span class="bar-label">{{ bucket.bucket }}</span>
+          <div class="bar-track"><div class="bar-fill {{ epss_classes.get(bucket.bucket, 'epss-low') }}" style="width: {{ (bucket.cnt / epss_max * 100)|int }}%;"></div></div>
+          <span class="bar-value">{{ bucket.cnt }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="section-head">
+    <h2>Highest <em>EPSS</em></h2>
+    <span class="count">most likely to be exploited</span>
+    <div class="actions"><a href="/cves?sort=epss">All by EPSS →</a></div>
+  </div>
+  <div class="panel">
+    <div class="panel-body flush">
       <table>
-        <thead><tr><th>ID</th><th>CVSS</th><th>EPSS</th><th>KEV</th></tr></thead>
+        <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>KEV</th><th>Description</th></tr></thead>
         <tbody>
         {% for cve in stats.highest_epss %}
-        <tr>
-          <td><a href="/cve/{{ cve.id }}" class="id">{{ cve.id }}</a></td>
-          <td>{{ cve.cvss_score or 'N/A' }}</td>
-          <td>
-            <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span>
-            <span class="badge badge-epss">{{ "%.2f%%"|format(cve.epss_score * 100) }}</span>
-          </td>
-          <td>{% if cve.kev %}<span class="badge badge-kev">KEV</span>{% else %}—{% endif %}</td>
+        <tr class="sev-{{ cve.cvss_severity }}">
+          <td><a href="/cve/{{ cve.id }}" class="cve-id-cell">{{ cve.id }}</a></td>
+          <td><span class="num strong">{{ cve.cvss_score or '—' }}</span></td>
+          <td><span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span><span class="badge badge-epss">{{ "%.2f%%"|format(cve.epss_score * 100) }}</span></td>
+          <td>{% if cve.kev %}<span class="badge badge-kev">KEV</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+          <td class="desc-cell" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{% if cve.description %}{{ cve.description[:140] }}{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
         </tbody>
@@ -532,302 +1062,319 @@ DASHBOARD_TEMPLATE = """
   </div>
 </div>
 
-<!-- KEV CVEs -->
-{% if stats.kev_cves %}
-<div class="card">
-  <div class="card-header">Known Exploited Vulnerabilities (KEV)</div>
-  <div class="card-body" style="padding:0;">
-    <table>
-      <thead><tr><th>ID</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>Description</th></tr></thead>
-      <tbody>
-      {% for cve in stats.kev_cves %}
-      <tr>
-        <td><a href="/cve/{{ cve.id }}" class="id">{{ cve.id }}</a></td>
-        <td>{{ cve.cvss_score or 'N/A' }}</td>
-        <td>{% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }}</span>{% else %}N/A{% endif %}</td>
-        <td>{% if cve.epss_score is not none %}
-          <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span>
-          {{ "%.1f%%"|format(cve.epss_score * 100) }}
-        {% else %}—{% endif %}</td>
-        <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ cve.description[:120] if cve.description else '—' }}</td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
-
 <div class="two-col">
-  <div class="card">
-    <div class="card-header">Top PoCs by Stars</div>
-    <div class="card-body" style="padding:0;">
+  <div>
+    <div class="section-head"><h2>Recent ingest</h2><span class="count">last 10</span></div>
+    <div class="panel"><div class="panel-body flush">
+      <table>
+        <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>Published</th></tr></thead>
+        <tbody>
+        {% for cve in stats.recent_cves %}
+        <tr class="sev-{{ cve.cvss_severity }}">
+          <td><a href="/cve/{{ cve.id }}" class="cve-id-cell">{{ cve.id }}</a></td>
+          <td><span class="num strong">{{ cve.cvss_score or '—' }}</span> {% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity[:3] }}</span>{% endif %}</td>
+          <td>{% if cve.epss_score is not none %}<span class="epss-text">{{ "%.1f%%"|format(cve.epss_score * 100) }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+          <td><span class="num">{{ cve.published_at[:10] if cve.published_at else '—' }}</span></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div></div>
+  </div>
+  <div>
+    <div class="section-head"><h2>Top PoCs <em>by reach</em></h2><span class="count">★ ranked</span></div>
+    <div class="panel"><div class="panel-body flush">
       <table>
         <thead><tr><th>Source</th><th>Stars</th><th>URL</th></tr></thead>
         <tbody>
         {% for poc in stats.top_pocs %}
         <tr>
           <td><span class="badge badge-source">{{ poc.source }}</span></td>
-          <td>★ {{ poc.stars }}</td>
-          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="{{ poc.url }}" target="_blank">{{ poc.url[:60] }}...</a></td>
+          <td><span class="num strong" style="color:var(--accent);">★ {{ poc.stars }}</span></td>
+          <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="{{ poc.url }}" target="_blank" style="font-family:var(--mono);font-size:12px;">{{ poc.url[:55] }}…</a></td>
         </tr>
         {% endfor %}
         </tbody>
       </table>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-header">Attack Tags</div>
-    <div class="card-body">
-      {% if stats.top_tags %}
-      <div class="tag-cloud">
-        {% set max_tag = stats.top_tags|map(attribute='cnt')|max %}
-        {% for tag in stats.top_tags %}
-        <span class="badge badge-tag {% if tag.cnt > max_tag * 0.6 %}large{% endif %}">{{ tag.tag }} ({{ tag.cnt }})</span>
-        {% endfor %}
-      </div>
-      {% else %}
-      <p style="color:var(--text-dim);">No attack tags available.</p>
-      {% endif %}
-    </div>
+    </div></div>
   </div>
 </div>
 
-<!-- Monthly trend -->
-{% if stats.monthly_cves %}
-<div class="card">
-  <div class="card-header">CVEs Published per Month (Last 6 Months)</div>
-  <div class="card-body">
-    <div class="bar-chart">
-    {% set month_max = stats.monthly_cves|map(attribute='cnt')|max %}
-    {% for m in stats.monthly_cves %}
-      <div class="bar-row">
-        <span class="bar-label">{{ m.month }}</span>
-        <div class="bar-track">
-          <div class="bar-fill monthly" style="width: {{ (m.cnt / month_max * 100)|int }}%;"></div>
-        </div>
-        <span class="bar-value">{{ m.cnt }}</span>
-      </div>
-    {% endfor %}
+{% if stats.top_tags %}
+<div class="section">
+  <div class="section-head"><h2>Attack surface</h2><span class="count">top vectors observed</span></div>
+  <div class="panel"><div class="panel-body">
+    {% set max_tag = stats.top_tags|map(attribute='cnt')|max %}
+    <div class="tag-cloud">
+      {% for tag in stats.top_tags %}
+      <span class="badge badge-tag {% if tag.cnt > max_tag * 0.6 %}large{% endif %}">{{ tag.tag }} · {{ tag.cnt }}</span>
+      {% endfor %}
     </div>
-  </div>
+  </div></div>
 </div>
 {% endif %}
+
+<div class="two-col">
+  {% if stats.monthly_cves %}
+  <div>
+    <div class="section-head"><h2>Publication tempo</h2><span class="count">last 6 months</span></div>
+    <div class="panel"><div class="panel-body">
+      <div class="bar-chart">
+      {% set month_max = stats.monthly_cves|map(attribute='cnt')|max %}
+      {% for m in stats.monthly_cves %}
+        <div class="bar-row">
+          <span class="bar-label">{{ m.month }}</span>
+          <div class="bar-track"><div class="bar-fill monthly" style="width: {{ (m.cnt / month_max * 100)|int }}%;"></div></div>
+          <span class="bar-value">{{ m.cnt }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+
+  {% if stats.sources %}
+  <div>
+    <div class="section-head"><h2>PoC sources</h2><span class="count">{{ stats.poc_count }} artifacts</span></div>
+    <div class="panel"><div class="panel-body">
+      <div class="bar-chart">
+      {% set src_max = stats.sources|map(attribute='cnt')|max %}
+      {% for src in stats.sources %}
+        <div class="bar-row">
+          <span class="bar-label">{{ src.source }}</span>
+          <div class="bar-track"><div class="bar-fill epss-high" style="width: {{ (src.cnt / src_max * 100)|int }}%;"></div></div>
+          <span class="bar-value">{{ src.cnt }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+</div>
 
 {% if stats.categories %}
-<div class="card">
-  <div class="card-header">CVEs by Product Category</div>
-  <div class="card-body">
+<div class="section">
+  <div class="section-head"><h2>Affected product categories</h2><span class="count">{{ stats.categories|length }} categories</span></div>
+  <div class="panel"><div class="panel-body">
     <div class="tag-cloud">
     {% for cat in stats.categories %}
-    <span class="badge badge-tag {% if cat.cnt > 50 %}large{% endif %}">{{ cat.category }} ({{ cat.cnt }})</span>
+    <span class="badge badge-tag {% if cat.cnt > 50 %}large{% endif %}">{{ cat.category }} · {{ cat.cnt }}</span>
     {% endfor %}
     </div>
-  </div>
-</div>
-{% endif %}
-
-{% if stats.sources %}
-<div class="card">
-  <div class="card-header">PoC Sources</div>
-  <div class="card-body">
-    <div class="bar-chart">
-    {% set src_max = stats.sources|map(attribute='cnt')|max %}
-    {% for src in stats.sources %}
-      <div class="bar-row">
-        <span class="bar-label">{{ src.source }}</span>
-        <div class="bar-track">
-          <div class="bar-fill high" style="width: {{ (src.cnt / src_max * 100)|int }}%;"></div>
-        </div>
-        <span class="bar-value">{{ src.cnt }}</span>
-      </div>
-    {% endfor %}
-    </div>
-  </div>
+  </div></div>
 </div>
 {% endif %}
 """
 
 SEARCH_TEMPLATE = """
-<h2 style="margin-bottom:1rem;">Search results for "{{ query }}" <span style="color:var(--text-dim);font-weight:400;">({{ total }} found)</span></h2>
+<div class="eyebrow">Query</div>
+<h1 class="page-title">"{{ query }}" <em>· {{ total }} match{% if total != 1 %}es{% endif %}</em></h1>
 
 {% if results %}
+<div class="panel"><div class="panel-body">
 {% for cve in results %}
 <div class="result-item">
   <a href="/cve/{{ cve.id }}" class="result-id">{{ cve.id }}</a>
-  <div style="display:flex;gap:.5rem;margin-top:.25rem;flex-wrap:wrap;align-items:center;">
-    {% if cve.cvss_score %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_score }} {{ cve.cvss_severity }}</span>{% endif %}
+  <div class="result-meta">
+    {% if cve.cvss_score %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }} · {{ cve.cvss_score }}</span>{% endif %}
     {% if cve.kev %}<span class="badge badge-kev">KEV</span>{% endif %}
     {% if cve.epss_score is not none %}
     <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span>
-    <span class="badge badge-epss">{{ "%.2f%%"|format(cve.epss_score * 100) }}</span>
+    <span class="badge badge-epss">EPSS {{ "%.2f%%"|format(cve.epss_score * 100) }}</span>
     {% endif %}
+    {% if cve.published_at %}<span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">{{ cve.published_at[:10] }}</span>{% endif %}
   </div>
-  <div class="result-desc">{{ cve.description[:200] }}</div>
+  <div class="result-desc">{{ cve.description[:240] if cve.description else '—' }}</div>
 </div>
 {% endfor %}
+</div></div>
 
 {% if total > per_page %}
 <div class="pagination">
   {% if page > 1 %}<a href="/search?q={{ query }}&page={{ page - 1 }}">← Prev</a>{% endif %}
-  <span class="current">Page {{ page }} of {{ (total / per_page)|round(0, 'ceil')|int }}</span>
+  <span class="current">{{ page }} / {{ (total / per_page)|round(0, 'ceil')|int }}</span>
   {% if page * per_page < total %}<a href="/search?q={{ query }}&page={{ page + 1 }}">Next →</a>{% endif %}
 </div>
 {% endif %}
 
 {% else %}
-<p style="color:var(--text-dim);">No CVEs found matching "{{ query }}".</p>
+<div class="panel"><div class="panel-body" style="padding:3rem 2rem;text-align:center;">
+  <div style="font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--text-dim);text-transform:uppercase;margin-bottom:.5rem;">No results</div>
+  <div style="color:var(--text-mid);">No CVEs in the local index match "<span style="font-family:var(--mono);color:var(--text);">{{ query }}</span>".</div>
+</div></div>
 {% endif %}
 """
 
 CVE_DETAIL_TEMPLATE = """
-<div class="cve-header">
+<div class="eyebrow">Vulnerability dossier</div>
+
+<div class="cve-hero">
   <div>
-    <div class="cve-id">{{ data.cve.id }}</div>
-    <div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap;">
+    <div class="id">{{ data.cve.id }}</div>
+    <div class="meta-line">
       {% if data.cve.cvss_severity %}<span class="badge badge-{{ data.cve.cvss_severity|lower }}">{{ data.cve.cvss_severity }}</span>{% endif %}
       {% if data.cve.kev %}<span class="badge badge-kev">CISA KEV</span>{% endif %}
-      {% if data.cve.epss_score is not none %}<span class="badge badge-epss">EPSS {{ "%.4f"|format(data.cve.epss_score) }}</span>{% endif %}
+      {% if data.cve.epss_score is not none and data.cve.epss_score >= 0.5 %}<span class="badge badge-epss">IMMINENT</span>{% endif %}
+      {% if data.linked_pocs %}<span class="badge badge-tag">PUBLIC POC × {{ data.linked_pocs|length }}</span>{% endif %}
       {% for tag in data.tags %}<span class="badge badge-tag">{{ tag }}</span>{% endfor %}
     </div>
-  </div>
-  <div class="cve-score">
-    <div class="score" style="color:{% if data.cve.cvss_score is not none and data.cve.cvss_score >= 9 %}var(--critical){% elif data.cve.cvss_score is not none and data.cve.cvss_score >= 7 %}var(--high){% elif data.cve.cvss_score is not none and data.cve.cvss_score >= 4 %}var(--orange){% else %}var(--green){% endif %};">
-      {{ data.cve.cvss_score or 'N/A' }}
+    <div class="desc">{{ data.cve.description or 'No description available.' }}</div>
+    <div class="timeline">
+      {% if data.cve.published_at %}<span>Published · <strong>{{ data.cve.published_at[:10] }}</strong></span>{% endif %}
+      {% if data.cve.first_seen %}<span>First seen · <strong>{{ data.cve.first_seen[:10] }}</strong></span>{% endif %}
+      {% if data.sources %}<span>Sources · <strong>{{ data.sources|join(', ') }}</strong></span>{% endif %}
     </div>
-    <div class="severity">CVSS Score</div>
+  </div>
+
+  <div class="gauges">
+    <div class="gauge">
+      <div class="label">CVSS</div>
+      <div class="val {% if data.cve.cvss_score is not none and data.cve.cvss_score >= 9 %}crit{% elif data.cve.cvss_score is not none and data.cve.cvss_score >= 7 %}hi{% elif data.cve.cvss_score is not none and data.cve.cvss_score >= 4 %}md{% else %}lo{% endif %}">{{ data.cve.cvss_score if data.cve.cvss_score is not none else '—' }}</div>
+      <div class="track"><div class="f {% if data.cve.cvss_score is not none and data.cve.cvss_score >= 9 %}crit{% elif data.cve.cvss_score is not none and data.cve.cvss_score >= 7 %}hi{% else %}lo{% endif %}" style="width: {{ ((data.cve.cvss_score or 0) * 10)|int }}%;"></div></div>
+    </div>
     {% if data.cve.epss_score is not none %}
-    <div style="margin-top:.5rem;">
-      <div style="font-size:.75rem;color:var(--text-dim);margin-bottom:.25rem;">EPSS: {{ "%.2f%%"|format(data.cve.epss_score * 100) }} exploit probability</div>
-      <div class="epss-bar" style="width:100px;height:10px;"><div class="epss-bar-fill" style="width: {{ (data.cve.epss_score * 100)|int }}%;"></div></div>
+    <div class="gauge">
+      <div class="label">EPSS</div>
+      <div class="val info">{{ "%.2f%%"|format(data.cve.epss_score * 100) }}</div>
+      <div class="track"><div class="f info" style="width: {{ (data.cve.epss_score * 100)|int }}%;"></div></div>
     </div>
     {% endif %}
     {% if data.cve.exploitability_score is not none %}
-    <div style="margin-top:.5rem;font-size:.8rem;color:var(--text-dim);">
-      Exploitability: <strong>{{ "%.1f"|format(data.cve.exploitability_score) }}/10</strong>
-      <div style="margin-top:.25rem;background:var(--bg);border-radius:4px;height:6px;width:100px;overflow:hidden;">
-        <div style="background:var(--accent);height:100%;width: {{ (data.cve.exploitability_score * 10)|int }}%;border-radius:4px;"></div>
-      </div>
+    <div class="gauge">
+      <div class="label">Exploitability</div>
+      <div class="val">{{ "%.1f"|format(data.cve.exploitability_score) }}<span style="font-size:1rem;color:var(--text-dim);">/10</span></div>
+      <div class="track"><div class="f" style="width: {{ (data.cve.exploitability_score * 10)|int }}%;"></div></div>
     </div>
     {% endif %}
   </div>
-</div>
-
-<div class="description">{{ data.cve.description or 'No description available.' }}</div>
-
-<div style="display:flex;gap:2rem;margin:1rem 0;font-size:.85rem;color:var(--text-dim);flex-wrap:wrap;">
-  {% if data.cve.published_at %}<span>Published: {{ data.cve.published_at[:10] }}</span>{% endif %}
-  {% if data.cve.first_seen %}<span>First seen: {{ data.cve.first_seen[:10] }}</span>{% endif %}
-  {% if data.sources %}<span>Sources: {{ data.sources|join(', ') }}</span>{% endif %}
-  {% if data.linked_pocs %}<span>PoCs: {{ data.linked_pocs|length }}</span>{% endif %}
 </div>
 
 {% if data.cwes %}
 <div class="section">
-  <div class="section-title">CWEs</div>
-  <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+  <div class="section-head"><h2>Weakness classification</h2><span class="count">CWE</span></div>
+  <div class="panel"><div class="panel-body">
+    <div class="tag-cloud">
     {% for cwe in data.cwes %}<span class="badge badge-tag">{{ cwe }}</span>{% endfor %}
-  </div>
+    </div>
+  </div></div>
 </div>
 {% endif %}
 
 {% if data.products %}
 <div class="section">
-  <div class="section-title">Affected Products</div>
-  <table>
-    <thead><tr><th>Vendor</th><th>Product</th><th>Versions</th><th>Category</th></tr></thead>
-    <tbody>
-    {% for p in data.products %}
-    <tr><td>{{ p.vendor }}</td><td>{{ p.product }}</td><td>{{ p.versions or '—' }}</td><td><span class="badge badge-source">{{ p.category }}</span></td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="section-head"><h2>Affected products</h2><span class="count">{{ data.products|length }} entries</span></div>
+  <div class="panel"><div class="panel-body flush">
+    <table>
+      <thead><tr><th>Vendor</th><th>Product</th><th>Versions</th><th>Category</th></tr></thead>
+      <tbody>
+      {% for p in data.products %}
+      <tr>
+        <td style="font-family:var(--mono);font-size:12.5px;">{{ p.vendor }}</td>
+        <td style="font-family:var(--mono);font-size:12.5px;">{{ p.product }}</td>
+        <td style="color:var(--text-mid);font-family:var(--mono);font-size:11.5px;">{{ p.versions or '—' }}</td>
+        <td><span class="badge badge-source">{{ p.category }}</span></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div></div>
 </div>
 {% endif %}
 
 {% if data.linked_pocs %}
 <div class="section">
-  <div class="section-title">Exploits / PoCs ({{ data.linked_pocs|length }})</div>
-  {% for poc in data.linked_pocs %}
-  <div class="poc-item">
-    <div>
-      <a href="{{ poc.url }}" target="_blank" class="poc-url">{{ poc.url }}</a>
-      <div class="poc-meta">
-        <span class="badge badge-source">{{ poc.source }}</span>
-        {% if poc.stars %}★ {{ poc.stars }}{% endif %}
-        {% if poc.age_days is not none %}<span style="margin-left:.5rem;">{{ poc.age_days }}d old</span>{% endif %}
+  <div class="section-head"><h2>Exploits <em>/ proof-of-concept</em></h2><span class="count">{{ data.linked_pocs|length }} artifact{% if data.linked_pocs|length != 1 %}s{% endif %}</span></div>
+  <div class="panel">
+    <div class="poc-list">
+    {% for poc in data.linked_pocs %}
+    <div class="poc-item">
+      <div>
+        <a href="{{ poc.url }}" target="_blank" rel="noopener noreferrer" class="poc-url">{{ poc.url }}</a>
+        <div class="poc-meta">
+          <span class="badge badge-source">{{ poc.source }}</span>
+          {% if poc.age_days is not none %}<span>{{ poc.age_days }}d old</span>{% endif %}
+        </div>
+        {% if poc.description %}<div class="poc-desc">{{ poc.description[:240] }}</div>{% endif %}
       </div>
-      {% if poc.description %}<div class="poc-desc">{{ poc.description[:200] }}</div>{% endif %}
+      <div class="poc-stars">{% if poc.stars %}★ {{ poc.stars }}{% endif %}</div>
+    </div>
+    {% endfor %}
     </div>
   </div>
-  {% endfor %}
 </div>
 {% endif %}
 
 {% if data.related_cves %}
 <div class="section">
-  <div class="section-title">Related CVEs ({{ data.related_cves|length }})</div>
-  <table>
-    <thead><tr><th>CVE</th><th>CVSS</th><th>Relation</th><th>Description</th></tr></thead>
-    <tbody>
-    {% for rc in data.related_cves %}
-    <tr>
-      <td><a href="/cve/{{ rc.id }}" class="id">{{ rc.id }}</a></td>
-      <td>{{ rc.cvss_score or 'N/A' }} {{ rc.cvss_severity or '' }}</td>
-      <td><span class="badge badge-source">{{ rc.relation|replace('_', ' ') }}</span></td>
-      <td style="color:var(--text-dim);">{{ rc.description[:100] }}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="section-head"><h2>Related vulnerabilities</h2><span class="count">{{ data.related_cves|length }} linked</span></div>
+  <div class="panel"><div class="panel-body flush">
+    <table>
+      <thead><tr><th>CVE</th><th>CVSS</th><th>Relation</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for rc in data.related_cves %}
+      <tr class="sev-{{ rc.cvss_severity }}">
+        <td><a href="/cve/{{ rc.id }}" class="cve-id-cell">{{ rc.id }}</a></td>
+        <td><span class="num strong">{{ rc.cvss_score or '—' }}</span> {% if rc.cvss_severity %}<span class="badge badge-{{ rc.cvss_severity|lower }}">{{ rc.cvss_severity[:3] }}</span>{% endif %}</td>
+        <td><span class="badge badge-source">{{ rc.relation|replace('_', ' ') }}</span></td>
+        <td class="desc-cell" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ rc.description[:120] }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div></div>
 </div>
 {% endif %}
 """
 
 LIST_TEMPLATE = """
-<h2 style="margin-bottom:1rem;">{{ title }} <span style="color:var(--text-dim);font-weight:400;">({{ total }})</span></h2>
+<div class="eyebrow">{{ eyebrow|default('Database · live index') }}</div>
+<h1 class="page-title">{{ title }} <em>· {{ total }}</em></h1>
+{% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
 
-{% if filters %}
-<div style="display:flex;gap:.5rem;margin-bottom:.5rem;flex-wrap:wrap;">
-  {% for f in filters %}
-  <a href="{{ f.url }}" class="badge {% if f.active %}badge-kev{% else %}badge-source{% endif %}">{{ f.label }}</a>
-  {% endfor %}
-</div>
-{% endif %}
-
-{% if sort_filters %}
-<div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;">
-  <span style="font-size:.75rem;color:var(--text-dim);align-self:center;margin-right:.25rem;">Sort:</span>
-  {% for f in sort_filters %}
-  <a href="{{ f.url }}" class="badge {% if f.active %}badge-epss{% else %}badge-source{% endif %}" style="font-size:.7rem;">{{ f.label }}</a>
-  {% endfor %}
+{% if filters or sort_filters %}
+<div class="filter-bar">
+  {% if filters %}
+  <div class="filter-group">
+    <span class="label">Filter</span>
+    {% for f in filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if sort_filters %}
+  <div class="filter-group">
+    <span class="label">Sort</span>
+    {% for f in sort_filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 
 {% if rows %}
-<div class="card">
-  <div class="card-body" style="padding:0;">
+<div class="panel">
+  <div class="panel-body flush">
     <table>
       <thead><tr>{% for col in columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for row in rows %}
-      <tr>
+      <tr class="{% if row.cvss_severity %}sev-{{ row.cvss_severity }}{% endif %}">
         {% for cell in cells %}
         <td>
-          {% if cell.type == 'cve_link' %}<a href="/cve/{{ row[cell.key] }}" class="id">{{ row[cell.key] }}</a>
-          {% elif cell.type == 'poc_link' %}<a href="{{ row[cell.key] }}" target="_blank" style="font-family:monospace;font-size:.75rem;">{{ row[cell.key][:50] }}...</a>
-          {% elif cell.type == 'badge' %}<span class="badge badge-{{ row[cell.key]|lower }}">{{ row[cell.key] }}</span>
-          {% elif cell.type == 'score' %}<span style="color:{% if row[cell.key] is not none and row[cell.key] >= 9 %}var(--critical){% elif row[cell.key] is not none and row[cell.key] >= 7 %}var(--high){% elif row[cell.key] is not none and row[cell.key] >= 4 %}var(--orange){% else %}var(--green){% endif %};font-weight:600;">{{ row[cell.key] }}</span>
-          {% elif cell.type == 'stars' %}★ {{ row[cell.key] }}
-          {% elif cell.type == 'truncate' %}{{ row[cell.key][:120] if row[cell.key] else '—' }}
+          {% if cell.type == 'cve_link' %}<a href="/cve/{{ row[cell.key] }}" class="cve-id-cell">{{ row[cell.key] }}</a>
+          {% elif cell.type == 'poc_link' %}<a href="{{ row[cell.key] }}" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:12px;">{{ row[cell.key][:60] }}…</a>
+          {% elif cell.type == 'badge' %}{% if row[cell.key] %}<span class="badge badge-{{ row[cell.key]|lower }}">{{ row[cell.key] }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+          {% elif cell.type == 'score' %}<span class="num strong" style="color:{% if row[cell.key] is not none and row[cell.key] >= 9 %}var(--critical){% elif row[cell.key] is not none and row[cell.key] >= 7 %}var(--high){% elif row[cell.key] is not none and row[cell.key] >= 4 %}var(--medium){% else %}var(--low){% endif %};">{{ row[cell.key] or '—' }}</span>
+          {% elif cell.type == 'stars' %}<span class="num" style="color:var(--accent);">★ {{ row[cell.key] }}</span>
+          {% elif cell.type == 'truncate' %}<span class="desc-cell">{{ row[cell.key][:140] if row[cell.key] else '—' }}</span>
           {% elif cell.type == 'epss' %}
             {% if row[cell.key] is not none %}
-            <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (row[cell.key] * 100)|int }}%;"></span></span>
-            <span style="font-size:.75rem;">{{ "%.1f%%"|format(row[cell.key] * 100) }}</span>
-            {% else %}—{% endif %}
-          {% elif cell.type == 'kev' %}
-            {% if row[cell.key] %}<span class="badge badge-kev">KEV</span>{% else %}—{% endif %}
-          {% else %}{{ row[cell.key] or '—' }}{% endif %}
+            <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (row[cell.key] * 100)|int }}%;"></span></span><span class="epss-text">{{ "%.1f%%"|format(row[cell.key] * 100) }}</span>
+            {% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+          {% elif cell.type == 'kev' %}{% if row[cell.key] %}<span class="badge badge-kev">KEV</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+          {% elif cell.type == 'date' %}<span class="num">{{ row[cell.key][:10] if row[cell.key] else '—' }}</span>
+          {% else %}{% if row[cell.key] is not none %}<span class="num">{{ row[cell.key] }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}{% endif %}
         </td>
         {% endfor %}
       </tr>
@@ -840,13 +1387,15 @@ LIST_TEMPLATE = """
 {% if total > per_page %}
 <div class="pagination">
   {% if page > 1 %}<a href="{{ prev_url }}">← Prev</a>{% endif %}
-  <span class="current">Page {{ page }} of {{ (total / per_page)|round(0, 'ceil')|int }}</span>
+  <span class="current">{{ page }} / {{ (total / per_page)|round(0, 'ceil')|int }}</span>
   {% if page * per_page < total %}<a href="{{ next_url }}">Next →</a>{% endif %}
 </div>
 {% endif %}
 
 {% else %}
-<p style="color:var(--text-dim);">No results found.</p>
+<div class="panel"><div class="panel-body" style="padding:3rem 2rem;text-align:center;">
+  <div style="font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--text-dim);text-transform:uppercase;">No matching records</div>
+</div></div>
 {% endif %}
 """
 
@@ -858,11 +1407,7 @@ def dashboard():
     try:
         stats = get_stats()
     except Exception as e:
-        return render_template_string(
-            BASE_TEMPLATE, title="Error",
-            content=f'<h2>Database Error</h2><p>{e}</p>',
-            active="", search_query="",
-        ), 500
+        return _error_page(f"Database Error: {e}", active="", search_query=""), 500
     return render_page(DASHBOARD_TEMPLATE, title="Dashboard", active="dashboard", stats=stats)
 
 
@@ -875,11 +1420,7 @@ def search():
     try:
         results, total = search_cves(query, page=page, per_page=PER_PAGE)
     except Exception as e:
-        return render_template_string(
-            BASE_TEMPLATE, title="Error",
-            content=f'<h2>Search Error</h2><p>{e}</p>',
-            active="", search_query=query,
-        ), 500
+        return _error_page(f"Search Error: {e}", active="", search_query=query), 500
     return render_page(
         SEARCH_TEMPLATE, title=f"Search: {query}", active="",
         query=query, results=results, total=total, page=page, per_page=PER_PAGE,
@@ -892,19 +1433,15 @@ def cve_detail(cve_id):
     try:
         data = get_cve_detail(cve_id)
     except Exception as e:
-        return render_template_string(
-            BASE_TEMPLATE, title="Error",
-            content=f'<h2>Database Error</h2><p>{e}</p>',
-            active="", search_query="",
-        ), 500
+        return _error_page(f"Database Error: {e}", active="", search_query=""), 500
     if not data:
-        not_found = render_template_string(
-            '<h2>CVE not found</h2><p>The CVE <code>{{ cve_id }}</code> was not found. <a href="/search?q={{ cve_id }}">Search?</a></p>',
-            cve_id=cve_id,
-        )
-        return render_template_string(
-            BASE_TEMPLATE, title="CVE Not Found", content=not_found,
-            active="", search_query="",
+        return render_page(
+            """<div class="eyebrow" style="color:var(--high);">404 · not indexed</div>
+            <h1 class="page-title">No record for <em>{{ cve_id }}</em>.</h1>
+            <p class="page-subtitle">This CVE is not in the local index.
+              <a href="/search?q={{ cve_id }}" style="color:var(--accent);">Try a keyword search &rarr;</a>
+            </p>""",
+            title="CVE Not Found", active="", cve_id=cve_id,
         ), 404
     return render_page(
         CVE_DETAIL_TEMPLATE, title=data["cve"]["id"], active="", data=data,
@@ -945,11 +1482,7 @@ def list_cves():
                 params + [PER_PAGE, offset]
             ).fetchall())
     except Exception as e:
-        return render_template_string(
-            BASE_TEMPLATE, title="Error",
-            content=f'<h2>Database Error</h2><p>{e}</p>',
-            active="cves", search_query="",
-        ), 500
+        return _error_page(f"Database Error: {e}", active="cves", search_query=""), 500
 
     filters = [
         {"label": "All", "url": "/cves", "active": not severity and not kev_only},
@@ -965,14 +1498,14 @@ def list_cves():
         {"label": "By Exploitability", "url": "/cves?sort=exploit" + (f"&severity={severity}" if severity else "") + ("&kev=1" if kev_only else ""), "active": sort == "exploit"},
         {"label": "Newest", "url": "/cves?sort=date" + (f"&severity={severity}" if severity else "") + ("&kev=1" if kev_only else ""), "active": sort == "date"},
     ]
-    columns = ["ID", "CVSS", "Severity", "EPSS", "KEV", "Description", "Published"]
+    columns = ["CVE", "CVSS", "Severity", "EPSS", "KEV", "Description", "Published"]
     cells = [
         {"type": "cve_link", "key": "id"}, {"type": "score", "key": "cvss_score"},
         {"type": "badge", "key": "cvss_severity"},
         {"type": "epss", "key": "epss_score"},
         {"type": "kev", "key": "kev"},
         {"type": "truncate", "key": "description"},
-        {"type": "plain", "key": "published_at"},
+        {"type": "date", "key": "published_at"},
     ]
     prev_q = f"&sort={sort}" if sort != "cvss" else ""
     if severity:
@@ -981,11 +1514,80 @@ def list_cves():
         prev_q += "&kev=1"
 
     return render_page(
-        LIST_TEMPLATE, title="CVEs", active="cves",
+        LIST_TEMPLATE, title="CVE index", active="cves",
+        eyebrow="Database · live index",
+        subtitle="Browse and filter the full set of indexed vulnerabilities. Severity stripe on the left edge of each row maps to the CVSS band.",
         rows=rows, total=total, page=page, per_page=PER_PAGE,
         filters=filters, sort_filters=sort_filters, columns=columns, cells=cells,
         prev_url=f"/cves?page={page - 1}{prev_q}" if page > 1 else None,
         next_url=f"/cves?page={page + 1}{prev_q}" if page * PER_PAGE < total else None,
+    )
+
+
+@app.route("/triage")
+def triage():
+    """Curated action queue — KEV ∪ EPSS≥0.5 ∪ critical-with-PoC, exploit-likelihood first."""
+    page = _safe_int(request.args.get("page", "1"))
+    lens = request.args.get("lens", "all")  # all | kev | imminent | weaponized
+
+    where_clauses = {
+        "all": """(c.kev = 1
+                   OR c.epss_score >= 0.5
+                   OR (c.cvss_score >= 9 AND pc.cve_id IS NOT NULL))""",
+        "kev": "c.kev = 1",
+        "imminent": "c.epss_score >= 0.5",
+        "weaponized": "c.cvss_score >= 9 AND pc.cve_id IS NOT NULL",
+    }
+    where = where_clauses.get(lens, where_clauses["all"])
+
+    try:
+        with _db() as conn:
+            total = conn.execute(f"""
+                SELECT COUNT(DISTINCT c.id) FROM cve c
+                LEFT JOIN poc_cve pc ON pc.cve_id = c.id
+                WHERE {where}
+            """).fetchone()[0]
+            offset = (page - 1) * PER_PAGE
+            rows = _rows_to_dicts(conn.execute(f"""
+                SELECT DISTINCT c.id, c.cvss_score, c.cvss_severity, c.description,
+                       c.epss_score, c.kev, c.published_at,
+                       (SELECT COUNT(*) FROM poc_cve WHERE cve_id = c.id) AS poc_count
+                FROM cve c
+                LEFT JOIN poc_cve pc ON pc.cve_id = c.id
+                WHERE {where}
+                ORDER BY c.kev DESC,
+                         COALESCE(c.epss_score, 0) DESC,
+                         COALESCE(c.cvss_score, 0) DESC
+                LIMIT ? OFFSET ?
+            """, (PER_PAGE, offset)).fetchall())
+    except Exception as e:
+        return _error_page(f"Database Error: {e}", active="triage"), 500
+
+    filters = [
+        {"label": "All actionable", "url": "/triage", "active": lens == "all"},
+        {"label": "KEV only", "url": "/triage?lens=kev", "active": lens == "kev"},
+        {"label": "Imminent · EPSS≥0.5", "url": "/triage?lens=imminent", "active": lens == "imminent"},
+        {"label": "Weaponized · CVSS≥9 + PoC", "url": "/triage?lens=weaponized", "active": lens == "weaponized"},
+    ]
+    columns = ["CVE", "CVSS", "Severity", "EPSS", "KEV", "PoCs", "Description"]
+    cells = [
+        {"type": "cve_link", "key": "id"},
+        {"type": "score", "key": "cvss_score"},
+        {"type": "badge", "key": "cvss_severity"},
+        {"type": "epss", "key": "epss_score"},
+        {"type": "kev", "key": "kev"},
+        {"type": "plain", "key": "poc_count"},
+        {"type": "truncate", "key": "description"},
+    ]
+    qs = f"&lens={lens}" if lens != "all" else ""
+    return render_page(
+        LIST_TEMPLATE, title="Triage queue", active="triage",
+        eyebrow="Action queue · prioritised",
+        subtitle="Vulnerabilities you should look at first: anything in CISA KEV, anything with EPSS ≥ 0.5, or critical CVEs with public proof-of-concept. Ordered by KEV → EPSS → CVSS.",
+        rows=rows, total=total, page=page, per_page=PER_PAGE,
+        filters=filters, columns=columns, cells=cells,
+        prev_url=f"/triage?page={page - 1}{qs}" if page > 1 else None,
+        next_url=f"/triage?page={page + 1}{qs}" if page * PER_PAGE < total else None,
     )
 
 
@@ -999,16 +1601,12 @@ def list_pocs():
         with _db() as conn:
             sources = [r[0] for r in conn.execute("SELECT DISTINCT source FROM poc ORDER BY source").fetchall()]
     except Exception as e:
-        return render_template_string(
-            BASE_TEMPLATE, title="Error",
-            content=f'<h2>Database Error</h2><p>{e}</p>',
-            active="pocs", search_query="",
-        ), 500
+        return _error_page(f"Database Error: {e}", active="pocs", search_query=""), 500
 
     filters = [{"label": "All", "url": "/pocs", "active": not source}]
     for s in sources:
         filters.append({"label": s, "url": f"/pocs?source={s}", "active": source == s})
-    columns = ["URL", "Source", "Stars", "Age", "Description"]
+    columns = ["URL", "Source", "Stars", "Age (d)", "Description"]
     cells = [
         {"type": "poc_link", "key": "url"}, {"type": "badge", "key": "source"},
         {"type": "stars", "key": "stars"}, {"type": "plain", "key": "age_days"},
@@ -1017,7 +1615,9 @@ def list_pocs():
     src_q = f"&source={source}" if source else ""
 
     return render_page(
-        LIST_TEMPLATE, title="Proof of Concepts", active="pocs",
+        LIST_TEMPLATE, title="Public exploits", active="pocs",
+        eyebrow="Proof-of-concept artifacts",
+        subtitle="Public exploit artifacts harvested from GitHub, Exploit-DB and other sources. Ranked by GitHub stars when available.",
         rows=rows, total=total, page=page, per_page=PER_PAGE,
         filters=filters, columns=columns, cells=cells,
         prev_url=f"/pocs?page={page - 1}{src_q}" if page > 1 else None,
