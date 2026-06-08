@@ -82,15 +82,17 @@ def _render_text(cves: list[CVE], pocs: list[PoC], links: dict[str, list[PoC]]) 
         for cve in group:
             score = cve.cvss_score
             score_str = f' [CVSS {score} {cve.cvss_severity or ""}]' if score else ''
-            w(f'\n  {cve.id}{score_str}')
+            kev_str = ' [KEV]' if cve.kev else ''
+            epss_str = f' [EPSS {cve.epss_score:.1%}]' if cve.epss_score is not None else ''
+            w(f'\n  {cve.id}{score_str}{kev_str}{epss_str}')
             w(f'    {cve.description[:200]}')
             if cve.attack_tags:
                 w(f'    tags: {", ".join(cve.attack_tags)}')
             for ap in cve.affected[:3]:
-                ver = f' ({"; ".join(ap.versions[:2])})' if ap.versions else ''
+                ver = f' ({", ".join(ap.versions[:2])})' if ap.versions else ''
                 w(f'    affects: {ap.vendor}/{ap.product}{ver}')
             for poc in links.get(cve.id.upper(), []):
-                w(f'    PoC: {_poc_label(poc)} ({poc.stars or 0}*)')
+                w(f'    PoC: {_poc_label(poc)} ({poc.stars or 0}* [{poc.source}])')
 
     if standalone:
         w(f'\n--- Standalone PoCs ({len(standalone)}) ---')
@@ -127,18 +129,25 @@ def _render_markdown(cves: list[CVE], pocs: list[PoC], links: dict[str, list[PoC
         for cve in group:
             score = cve.cvss_score
             score_str = f' **CVSS {score} {cve.cvss_severity or ""}**' if score else ''
-            w(f'- **{cve.id}**{score_str}')
+            badges = []
+            if cve.kev:
+                badges.append('`KEV`')
+            if cve.epss_score is not None:
+                badges.append(f'`EPSS {cve.epss_score:.1%}`')
+            badge_str = ' '.join(badges)
+            w(f'- **{cve.id}**{score_str} {badge_str}')
             w(f'  > {cve.description[:200]}')
             if cve.attack_tags:
                 w(f'  tags: `{"`, `".join(cve.attack_tags)}`')
             for ap in cve.affected[:3]:
-                ver = f' ({"; ".join(ap.versions[:2])})' if ap.versions else ''
+                ver = f' ({", ".join(ap.versions[:2])})' if ap.versions else ''
                 w(f'  affects: *{ap.vendor}/{ap.product}*{ver}')
             for poc in links.get(cve.id.upper(), []):
+                src_tag = f' [{poc.source}]'
                 if poc.source == 'twitter':
-                    w(f'  PoC: [{poc.url}]({poc.url}) {poc.stars or 0}* [tweet]')
+                    w(f'  PoC: [{poc.url}]({poc.url}) {poc.stars or 0}* [tweet{src_tag}]')
                 else:
-                    w(f'  PoC: [{poc.url}]({poc.url}) {poc.stars or 0}*')
+                    w(f'  PoC: [{poc.url}]({poc.url}) {poc.stars or 0}*{src_tag}')
 
     if standalone:
         w(f'\n## Standalone PoCs ({len(standalone)})\n')

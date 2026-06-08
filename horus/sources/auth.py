@@ -7,6 +7,8 @@ Priority:
   4. None — unauthenticated, 60 req/hr limit
 """
 
+
+from __future__ import annotations
 import os
 import subprocess
 from functools import lru_cache

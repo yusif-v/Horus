@@ -9,16 +9,20 @@ CREATE TABLE IF NOT EXISTS cve (
     cvss_score      REAL,
     cvss_severity   TEXT,
     published_at    TEXT,
+    epss_score      REAL,                       -- EPSS probability (0-1)
+    kev             INTEGER DEFAULT 0,          -- CISA Known Exploited (0/1)
+    exploitability_score REAL,                  -- computed: weighted composite
     first_seen      TEXT NOT NULL,
     last_seen       TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS poc (
     url             TEXT PRIMARY KEY,
-    source          TEXT NOT NULL,              -- github | gitlab | exploit-db
+    source          TEXT NOT NULL,              -- github | exploit-db | packetstorm | nitter | twitter | manual
     stars           INTEGER,
     age_days        INTEGER,
     description     TEXT,
+    fetched_date    TEXT,                       -- when PoC was fetched from external source
     first_seen      TEXT NOT NULL,
     last_seen       TEXT NOT NULL
 );
@@ -84,6 +88,8 @@ CREATE TABLE IF NOT EXISTS meta (
 
 CREATE INDEX IF NOT EXISTS idx_cve_published_at        ON cve(published_at);
 CREATE INDEX IF NOT EXISTS idx_cve_cvss_score          ON cve(cvss_score);
+CREATE INDEX IF NOT EXISTS idx_cve_epss_score          ON cve(epss_score);
+CREATE INDEX IF NOT EXISTS idx_cve_kev                ON cve(kev);
 CREATE INDEX IF NOT EXISTS idx_cve_product_product_id  ON cve_product(product_id);
 CREATE INDEX IF NOT EXISTS idx_cve_attack_tag_tag      ON cve_attack_tag(tag);
 CREATE INDEX IF NOT EXISTS idx_poc_cve_cve_id          ON poc_cve(cve_id);

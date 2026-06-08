@@ -1,33 +1,45 @@
 # Horus
 
-**Version:** 0.5.0
+**Version:** 0.7.0
 
-Daily PoC research scanner. Searches GitHub and NVD for new vulnerability disclosures with proof-of-concept exploits.
+Daily PoC research scanner. Searches GitHub, NVD, X/Twitter, and Exploit-DB for new vulnerability disclosures with proof-of-concept exploits. Enriches with CISA KEV and EPSS scores. Requires Python 3.10+.
 
 ## What it does
 
 - **GitHub**: Searches for new PoC/exploit repositories (filtered: <30d old, >10 stars, fresh PoC keywords)
 - **NVD**: Fetches recently published CVEs with CVSS scores, CWE IDs, and affected vendor/product/version ranges
-- **Classification**: Tags each CVE with an attack type (rce, sql-injection, lpe, …) and product category (web-server, database, kernel, …) from a locked vocabulary
-- **PoC linking**: GitHub repos that reference known CVE IDs are attached to that CVE; everything else surfaces as a standalone PoC
-- **Persistence**: SQLite at `state/horus.db` — normalized schema (CVE, PoC, Product, AttackTag, CWE + join tables for graph edges)
-- **Reports**: Markdown (`reports/YYYY/MM/YYYY-MM-DD.md`) and interactive graph (`reports/YYYY/MM/YYYY-MM-DD.graph.html`) written every run
-- **Delivery**: Designed to run as a daily cron job, outputs to stdout
+- **X/Twitter**: Searches for CVE mentions via Chrome cookie authentication (no API key needed) — birdnode-compatible GraphQL client
+- **Exploit-DB**: Looks up published exploits for each new CVE found by NVD
+- **Enrichment**: CISA KEV (known-exploited flag) + EPSS (exploit probability score) + composite exploitability score
+- **Classification**: Tags each CVE with attack type (rce, sql-injection, lpe, …) and product category from a locked vocabulary
+- **PoC linking**: All sources that reference known CVE IDs are attached to that CVE
+- **Persistence**: SQLite at `state/horus.db` — normalized schema with graph edges
+- **Reports**: Markdown + interactive Cytoscape.js graph every run
+
+## Plugin Architecture
+
+Sources and enrichers are **self-discovering plugins**. Adding a new source = creating ONE file in `horus/sources/` with a `run()` function. No other files change.
+
+```bash
+python3 -m horus --list-sources    # show all discovered plugins
+python3 -m horus --sources github,nvd  # run only specific sources
+python3 -m horus --no-exploitdb    # skip a source (auto-generated flag)
+python3 -m horus --skip-kev        # skip an enricher (auto-generated flag)
+```
 
 ## Usage
 
 ```bash
-# Run manually
+# Run all sources + enrichers
 python3 -m horus
 
 # Common options
 python3 -m horus --min-cvss 7.0          # NVD: only High/Critical
 python3 -m horus --max-results 10         # cap items per source
-python3 -m horus --format md              # markdown output (e.g. for Telegram)
-python3 -m horus --quiet                  # suppress progress on stderr
-
-# Run via cron (daily at 09:00 UTC)
-# Cron ID: f68b886451d7
+python3 -m horus --format md             # markdown output (e.g. for Telegram)
+python3 -m horus --quiet                 # suppress progress on stderr
+python3 -m horus --no-exploitdb --skip-kev  # skip specific plugins
+python3 -m horus --list-sources          # list all plugins
 ```
 
 ### Flags
@@ -39,24 +51,33 @@ python3 -m horus --quiet                  # suppress progress on stderr
 | `--format {text,md}` | Output format (markdown for chat delivery) |
 | `--quiet` | Send progress lines to stderr only |
 | `--version` | Print version and exit |
+| `--list-sources` | List all plugins and exit |
+| `--sources A,B` | Run only these sources |
+| `--enrichers A,B` | Run only these enrichers |
+| `--no-<name>` | Skip a source (auto-generated per source) |
+| `--skip-<name>` | Skip an enricher (auto-generated per enricher) |
 
-Progress messages now go to **stderr**, so `python3 -m horus --format md > report.md` produces clean markdown.
+## Data Sources
 
-### Interactive graph
+| Source | Auth | Cost | Coverage |
+|--------|------|------|----------|
+| GitHub API | Token optional | Free | New PoC repos |
+| NVD API | None | Free | Recent CVEs with CVSS |
+| X/Twitter | Chrome cookies | Free | CVE mentions in tweets |
+| Exploit-DB | None | Free | Published exploits |
+| CISA KEV | None | Free | Known-exploited vulnerabilities |
+| EPSS | None | Free | Exploit probability scores |
 
-Each run writes `reports/YYYY/MM/YYYY-MM-DD.graph.html` — a single self-contained file with Cytoscape.js (loaded via CDN). Open it directly in a browser:
+### X/Twitter authentication
 
-```bash
-open reports/2026/05/2026-05-21.graph.html   # macOS
-xdg-open reports/2026/05/2026-05-21.graph.html  # Linux
-```
+Horus reads your Chrome cookies (auth_token + ct0) to authenticate with X's internal GraphQL API — same approach as birdnode, in pure Python. No API key, no browser required.
 
-- **Red circles** — CVEs (size = CVSS)
-- **Green diamonds** — PoCs (size = stars)
-- **Blue rectangles** — affected products
-- **Orange hexagons** — attack tags
+Requirements:
+- macOS (uses `security` command for keychain access)
+- Chrome logged into x.com (Profile 1 tested)
+- `cryptography` package: `pip install cryptography`
 
-Click any node to highlight its neighborhood and view details. Skip with `--no-graph`.
+Override with env vars: `X_AUTH_TOKEN=... X_CT0=... python3 -m horus`
 
 ### GitHub authentication
 
@@ -76,31 +97,29 @@ python3 -m horus --auth-status
 ## Output
 
 ```
-=== Daily PoC Research Report — 2026-05-19 ===
+=== Daily PoC Research Report — 2026-06-07 ===
 
-[1/2] Searching GitHub for new PoC repos...
+[1/6] Searching GitHub for new PoC repos...
   Found 9 relevant repos
-[2/2] Fetching recent CVEs from NVD...
+[2/6] Fetching recent CVEs from NVD...
   Found 15 relevant CVEs
+[3/6] Searching X/Twitter for CVE mentions...
+  Found 3 relevant tweets
+[4/6] Searching Exploit-DB for known CVEs...
+  Found 2 Exploit-DB entries
+[5/6] Merging and deduplicating findings...
+[6/6] Persisting to database...
 
---- GitHub Repos (new PoCs) ---
-[1] rootsecdev/cve_2026_31431 (558 stars, 19d old)
-    https://github.com/rootsecdev/cve_2026_31431
-    Exploit POC for CVE_2026_31431
+--- Web Application (3 CVEs) ---
+[1] CVE-2026-3143 [CVSS 9.1 CRITICAL] [KEV] [EPSS 0.87]
+    Exploit POC for CVE_2026_3143 — RCE in nginx
+    ★ 558 stars | GitHub: rootsecdev/cve_2026_31431
+    X: @security_researcher (https://x.com/.../status/...)
+    EDB: https://www.exploit-db.com/exploits/52001
+    Exploitability: 8.5/10
 
---- Recent CVEs (NVD) ---
-[1] CVE-2026-8719 [CVSS: 8.8 HIGH]
-    WordPress AI Engine privilege escalation
-
-Total: 24 items | GitHub: 9 | NVD: 15
+Total: 24 items | CVEs: 15 | PoCs: 9
 ```
-
-## Data Sources
-
-| Source | Auth | Cost | Coverage |
-|--------|------|------|----------|
-| GitHub API | None | Free | New PoC repos |
-| NVD API | None | Free | Recent CVEs with CVSS |
 
 ## Project Structure
 
@@ -109,31 +128,86 @@ Horus/
 ├── horus/
 │   ├── __init__.py       # Version
 │   ├── __main__.py       # `python3 -m horus` entry
-│   ├── cli.py            # Orchestration
+│   ├── cli.py            # Plugin orchestrator (generic, never changes)
 │   ├── config.py         # Queries, keywords, thresholds, paths
 │   ├── core/             # Pure domain — no I/O
 │   │   ├── model.py      #   CVE, PoC, AffectedProduct dataclasses
 │   │   ├── vocab.py      #   Closed vocabularies (tags, categories)
 │   │   ├── classify.py   #   Attack-tag + product-category classifiers
 │   │   ├── filters.py    #   PoC relevance + CVE extraction
-│   │   └── merge.py      #   Raw dicts → typed model + PoC↔CVE links
-│   ├── sources/          # Data ingestion (network)
-│   │   ├── http.py       #   Shared HTTP/JSON helper
+│   │   ├── merge.py      #   Dedup + PoC↔CVE linking
+│   │   └── xsearch.py    #   Chrome cookie auth + X GraphQL client
+│   ├── sources/          # Data ingestion plugins (drop-in)
 │   │   ├── auth.py       #   GitHub token resolution
+│   │   ├── http.py       #   Shared HTTP helper
 │   │   ├── github.py     #   GitHub repo search
-│   │   └── nvd.py        #   NVD CVE feed (CWE + CPE extraction)
+│   │   ├── nvd.py        #   NVD CVE feed
+│   │   ├── exploitdb.py  #   Exploit-DB lookup
+│   │   └── x_twitter.py  #   X/Twitter search (Chrome auth)
+│   ├── enrichers/        # Enrichment plugins (drop-in)
+│   │   ├── kev.py        #   CISA KEV flag
+│   │   └── epss.py       #   EPSS scores
 │   ├── storage/          # Local persistence (SQLite)
 │   │   ├── schema.sql    #   Idempotent DDL
-│   │   └── db.py         #   Schema init, vocab seeding, migration, CRUD
+│   │   └── db.py         #   Schema init, migration, CRUD, exploitability scoring
 │   └── render/           # Output formatting
 │       ├── report.py     #   Text / markdown renderer
 │       ├── persist.py    #   Save markdown report to disk
 │       └── graph.py      #   Interactive Cytoscape.js HTML graph
 ├── state/
 │   └── horus.db          # SQLite — all persistent state
+├── reports/              # Generated reports + graphs
+├── ARCHITECTURE.md       # Plugin architecture documentation
 ├── README.md
 └── CHANGELOG.md
 ```
+
+## Adding a New Source
+
+Create `horus/sources/my_source.py`:
+
+```python
+NAME = "My Source"
+DEFAULT_ENABLED = True
+
+def run(known_cve_ids, known_poc_urls, args, **kwargs) -> dict:
+    """Fetch new data. Returns {"cves": [CVE, ...], "pocs": [PoC, ...]}."""
+    # ... your fetching logic ...
+    return {"cves": [...], "pocs": [...]}
+```
+
+Done. Horus auto-discovers it. Flag `--no-my_source` is auto-generated.
+
+## Adding a New Enricher
+
+Create `horus/enrichers/my_enricher.py`:
+
+```python
+NAME = "My Enricher"
+DEFAULT_ENABLED = True
+
+def enrich(cves, pocs, args, **kwargs) -> None:
+    """Enrich CVEs/PoCs in-place."""
+    for cve in cves:
+        cve.my_new_field = "computed_value"
+```
+
+Done. Flag `--skip-my_enricher` is auto-generated.
+
+## Interactive Graph
+
+Each run writes `reports/YYYY/MM/YYYY-MM-DD.graph.html`. Open in browser:
+
+```bash
+open reports/2026/06/2026-06-07.graph.html   # macOS
+```
+
+- **Red circles** — CVEs (size = CVSS)
+- **Green diamonds** — PoCs (size = stars)
+- **Blue rectangles** — affected products
+- **Orange hexagons** — attack tags
+
+Skip with `--no-graph`.
 
 ## Changelog
 

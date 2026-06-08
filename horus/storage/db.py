@@ -5,6 +5,8 @@ used to live under state/ (seen_items.json, last_run.json) — those are
 migrated once on first run and then renamed to .migrated.
 """
 
+
+from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -165,23 +167,57 @@ def _upsert_product(
     return cur.lastrowid
 
 
+def _compute_exploitability(cve: CVE) -> float | None:
+    """Compute a composite exploitability score (0-10).
+
+    Weighted formula:
+      - CVSS base score (0-10): weight 0.4
+      - EPSS probability (0-1) scaled to 0-10: weight 0.3
+      - KEV bonus: +2.0 if in CISA KEV
+      - PoC availability bonus: +1.0 (applied at merge time, not here)
+
+    Returns None if no CVSS score is available.
+    """
+    if cve.cvss_score is None:
+        return None
+
+    score = cve.cvss_score * 0.4
+
+    if cve.epss_score is not None:
+        score += cve.epss_score * 10 * 0.3
+
+    if cve.kev:
+        score += 2.0
+
+    return min(score, 10.0)
+
+
 def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
     now = _now()
+
+    # Compute exploitability score before persisting
+    exploitable = _compute_exploitability(cve)
+
     conn.execute(
         '''INSERT INTO cve
               (id, description, cvss_score, cvss_severity, published_at,
+               epss_score, kev, exploitability_score,
                first_seen, last_seen)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
-             description   = COALESCE(excluded.description,   cve.description),
-             cvss_score    = COALESCE(excluded.cvss_score,    cve.cvss_score),
-             cvss_severity = COALESCE(excluded.cvss_severity, cve.cvss_severity),
-             published_at  = COALESCE(excluded.published_at,  cve.published_at),
-             last_seen     = excluded.last_seen
+             description           = COALESCE(excluded.description, cve.description),
+             cvss_score            = COALESCE(excluded.cvss_score, cve.cvss_score),
+             cvss_severity         = COALESCE(excluded.cvss_severity, cve.cvss_severity),
+             published_at          = COALESCE(excluded.published_at, cve.published_at),
+             epss_score            = COALESCE(excluded.epss_score, cve.epss_score),
+             kev                   = MAX(excluded.kev, cve.kev),
+             exploitability_score  = COALESCE(excluded.exploitability_score, cve.exploitability_score),
+             last_seen             = excluded.last_seen
         ''',
         (
             cve.id, cve.description, cve.cvss_score, cve.cvss_severity,
             cve.published_at.isoformat() if cve.published_at else None,
+            cve.epss_score, cve.kev, exploitable,
             now, now,
         ),
     )

@@ -1,3 +1,10 @@
-"""Horus — Daily PoC Research Scanner."""
+"""Horus — Daily PoC Research Scanner.
 
-__version__ = "0.5.0"
+Plugin-based architecture. Adding a new source means creating a single
+file in sources/ with a run() function. No other files change.
+
+Usage:
+    python3 -m horos [--sources github,nvd] [--skip-kev] [--format md]
+"""
+
+__version__ = "0.7.0"

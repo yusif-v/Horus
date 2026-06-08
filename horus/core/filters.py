@@ -1,5 +1,7 @@
 """Text filters: PoC relevance check and CVE extraction."""
 
+
+from __future__ import annotations
 import re
 
 from ..config import FRESH_POC_KEYWORDS, LOW_VALUE_KEYWORDS

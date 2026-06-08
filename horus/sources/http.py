@@ -1,5 +1,7 @@
 """Minimal HTTP helper used by source modules."""
 
+
+from __future__ import annotations
 import json
 import urllib.request
 

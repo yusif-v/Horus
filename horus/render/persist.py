@@ -1,5 +1,7 @@
 """Write rendered reports to disk under reports/YYYY/MM/."""
 
+
+from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 

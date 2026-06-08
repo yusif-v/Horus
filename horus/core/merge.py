@@ -1,10 +1,10 @@
-"""Fold raw source records into typed CVE and PoC objects.
+"""Merge layer — combine results from all sources.
 
-The two source modules still return plain dicts (so the wire format stays
-inspectable). This layer is the single place that knows how to turn those
-dicts into the domain model defined in `horus.model`.
+Takes raw CVE and PoC dicts from any source, deduplicates, and produces
+typed domain objects.
 """
 
+from __future__ import annotations
 from datetime import datetime
 
 from .classify import classify_attack_tags, classify_product_category
@@ -13,87 +13,149 @@ from .model import CVE, AffectedProduct, PoC
 
 
 def cve_from_nvd(raw: dict) -> CVE:
-    """Build a CVE from one NVD result dict (see sources/nvd.py)."""
-    desc = raw.get('description', '')
-    cwes = raw.get('cwe_ids', [])  # nvd source may attach these in v0.4+
+    """Build a CVE from an NVD result dict."""
+    desc = raw.get("description", "")
+    cwes = raw.get("cwe_ids", [])
     category = classify_product_category(desc)
 
     affected: list[AffectedProduct] = []
-    for ap in raw.get('affected', []):
+    for ap in raw.get("affected", []):
         affected.append(AffectedProduct(
-            vendor=ap.get('vendor', 'unknown'),
-            product=ap.get('product', 'unknown'),
-            versions=list(ap.get('versions', [])),
-            category=classify_product_category(ap.get('vendor', ''), ap.get('product', '')),
+            vendor=ap.get("vendor", "unknown"),
+            product=ap.get("product", "unknown"),
+            versions=list(ap.get("versions", [])),
+            category=classify_product_category(ap.get("vendor", ""), ap.get("product", "")),
         ))
-    if not affected and category != 'unknown':
-        affected.append(AffectedProduct(
-            vendor='unknown', product='unknown', category=category,
-        ))
+    if not affected and category != "unknown":
+        affected.append(AffectedProduct(vendor="unknown", product="unknown", category=category))
 
     now = datetime.utcnow()
     return CVE(
-        id=raw['cve'],
+        id=raw["cve"],
         description=desc,
-        cvss_score=raw.get('cvss_score'),
-        cvss_severity=raw.get('severity'),
-        published_at=raw.get('published_at'),
+        cvss_score=raw.get("cvss_score"),
+        cvss_severity=raw.get("severity"),
+        published_at=raw.get("published_at"),
         attack_tags=classify_attack_tags(desc, cwes),
         cwe_ids=cwes,
         affected=affected,
-        sources=['nvd'],
+        sources=["nvd"],
+        epss_score=raw.get("epss_score"),
+        kev=raw.get("kev", 0),
         first_seen=now,
         last_seen=now,
     )
 
 
 def poc_from_github(raw: dict) -> PoC:
-    """Build a PoC from one GitHub result dict (see sources/github.py)."""
     text = f'{raw.get("repo", "")} {raw.get("description", "")}'
     return PoC(
-        url=raw.get('url', ''),
-        source='github',
-        stars=raw.get('stars'),
-        age_days=raw.get('age_days'),
-        description=raw.get('description'),
-        cve_refs=raw.get('cves') or extract_cves(text),
+        url=raw.get("url", ""),
+        source="github",
+        stars=raw.get("stars"),
+        age_days=raw.get("age_days"),
+        description=raw.get("description"),
+        cve_refs=raw.get("cves") or extract_cves(text),
     )
 
 
 def poc_from_twitter(raw: dict) -> PoC:
-    """Build a PoC from one Twitter result dict (see sources/twitter.py)."""
-    text = raw.get('description', '') or ''
+    text = raw.get("description", "") or ""
     return PoC(
-        url=raw.get('url', ''),
-        source='twitter',
-        stars=raw.get('stars'),
-        age_days=raw.get('age_days'),
+        url=raw.get("url", ""),
+        source="twitter",
+        stars=raw.get("stars"),
+        age_days=raw.get("age_days"),
         description=text[:300],
-        cve_refs=raw.get('cves') or extract_cves(text),
+        cve_refs=raw.get("cves") or extract_cves(text),
     )
 
 
-def merge_findings(
-    nvd_raw: list[dict],
-    github_raw: list[dict],
-    twitter_raw: list[dict] | None = None,
-) -> tuple[list[CVE], list[PoC]]:
-    """Convert raw results to CVE + PoC lists. No CVEs are synthesized from
-    GitHub-only findings — those live as standalone PoCs with cve_refs that
-    may or may not match a known CVE.
+def poc_from_nitter(raw: dict) -> PoC:
+    return PoC(
+        url=raw.get("url", ""),
+        source="nitter",
+        stars=raw.get("stars"),
+        age_days=raw.get("age_days"),
+        description=raw.get("description"),
+        cve_refs=raw.get("cves", []),
+    )
+
+
+def poc_from_exploitdb(raw: dict) -> PoC:
+    return PoC(
+        url=raw.get("url", ""),
+        source="exploit-db",
+        stars=None,
+        age_days=None,
+        description=raw.get("description"),
+        cve_refs=raw.get("cves", []),
+    )
+
+
+def poc_from_x(raw: dict) -> PoC:
+    return PoC(
+        url=raw.get("url", ""),
+        source="x",
+        stars=raw.get("stars"),
+        age_days=raw.get("age_days"),
+        description=raw.get("description"),
+        cve_refs=raw.get("cves", []),
+    )
+
+
+# Map source names to builder functions
+POC_BUILDERS = {
+    "github": poc_from_github,
+    "twitter": poc_from_twitter,
+    "nitter": poc_from_nitter,
+    "exploit-db": poc_from_exploitdb,
+    "x": poc_from_x,
+}
+
+
+def deduplicate_pocs(pocs: list[PoC]) -> list[PoC]:
+    """Merge duplicate PoCs by URL, keeping the richest metadata."""
+    seen: dict[str, PoC] = {}
+    source_priority = {"exploit-db": 3, "github": 2, "x": 1, "nitter": 1, "twitter": 0}
+
+    for poc in pocs:
+        if poc.url in seen:
+            existing = seen[poc.url]
+            existing.cve_refs = list(set(existing.cve_refs + poc.cve_refs))
+            if poc.stars and (not existing.stars or poc.stars > existing.stars):
+                existing.stars = poc.stars
+            if poc.description and (not existing.description or
+                                    len(poc.description) > len(existing.description)):
+                existing.description = poc.description
+            if source_priority.get(poc.source, 0) > source_priority.get(existing.source, 0):
+                existing.source = poc.source
+        else:
+            seen[poc.url] = poc
+    return list(seen.values())
+
+
+def merge_findings(all_cves: list, all_pocs: list) -> tuple[list[CVE], list[PoC]]:
+    """Deduplicate CVEs and PoCs from all sources.
+
+    CVEs are deduplicated by ID (first seen wins).
+    PoCs are deduplicated by URL (richest metadata wins).
     """
-    cves = [cve_from_nvd(r) for r in nvd_raw]
-    pocs = [poc_from_github(r) for r in github_raw]
-    if twitter_raw:
-        pocs += [poc_from_twitter(r) for r in twitter_raw]
+    # Deduplicate CVEs by ID
+    seen_cves: dict[str, CVE] = {}
+    for cve in all_cves:
+        if cve.id not in seen_cves:
+            seen_cves[cve.id] = cve
+    cves = list(seen_cves.values())
+
+    # Deduplicate PoCs
+    pocs = deduplicate_pocs(all_pocs)
+
     return cves, pocs
 
 
 def link_pocs_to_cves(cves: list[CVE], pocs: list[PoC]) -> dict[str, list[PoC]]:
-    """Return CVE id -> list of PoCs that reference it.
-
-    Pure derivation from `PoC.cve_refs` ∩ {cve.id for cve in cves}.
-    """
+    """Return {cve_id: [PoC, ...]} mapping."""
     known_ids = {c.id.upper() for c in cves}
     links: dict[str, list[PoC]] = {cid: [] for cid in known_ids}
     for poc in pocs:
