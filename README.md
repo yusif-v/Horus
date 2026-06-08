@@ -71,11 +71,36 @@ python3 -m horus --auth-status
 | `--enrichers A,B` | Run only these enrichers |
 | `--no-<name>` | Skip a source (auto-generated per source) |
 | `--skip-<name>` | Skip an enricher (auto-generated per enricher) |
-| `--query CVE-XXXX-XXXX` | Query a CVE enrichment report from the database |
-| `--health-check` | Run database integrity checks and exit |
-| `--auth-status` | Show GitHub auth status and exit |
-| `--no-save` | Skip writing report to disk |
-| `--no-graph` | Skip writing the interactive graph HTML |
+|| `--query CVE-XXXX-XXXX` | Query a CVE enrichment report from the database |
+|| `--health-check` | Run database integrity checks and exit ||
+|| `--auth-status` | Show GitHub auth status and exit ||
+|| `--no-save` | Skip writing report to disk ||
+|| `--no-graph` | Skip writing the interactive graph HTML ||
+
+## Web Interface
+
+Horus includes a Flask-based web UI for browsing the database visually.
+
+```bash
+# Install web dependencies
+pip install flask
+
+# Start the server
+python3 -m horus.web              # http://127.0.0.1:8080
+python3 -m horus.web --port 8080  # custom port
+python3 -m horus.web --host 0.0.0.0 --port 8080  # network-accessible
+```
+
+**Pages:**
+- `/` — Dashboard: stats, recent CVEs, top PoCs, category breakdown
+- `/search?q=CVE-2026-11413` — Search CVEs by ID or keyword
+- `/cve/CVE-2026-11413` — Full CVE detail with PoCs, tags, products, related CVEs
+- `/cves` — Browse all CVEs, filter by severity/KEV
+- `/pocs` — Browse all PoCs, filter by source
+- `/api/stats` — JSON API for dashboard stats
+- `/api/cve/CVE-2026-11413` — JSON API for CVE detail
+
+Dark theme, responsive design, works on desktop and mobile.
 
 ## Query Output
 
