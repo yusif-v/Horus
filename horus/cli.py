@@ -281,7 +281,8 @@ def main(argv: list[str] | None = None) -> None:
             db.mark_run(conn, name)
 
     # ── Phase 5: Output ──────────────────────────────────────────────────
-    print(render_report(cves, pocs, links, fmt=args.format), end="")
+    report_text = render_report(cves, pocs, links, fmt=args.format)
+    print(report_text, end="")
 
     if not args.no_save:
         path = save_report(render_report(cves, pocs, links, fmt="md"), fmt="md")

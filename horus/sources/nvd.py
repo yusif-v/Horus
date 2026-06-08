@@ -98,61 +98,80 @@ def run(
     start = _resolve_start(now, last_run_nvd).strftime("%Y-%m-%dT%H:%M:%S.000")
     end = now.strftime("%Y-%m-%dT%H:%M:%S.000")
 
-    url = (
-        f"https://services.nvd.nist.gov/rest/json/cves/2.0"
-        f"?pubStartDate={start}&pubEndDate={end}&resultsPerPage=50"
-    )
-
-    try:
-        data = fetch_json(url)
-    except Exception as e:
-        print(f"  [WARN] NVD fetch failed: {e}", file=sys.stderr)
-        return {"cves": [], "pocs": []}
-
     results = []
-    for item in data.get("vulnerabilities", []):
-        cve = item.get("cve", {})
-        cve_id = cve.get("id", "Unknown")
+    seen_this_run: set[str] = set()
+    results_per_page = 50
+    max_pages = 20  # safety cap: 1000 CVEs max per run
+    total_results = None
 
-        desc = ""
-        for d in cve.get("descriptions", []):
-            if d.get("lang") == "en":
-                desc = d.get("value", "")
-                break
+    for page in range(max_pages):
+        url = (
+            f"https://services.nvd.nist.gov/rest/json/cves/2.0"
+            f"?pubStartDate={start}&pubEndDate={end}"
+            f"&resultsPerPage={results_per_page}"
+            f"&startIndex={page * results_per_page}"
+        )
 
-        score, severity = _extract_cvss(cve.get("metrics", {}))
+        try:
+            data = fetch_json(url)
+        except Exception as e:
+            print(f"  [WARN] NVD fetch failed (page {page}): {e}", file=sys.stderr)
+            break
 
-        if args.min_cvss is not None and (score is None or score < args.min_cvss):
-            continue
+        if page == 0:
+            total_results = data.get("totalResults", 0)
 
-        if cve_id in known_cve_ids:
-            continue
-        known_cve_ids.add(cve_id)
+        vulnerabilities = data.get("vulnerabilities", [])
+        if not vulnerabilities:
+            break
 
-        published_iso = cve.get("published")
-        published_at = None
-        if published_iso:
-            try:
-                published_at = datetime.strptime(published_iso[:19], "%Y-%m-%dT%H:%M:%S")
-            except ValueError:
-                pass
+        for item in vulnerabilities:
+            cve = item.get("cve", {})
+            cve_id = cve.get("id", "Unknown")
 
-        results.append({
-            "source": "NVD",
-            "cve": cve_id,
-            "description": desc[:300],
-            "cvss_score": score,
-            "severity": severity,
-            "cwe_ids": _extract_cwes(cve.get("weaknesses", [])),
-            "affected": _extract_affected(cve.get("configurations", [])),
-            "published_at": published_at,
-        })
+            desc = ""
+            for d in cve.get("descriptions", []):
+                if d.get("lang") == "en":
+                    desc = d.get("value", "")
+                    break
+
+            score, severity = _extract_cvss(cve.get("metrics", {}))
+
+            if args.min_cvss is not None and (score is None or score < args.min_cvss):
+                continue
+
+            if cve_id in known_cve_ids or cve_id in seen_this_run:
+                continue
+            seen_this_run.add(cve_id)
+
+            published_iso = cve.get("published")
+            published_at = None
+            if published_iso:
+                try:
+                    published_at = datetime.strptime(published_iso[:19], "%Y-%m-%dT%H:%M:%S")
+                except ValueError:
+                    pass
+
+            results.append({
+                "source": "NVD",
+                "cve": cve_id,
+                "description": desc[:300],
+                "cvss_score": score,
+                "severity": severity,
+                "cwe_ids": _extract_cwes(cve.get("weaknesses", [])),
+                "affected": _extract_affected(cve.get("configurations", [])),
+                "published_at": published_at,
+            })
+
+        # Check if we've fetched all results
+        fetched = (page + 1) * results_per_page
+        if total_results is not None and fetched >= total_results:
+            break
 
     results.sort(key=lambda x: x.get("cvss_score") or 0, reverse=True)
     if args.max_results is not None:
         results = results[: args.max_results]
 
-    # Convert to CVE objects
     from ..core.merge import cve_from_nvd
     cves = [cve_from_nvd(r) for r in results]
     return {"cves": cves, "pocs": []}

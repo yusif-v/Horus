@@ -75,7 +75,7 @@ def run(
                 "cves": extract_cves(combined),
                 "stars": stars,
                 "created": created_at[:10] if created_at else "",
-                "age_days": age_days or 0,
+                "age_days": age_days,
             })
 
     results.sort(key=lambda x: x.get("stars", 0), reverse=True)

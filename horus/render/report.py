@@ -39,8 +39,8 @@ def _standalone_pocs(pocs: list[PoC], cves: list[CVE]) -> list[PoC]:
 
 
 def _poc_label(poc: PoC) -> str:
-    """Return a display label for a PoC, including Twitter attribution."""
-    if poc.source == 'twitter':
+    """Return a display label for a PoC, including X/Twitter attribution."""
+    if poc.source in ('twitter', 'x'):
         return f'{poc.url} [tweet]'
     return poc.url
 
@@ -48,7 +48,7 @@ def _poc_label(poc: PoC) -> str:
 def _poc_detail(poc: PoC) -> str:
     """Return detail line for a standalone PoC."""
     parts = [f'{poc.stars or 0}', f'{poc.age_days or 0}d']
-    if poc.source == 'twitter':
+    if poc.source in ('twitter', 'x'):
         parts.append('tweet')
     label = f'({" ".join(parts)})'
     return label
@@ -144,16 +144,16 @@ def _render_markdown(cves: list[CVE], pocs: list[PoC], links: dict[str, list[PoC
                 w(f'  affects: *{ap.vendor}/{ap.product}*{ver}')
             for poc in links.get(cve.id.upper(), []):
                 src_tag = f' [{poc.source}]'
-                if poc.source == 'twitter':
+                if poc.source in ('twitter', 'x'):
                     w(f'  PoC: [{poc.url}]({poc.url}) {poc.stars or 0}* [tweet{src_tag}]')
                 else:
                     w(f'  PoC: [{poc.url}]({poc.url}) {poc.stars or 0}*{src_tag}')
 
     if standalone:
-        w(f'\n## Standalone PoCs ({len(standalone)})\n')
+        w(f'\\n## Standalone PoCs ({len(standalone)})\\n')
         for poc in sorted(standalone, key=lambda p: p.stars or 0, reverse=True):
             refs = f' -- refs: {", ".join(poc.cve_refs)}' if poc.cve_refs else ''
-            src_tag = ' [tweet]' if poc.source == 'twitter' else ''
+            src_tag = ' [tweet]' if poc.source in ('twitter', 'x') else ''
             w(f'- [{poc.url}]({poc.url}) {poc.stars or 0}* {poc.age_days or 0}d{refs}{src_tag}')
             if poc.description:
                 w(f'  > {poc.description[:200]}')

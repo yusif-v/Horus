@@ -30,7 +30,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from horus.config import STATE_DIR
 from horus.core.vocab import ATTACK_TAGS, PRODUCT_CATEGORIES
+
+DB_PATH_DEFAULT = STATE_DIR / "horus.db"
 
 
 # ─── Allowed values ──────────────────────────────────────────────────────────
@@ -47,12 +50,8 @@ ALLOWED_CVE_SOURCES = frozenset({
 
 ALLOWED_SEVERITIES = frozenset({"LOW", "MEDIUM", "HIGH", "CRITICAL", ""})
 
-CVE_ID_RE = None  # compiled below
-
-
-def _cve_id_re():
-    import re
-    return re.compile(r"^CVE-\d{4}-\d{4,}$")
+import re as _re
+CVE_ID_RE = _re.compile(r"^CVE-\d{4}-\d{4,}$")
 
 
 # ─── Report structures ──────────────────────────────────────────────────────
@@ -205,7 +204,7 @@ def _check_schema(conn: sqlite3.Connection, report: HealthReport):
 
 def _check_cve_data_quality(conn: sqlite3.Connection, report: HealthReport):
     """Validate CVE records for data quality issues."""
-    re_id = _cve_id_re()
+    re_id = CVE_ID_RE
 
     total = conn.execute("SELECT COUNT(*) FROM cve").fetchone()[0]
     report.stats["total_cves"] = total
@@ -615,7 +614,7 @@ def run_health_check(db_path: str | None = None) -> HealthReport:
     report = HealthReport()
 
     if db_path is None:
-        db_path = str(Path.home() / "Development" / "Projects" / "Horus" / "state" / "horus.db")
+        db_path = str(DB_PATH_DEFAULT)
 
     if not Path(db_path).exists():
         report.error("database", f"Database file not found: {db_path}")
