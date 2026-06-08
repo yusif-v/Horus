@@ -82,10 +82,13 @@ python3 -m horus --auth-status
 Horus includes a Flask-based web UI for browsing the database visually.
 
 ```bash
-# Install web dependencies
-pip install flask
+# First time: create venv and install dependencies
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[web]"
 
-# Start the server
+# Start the server (always activate venv first)
+source .venv/bin/activate
 python3 -m horus.web              # http://127.0.0.1:8080
 python3 -m horus.web --port 8080  # custom port
 python3 -m horus.web --host 0.0.0.0 --port 8080  # network-accessible
