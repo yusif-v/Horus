@@ -74,6 +74,30 @@ def get_stats() -> dict:
         kev_count = conn.execute("SELECT COUNT(*) FROM cve WHERE kev = 1").fetchone()[0]
         with_epss = conn.execute("SELECT COUNT(*) FROM cve WHERE epss_score IS NOT NULL").fetchone()[0]
         linked_pocs = conn.execute("SELECT COUNT(DISTINCT poc_url) FROM poc_cve").fetchone()[0]
+        cves_with_pocs = conn.execute("SELECT COUNT(DISTINCT cve_id) FROM poc_cve").fetchone()[0]
+
+        # Average EPSS
+        avg_epss = conn.execute("SELECT AVG(epss_score) FROM cve WHERE epss_score IS NOT NULL").fetchone()[0]
+
+        # Average exploitability
+        avg_exploit = conn.execute("SELECT AVG(exploitability_score) FROM cve WHERE exploitability_score IS NOT NULL").fetchone()[0]
+
+        # Severity breakdown
+        severity_breakdown = _rows_to_dicts(conn.execute(
+            "SELECT cvss_severity, COUNT(*) as cnt FROM cve WHERE cvss_severity IS NOT NULL GROUP BY cvss_severity ORDER BY cnt DESC"
+        ).fetchall())
+
+        # EPSS distribution buckets
+        epss_buckets = _rows_to_dicts(conn.execute("""
+            SELECT CASE
+                WHEN epss_score >= 0.5 THEN 'Very High (≥0.5)'
+                WHEN epss_score >= 0.1 THEN 'High (0.1-0.5)'
+                WHEN epss_score >= 0.01 THEN 'Medium (0.01-0.1)'
+                WHEN epss_score IS NOT NULL THEN 'Low (<0.01)'
+            END as bucket, COUNT(*) as cnt
+            FROM cve WHERE epss_score IS NOT NULL
+            GROUP BY bucket ORDER BY cnt DESC
+        """).fetchall())
 
         # Source breakdown
         sources = _rows_to_dicts(conn.execute(
@@ -85,6 +109,11 @@ def get_stats() -> dict:
             "SELECT p.category, COUNT(DISTINCT cp.cve_id) as cnt FROM cve_product cp JOIN product p ON p.id = cp.product_id GROUP BY p.category ORDER BY cnt DESC"
         ).fetchall())
 
+        # Top attack tags
+        top_tags = _rows_to_dicts(conn.execute("""
+            SELECT tag, COUNT(*) as cnt FROM cve_attack_tag GROUP BY tag ORDER BY cnt DESC LIMIT 15
+        """).fetchall())
+
         # Recent CVEs (last 10)
         recent_cves = _rows_to_dicts(conn.execute(
             "SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at FROM cve ORDER BY published_at DESC NULLS LAST LIMIT 10"
@@ -95,16 +124,45 @@ def get_stats() -> dict:
             "SELECT url, source, stars, description FROM poc WHERE stars IS NOT NULL ORDER BY stars DESC LIMIT 10"
         ).fetchall())
 
+        # Highest EPSS CVEs
+        highest_epss = _rows_to_dicts(conn.execute("""
+            SELECT id, cvss_score, cvss_severity, epss_score, kev FROM cve
+            WHERE epss_score IS NOT NULL ORDER BY epss_score DESC LIMIT 10
+        """).fetchall())
+
+        # KEV CVEs with details
+        kev_cves = _rows_to_dicts(conn.execute("""
+            SELECT id, cvss_score, cvss_severity, epss_score, description FROM cve
+            WHERE kev = 1 ORDER BY cvss_score DESC NULLS LAST LIMIT 10
+        """).fetchall())
+
+        # CVEs published per month (last 6 months)
+        monthly_cves = _rows_to_dicts(conn.execute("""
+            SELECT strftime('%Y-%m', published_at) as month, COUNT(*) as cnt
+            FROM cve WHERE published_at IS NOT NULL
+              AND published_at >= date('now', '-6 months')
+            GROUP BY month ORDER BY month
+        """).fetchall())
+
     return {
         "cve_count": cve_count,
         "poc_count": poc_count,
         "kev_count": kev_count,
         "with_epss": with_epss,
         "linked_pocs": linked_pocs,
+        "cves_with_pocs": cves_with_pocs,
+        "avg_epss": avg_epss,
+        "avg_exploit": avg_exploit,
+        "severity_breakdown": severity_breakdown,
+        "epss_buckets": epss_buckets,
         "sources": sources,
         "categories": categories,
+        "top_tags": top_tags,
         "recent_cves": recent_cves,
         "top_pocs": top_pocs,
+        "highest_epss": highest_epss,
+        "kev_cves": kev_cves,
+        "monthly_cves": monthly_cves,
     }
 
 
@@ -263,6 +321,7 @@ a:hover { text-decoration: underline; }
 .stat .value.orange { color: var(--orange); }
 .stat .value.green { color: var(--green); }
 .stat .value.purple { color: var(--purple); }
+.stat .sub { font-size: .75rem; color: var(--text-dim); margin-top: .25rem; }
 
 /* Cards */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem; }
@@ -286,6 +345,33 @@ td .id { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; }
 .badge-epss { background: var(--purple); color: #fff; }
 .badge-source { background: var(--border); color: var(--text-dim); }
 .badge-tag { background: rgba(88,166,255,.15); color: var(--accent); }
+
+/* Bar chart */
+.bar-chart { display: flex; flex-direction: column; gap: .5rem; }
+.bar-row { display: flex; align-items: center; gap: .75rem; }
+.bar-label { min-width: 140px; font-size: .8rem; color: var(--text-dim); text-align: right; flex-shrink: 0; }
+.bar-track { flex: 1; height: 20px; background: var(--bg); border-radius: 4px; overflow: hidden; position: relative; }
+.bar-fill { height: 100%; border-radius: 4px; transition: width .3s ease; min-width: 2px; }
+.bar-fill.critical { background: var(--critical); }
+.bar-fill.high { background: var(--high); }
+.bar-fill.medium { background: #d2992266; }
+.bar-fill.low { background: #3fb95066; }
+.bar-fill.epss-vhigh { background: var(--purple); }
+.bar-fill.epss-high { background: var(--accent); }
+.bar-fill.epss-med { background: var(--orange); }
+.bar-fill.epss-low { background: var(--green); }
+.bar-fill.kev { background: var(--red); }
+.bar-fill.monthly { background: var(--accent); }
+.bar-value { min-width: 40px; font-size: .8rem; font-weight: 600; color: var(--text); flex-shrink: 0; }
+
+/* EPSS bar */
+.epss-bar { display: inline-block; width: 60px; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; vertical-align: middle; margin-right: .25rem; }
+.epss-bar-fill { height: 100%; border-radius: 4px; background: var(--purple); }
+
+/* Tag cloud */
+.tag-cloud { display: flex; flex-wrap: wrap; gap: .4rem; }
+.tag-cloud .badge-tag { font-size: .7rem; }
+.tag-cloud .badge-tag.large { font-size: .85rem; padding: .25rem .65rem; }
 
 /* CVE detail */
 .cve-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
@@ -315,12 +401,19 @@ td .id { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; }
 .result-id { font-family: 'SF Mono', 'Fira Code', monospace; font-weight: 600; font-size: 1rem; }
 .result-desc { font-size: .85rem; color: var(--text-dim); margin-top: .25rem; }
 
+/* Two column layout */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
+
 /* Responsive */
 @media (max-width: 768px) {
   .nav { padding: 0 1rem; gap: 1rem; }
   .nav .search input { width: 160px; }
   .container { padding: 1rem; }
   .cve-score { margin-left: 0; text-align: left; }
+  .two-col { grid-template-columns: 1fr; }
+  .three-col { grid-template-columns: 1fr; }
+  .bar-label { min-width: 80px; font-size: .7rem; }
 }
 </style>
 </head>
@@ -329,6 +422,7 @@ td .id { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; }
   <a href="/" class="logo">Horus<span>.</span></a>
   <a href="/" class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
   <a href="/cves" class="{% if active == 'cves' %}active{% endif %}">CVEs</a>
+  <a href="/cves?sort=exploit" class="{% if active == 'priority' %}active{% endif %}">Priority</a>
   <a href="/pocs" class="{% if active == 'pocs' %}active{% endif %}">PoCs</a>
   <form class="search" action="/search" method="get">
     <input type="text" name="q" placeholder="Search CVE..." value="{{ search_query|default('') }}">
@@ -343,24 +437,71 @@ td .id { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; }
 DASHBOARD_TEMPLATE = """
 <div class="stats">
   <div class="stat"><div class="label">Total CVEs</div><div class="value">{{ stats.cve_count }}</div></div>
-  <div class="stat"><div class="label">Total PoCs</div><div class="value orange">{{ stats.poc_count }}</div></div>
-  <div class="stat"><div class="label">KEV</div><div class="value red">{{ stats.kev_count }}</div></div>
-  <div class="stat"><div class="label">With EPSS</div><div class="value purple">{{ stats.with_epss }}</div></div>
-  <div class="stat"><div class="label">Linked PoCs</div><div class="value green">{{ stats.linked_pocs }}</div></div>
+  <div class="stat"><div class="label">Total PoCs</div><div class="value orange">{{ stats.poc_count }}</div><div class="sub">{{ stats.cves_with_pocs }} CVEs linked</div></div>
+  <div class="stat"><div class="label">KEV</div><div class="value red">{{ stats.kev_count }}</div><div class="sub">known exploited</div></div>
+  <div class="stat"><div class="label">With EPSS</div><div class="value purple">{{ stats.with_epss }}</div><div class="sub">avg: {{ "%.2f%%"|format(stats.avg_epss * 100) if stats.avg_epss else 'N/A' }}</div></div>
+  <div class="stat"><div class="label">Avg Exploitability</div><div class="value green">{{ "%.1f"|format(stats.avg_exploit) if stats.avg_exploit else 'N/A' }}<span style="font-size:.6em;">/10</span></div></div>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+<!-- Severity breakdown bar chart -->
+{% if stats.severity_breakdown %}
+<div class="card">
+  <div class="card-header">CVEs by Severity</div>
+  <div class="card-body">
+    <div class="bar-chart">
+    {% set sev_max = stats.severity_breakdown|map(attribute='cnt')|max %}
+    {% for sev in stats.severity_breakdown %}
+      <div class="bar-row">
+        <span class="bar-label">{{ sev.cvss_severity }}</span>
+        <div class="bar-track">
+          <div class="bar-fill {{ sev.cvss_severity|lower }}" style="width: {{ (sev.cnt / sev_max * 100)|int }}%;"></div>
+        </div>
+        <span class="bar-value">{{ sev.cnt }}</span>
+      </div>
+    {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- EPSS distribution -->
+{% if stats.epss_buckets %}
+<div class="card">
+  <div class="card-header">EPSS Distribution</div>
+  <div class="card-body">
+    <div class="bar-chart">
+    {% set epss_max = stats.epss_buckets|map(attribute='cnt')|max %}
+    {% set epss_classes = {'Very High (≥0.5)': 'epss-vhigh', 'High (0.1-0.5)': 'epss-high', 'Medium (0.01-0.1)': 'epss-med', 'Low (<0.01)': 'epss-low'} %}
+    {% for bucket in stats.epss_buckets %}
+      <div class="bar-row">
+        <span class="bar-label">{{ bucket.bucket }}</span>
+        <div class="bar-track">
+          <div class="bar-fill {{ epss_classes.get(bucket.bucket, 'epss-low') }}" style="width: {{ (bucket.cnt / epss_max * 100)|int }}%;"></div>
+        </div>
+        <span class="bar-value">{{ bucket.cnt }}</span>
+      </div>
+    {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="two-col">
   <div class="card">
     <div class="card-header">Recent CVEs</div>
     <div class="card-body" style="padding:0;">
       <table>
-        <thead><tr><th>ID</th><th>CVSS</th><th>Severity</th><th>Published</th></tr></thead>
+        <thead><tr><th>ID</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>Published</th></tr></thead>
         <tbody>
         {% for cve in stats.recent_cves %}
         <tr>
           <td><a href="/cve/{{ cve.id }}" class="id">{{ cve.id }}</a></td>
           <td>{{ cve.cvss_score or 'N/A' }}</td>
           <td>{% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }}</span>{% else %}N/A{% endif %}</td>
+          <td>{% if cve.epss_score is not none %}
+            <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span>
+            {{ "%.1f%%"|format(cve.epss_score * 100) }}
+          {% else %}—{% endif %}</td>
           <td>{{ cve.published_at[:10] if cve.published_at else 'N/A' }}</td>
         </tr>
         {% endfor %}
@@ -369,16 +510,20 @@ DASHBOARD_TEMPLATE = """
     </div>
   </div>
   <div class="card">
-    <div class="card-header">Top PoCs</div>
+    <div class="card-header">Highest EPSS CVEs</div>
     <div class="card-body" style="padding:0;">
       <table>
-        <thead><tr><th>Source</th><th>Stars</th><th>URL</th></tr></thead>
+        <thead><tr><th>ID</th><th>CVSS</th><th>EPSS</th><th>KEV</th></tr></thead>
         <tbody>
-        {% for poc in stats.top_pocs %}
+        {% for cve in stats.highest_epss %}
         <tr>
-          <td><span class="badge badge-source">{{ poc.source }}</span></td>
-          <td>{{ poc.stars }}</td>
-          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="{{ poc.url }}" target="_blank">{{ poc.url[:60] }}...</a></td>
+          <td><a href="/cve/{{ cve.id }}" class="id">{{ cve.id }}</a></td>
+          <td>{{ cve.cvss_score or 'N/A' }}</td>
+          <td>
+            <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span>
+            <span class="badge badge-epss">{{ "%.2f%%"|format(cve.epss_score * 100) }}</span>
+          </td>
+          <td>{% if cve.kev %}<span class="badge badge-kev">KEV</span>{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
         </tbody>
@@ -387,13 +532,115 @@ DASHBOARD_TEMPLATE = """
   </div>
 </div>
 
-{% if stats.categories %}
-<div class="card" style="margin-top:1.5rem;">
-  <div class="card-header">CVEs by Category</div>
+<!-- KEV CVEs -->
+{% if stats.kev_cves %}
+<div class="card">
+  <div class="card-header">Known Exploited Vulnerabilities (KEV)</div>
+  <div class="card-body" style="padding:0;">
+    <table>
+      <thead><tr><th>ID</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for cve in stats.kev_cves %}
+      <tr>
+        <td><a href="/cve/{{ cve.id }}" class="id">{{ cve.id }}</a></td>
+        <td>{{ cve.cvss_score or 'N/A' }}</td>
+        <td>{% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }}</span>{% else %}N/A{% endif %}</td>
+        <td>{% if cve.epss_score is not none %}
+          <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span>
+          {{ "%.1f%%"|format(cve.epss_score * 100) }}
+        {% else %}—{% endif %}</td>
+        <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ cve.description[:120] if cve.description else '—' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-header">Top PoCs by Stars</div>
+    <div class="card-body" style="padding:0;">
+      <table>
+        <thead><tr><th>Source</th><th>Stars</th><th>URL</th></tr></thead>
+        <tbody>
+        {% for poc in stats.top_pocs %}
+        <tr>
+          <td><span class="badge badge-source">{{ poc.source }}</span></td>
+          <td>★ {{ poc.stars }}</td>
+          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="{{ poc.url }}" target="_blank">{{ poc.url[:60] }}...</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">Attack Tags</div>
+    <div class="card-body">
+      {% if stats.top_tags %}
+      <div class="tag-cloud">
+        {% set max_tag = stats.top_tags|map(attribute='cnt')|max %}
+        {% for tag in stats.top_tags %}
+        <span class="badge badge-tag {% if tag.cnt > max_tag * 0.6 %}large{% endif %}">{{ tag.tag }} ({{ tag.cnt }})</span>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color:var(--text-dim);">No attack tags available.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Monthly trend -->
+{% if stats.monthly_cves %}
+<div class="card">
+  <div class="card-header">CVEs Published per Month (Last 6 Months)</div>
   <div class="card-body">
-    <div style="display:flex;flex-wrap:wrap;gap:.5rem;">
+    <div class="bar-chart">
+    {% set month_max = stats.monthly_cves|map(attribute='cnt')|max %}
+    {% for m in stats.monthly_cves %}
+      <div class="bar-row">
+        <span class="bar-label">{{ m.month }}</span>
+        <div class="bar-track">
+          <div class="bar-fill monthly" style="width: {{ (m.cnt / month_max * 100)|int }}%;"></div>
+        </div>
+        <span class="bar-value">{{ m.cnt }}</span>
+      </div>
+    {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if stats.categories %}
+<div class="card">
+  <div class="card-header">CVEs by Product Category</div>
+  <div class="card-body">
+    <div class="tag-cloud">
     {% for cat in stats.categories %}
-    <span class="badge badge-tag">{{ cat.category }} ({{ cat.cnt }})</span>
+    <span class="badge badge-tag {% if cat.cnt > 50 %}large{% endif %}">{{ cat.category }} ({{ cat.cnt }})</span>
+    {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if stats.sources %}
+<div class="card">
+  <div class="card-header">PoC Sources</div>
+  <div class="card-body">
+    <div class="bar-chart">
+    {% set src_max = stats.sources|map(attribute='cnt')|max %}
+    {% for src in stats.sources %}
+      <div class="bar-row">
+        <span class="bar-label">{{ src.source }}</span>
+        <div class="bar-track">
+          <div class="bar-fill high" style="width: {{ (src.cnt / src_max * 100)|int }}%;"></div>
+        </div>
+        <span class="bar-value">{{ src.cnt }}</span>
+      </div>
     {% endfor %}
     </div>
   </div>
@@ -408,10 +655,13 @@ SEARCH_TEMPLATE = """
 {% for cve in results %}
 <div class="result-item">
   <a href="/cve/{{ cve.id }}" class="result-id">{{ cve.id }}</a>
-  <div style="display:flex;gap:.5rem;margin-top:.25rem;flex-wrap:wrap;">
+  <div style="display:flex;gap:.5rem;margin-top:.25rem;flex-wrap:wrap;align-items:center;">
     {% if cve.cvss_score %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_score }} {{ cve.cvss_severity }}</span>{% endif %}
     {% if cve.kev %}<span class="badge badge-kev">KEV</span>{% endif %}
-    {% if cve.epss_score is not none %}<span class="badge badge-epss">EPSS {{ "%.2f"|format(cve.epss_score * 100) }}%</span>{% endif %}
+    {% if cve.epss_score is not none %}
+    <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span>
+    <span class="badge badge-epss">{{ "%.2f%%"|format(cve.epss_score * 100) }}</span>
+    {% endif %}
   </div>
   <div class="result-desc">{{ cve.description[:200] }}</div>
 </div>
@@ -446,18 +696,30 @@ CVE_DETAIL_TEMPLATE = """
       {{ data.cve.cvss_score or 'N/A' }}
     </div>
     <div class="severity">CVSS Score</div>
+    {% if data.cve.epss_score is not none %}
+    <div style="margin-top:.5rem;">
+      <div style="font-size:.75rem;color:var(--text-dim);margin-bottom:.25rem;">EPSS: {{ "%.2f%%"|format(data.cve.epss_score * 100) }} exploit probability</div>
+      <div class="epss-bar" style="width:100px;height:10px;"><div class="epss-bar-fill" style="width: {{ (data.cve.epss_score * 100)|int }}%;"></div></div>
+    </div>
+    {% endif %}
     {% if data.cve.exploitability_score is not none %}
-    <div style="margin-top:.5rem;font-size:.8rem;color:var(--text-dim);">Exploitability: <strong>{{ "%.1f"|format(data.cve.exploitability_score) }}/10</strong></div>
+    <div style="margin-top:.5rem;font-size:.8rem;color:var(--text-dim);">
+      Exploitability: <strong>{{ "%.1f"|format(data.cve.exploitability_score) }}/10</strong>
+      <div style="margin-top:.25rem;background:var(--bg);border-radius:4px;height:6px;width:100px;overflow:hidden;">
+        <div style="background:var(--accent);height:100%;width: {{ (data.cve.exploitability_score * 10)|int }}%;border-radius:4px;"></div>
+      </div>
+    </div>
     {% endif %}
   </div>
 </div>
 
 <div class="description">{{ data.cve.description or 'No description available.' }}</div>
 
-<div style="display:flex;gap:2rem;margin:1rem 0;font-size:.85rem;color:var(--text-dim);">
+<div style="display:flex;gap:2rem;margin:1rem 0;font-size:.85rem;color:var(--text-dim);flex-wrap:wrap;">
   {% if data.cve.published_at %}<span>Published: {{ data.cve.published_at[:10] }}</span>{% endif %}
   {% if data.cve.first_seen %}<span>First seen: {{ data.cve.first_seen[:10] }}</span>{% endif %}
   {% if data.sources %}<span>Sources: {{ data.sources|join(', ') }}</span>{% endif %}
+  {% if data.linked_pocs %}<span>PoCs: {{ data.linked_pocs|length }}</span>{% endif %}
 </div>
 
 {% if data.cwes %}
@@ -493,6 +755,7 @@ CVE_DETAIL_TEMPLATE = """
       <div class="poc-meta">
         <span class="badge badge-source">{{ poc.source }}</span>
         {% if poc.stars %}★ {{ poc.stars }}{% endif %}
+        {% if poc.age_days is not none %}<span style="margin-left:.5rem;">{{ poc.age_days }}d old</span>{% endif %}
       </div>
       {% if poc.description %}<div class="poc-desc">{{ poc.description[:200] }}</div>{% endif %}
     </div>
@@ -525,9 +788,18 @@ LIST_TEMPLATE = """
 <h2 style="margin-bottom:1rem;">{{ title }} <span style="color:var(--text-dim);font-weight:400;">({{ total }})</span></h2>
 
 {% if filters %}
-<div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;">
+<div style="display:flex;gap:.5rem;margin-bottom:.5rem;flex-wrap:wrap;">
   {% for f in filters %}
   <a href="{{ f.url }}" class="badge {% if f.active %}badge-kev{% else %}badge-source{% endif %}">{{ f.label }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if sort_filters %}
+<div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;">
+  <span style="font-size:.75rem;color:var(--text-dim);align-self:center;margin-right:.25rem;">Sort:</span>
+  {% for f in sort_filters %}
+  <a href="{{ f.url }}" class="badge {% if f.active %}badge-epss{% else %}badge-source{% endif %}" style="font-size:.7rem;">{{ f.label }}</a>
   {% endfor %}
 </div>
 {% endif %}
@@ -548,6 +820,13 @@ LIST_TEMPLATE = """
           {% elif cell.type == 'score' %}<span style="color:{% if row[cell.key] is not none and row[cell.key] >= 9 %}var(--critical){% elif row[cell.key] is not none and row[cell.key] >= 7 %}var(--high){% elif row[cell.key] is not none and row[cell.key] >= 4 %}var(--orange){% else %}var(--green){% endif %};font-weight:600;">{{ row[cell.key] }}</span>
           {% elif cell.type == 'stars' %}★ {{ row[cell.key] }}
           {% elif cell.type == 'truncate' %}{{ row[cell.key][:120] if row[cell.key] else '—' }}
+          {% elif cell.type == 'epss' %}
+            {% if row[cell.key] is not none %}
+            <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (row[cell.key] * 100)|int }}%;"></span></span>
+            <span style="font-size:.75rem;">{{ "%.1f%%"|format(row[cell.key] * 100) }}</span>
+            {% else %}—{% endif %}
+          {% elif cell.type == 'kev' %}
+            {% if row[cell.key] %}<span class="badge badge-kev">KEV</span>{% else %}—{% endif %}
           {% else %}{{ row[cell.key] or '—' }}{% endif %}
         </td>
         {% endfor %}
@@ -637,6 +916,7 @@ def list_cves():
     page = _safe_int(request.args.get("page", "1"))
     severity = request.args.get("severity")
     kev_only = request.args.get("kev")
+    sort = request.args.get("sort", "cvss")
 
     try:
         with _db() as conn:
@@ -646,10 +926,22 @@ def list_cves():
                 params = [severity.upper()]
             if kev_only:
                 where = "WHERE kev = 1" if not where else where + " AND kev = 1"
+
+            # Sort options
+            order_map = {
+                "cvss": "cvss_score DESC NULLS LAST",
+                "epss": "epss_score DESC NULLS LAST",
+                "exploit": "exploitability_score DESC NULLS LAST",
+                "kev": "kev DESC, cvss_score DESC NULLS LAST",
+                "date": "published_at DESC NULLS LAST",
+                "newest": "first_seen DESC NULLS LAST",
+            }
+            order = order_map.get(sort, order_map["cvss"])
+
             total = conn.execute(f"SELECT COUNT(*) FROM cve {where}", params).fetchone()[0]
             offset = (page - 1) * PER_PAGE
             rows = _rows_to_dicts(conn.execute(
-                f"SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at FROM cve {where} ORDER BY cvss_score DESC NULLS LAST LIMIT ? OFFSET ?",
+                f"SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at FROM cve {where} ORDER BY {order} LIMIT ? OFFSET ?",
                 params + [PER_PAGE, offset]
             ).fetchall())
     except Exception as e:
@@ -667,20 +959,31 @@ def list_cves():
         {"label": "Low", "url": "/cves?severity=LOW", "active": severity == "LOW"},
         {"label": "KEV Only", "url": "/cves?kev=1", "active": bool(kev_only)},
     ]
-    columns = ["ID", "CVSS", "Severity", "Description", "Published"]
+    sort_filters = [
+        {"label": "By CVSS", "url": "/cves?sort=cvss" + (f"&severity={severity}" if severity else "") + ("&kev=1" if kev_only else ""), "active": sort == "cvss"},
+        {"label": "By EPSS", "url": "/cves?sort=epss" + (f"&severity={severity}" if severity else "") + ("&kev=1" if kev_only else ""), "active": sort == "epss"},
+        {"label": "By Exploitability", "url": "/cves?sort=exploit" + (f"&severity={severity}" if severity else "") + ("&kev=1" if kev_only else ""), "active": sort == "exploit"},
+        {"label": "Newest", "url": "/cves?sort=date" + (f"&severity={severity}" if severity else "") + ("&kev=1" if kev_only else ""), "active": sort == "date"},
+    ]
+    columns = ["ID", "CVSS", "Severity", "EPSS", "KEV", "Description", "Published"]
     cells = [
         {"type": "cve_link", "key": "id"}, {"type": "score", "key": "cvss_score"},
-        {"type": "badge", "key": "cvss_severity"}, {"type": "truncate", "key": "description"},
+        {"type": "badge", "key": "cvss_severity"},
+        {"type": "epss", "key": "epss_score"},
+        {"type": "kev", "key": "kev"},
+        {"type": "truncate", "key": "description"},
         {"type": "plain", "key": "published_at"},
     ]
-    prev_q = f"&severity={severity}" if severity else ""
+    prev_q = f"&sort={sort}" if sort != "cvss" else ""
+    if severity:
+        prev_q += f"&severity={severity}"
     if kev_only:
         prev_q += "&kev=1"
 
     return render_page(
         LIST_TEMPLATE, title="CVEs", active="cves",
         rows=rows, total=total, page=page, per_page=PER_PAGE,
-        filters=filters, columns=columns, cells=cells,
+        filters=filters, sort_filters=sort_filters, columns=columns, cells=cells,
         prev_url=f"/cves?page={page - 1}{prev_q}" if page > 1 else None,
         next_url=f"/cves?page={page + 1}{prev_q}" if page * PER_PAGE < total else None,
     )
