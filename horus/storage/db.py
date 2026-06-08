@@ -116,12 +116,29 @@ def _migrate_from_json(conn: sqlite3.Connection) -> tuple[int, int]:
     return cve_count, poc_count
 
 
+def _migrate_indexes(conn: sqlite3.Connection) -> None:
+    """Create any missing indexes (idempotent)."""
+    indexes = [
+        ("idx_cve_published_at", "cve(published_at)"),
+        ("idx_cve_cvss_score", "cve(cvss_score)"),
+        ("idx_cve_epss_score", "cve(epss_score)"),
+        ("idx_cve_kev", "cve(kev)"),
+        ("idx_cve_product_product_id", "cve_product(product_id)"),
+        ("idx_cve_attack_tag_tag", "cve_attack_tag(tag)"),
+        ("idx_poc_cve_cve_id", "poc_cve(cve_id)"),
+        ("idx_poc_source", "poc(source)"),
+    ]
+    for name, cols in indexes:
+        conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {cols}")
+
+
 def initialize() -> tuple[int, int]:
-    """Idempotent setup: schema + vocab + one-shot migration. Returns
+    """Idempotent setup: schema + vocab + index migration + one-shot migration. Returns
     (cves_migrated, pocs_migrated) — both 0 on subsequent runs."""
     with connect() as conn:
         _init_schema(conn)
         _seed_vocab(conn)
+        _migrate_indexes(conn)
         return _migrate_from_json(conn)
 
 

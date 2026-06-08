@@ -108,6 +108,10 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
         help="List all available sources and enrichers, then exit.",
     )
     p.add_argument(
+        "--health-check", action="store_true",
+        help="Run database health check and exit.",
+    )
+    p.add_argument(
         "--sources", type=str, default=None,
         help="Comma-separated list of sources to run (default: all enabled).",
     )
@@ -156,6 +160,13 @@ def main(argv: list[str] | None = None) -> None:
         for name, mod in sorted(enrichers.items()):
             enabled = getattr(mod, "DEFAULT_ENABLED", True)
             print(f"  {name:20s} {getattr(mod, 'NAME', name):30s} {'[on]' if enabled else '[off]'}")
+        return
+
+    # --health-check
+    if args.health_check:
+        from .storage.health import run_health_check
+        report = run_health_check()
+        report.print()
         return
 
     # --auth-status
