@@ -219,25 +219,28 @@ def main(argv: list[str] | None = None) -> None:
         known_poc_urls = db.list_known_poc_urls(conn)
         last_run_nvd = db.get_last_run(conn, "nvd")
 
-    # ── Phase 1: Run sources ─────────────────────────────────────────────
-    all_cves = []
-    all_pocs = []
-    source_results = {}  # {source_name: {"cves": [...], "pocs": [...]}}
+    # ── Phase 1a: Run CVE sources (discover new CVEs) ────────────────────
+    # CVE sources run first so their discovered IDs are available to PoC sources
+    cve_source_names = {"nvd"}  # source names that primarily discover CVEs
+    poc_source_names = set(selected_sources.keys()) - cve_source_names
 
+    all_cves: list = []
+    all_pocs: list = []
+    source_results: dict = {}
     step = 0
     total_steps = len(selected_sources) + len(selected_enrichers) + 2  # +merge +persist
 
-    for name, mod in sorted(selected_sources.items()):
+    def _run_source(name: str, mod) -> None:
+        nonlocal step
         step += 1
         label = getattr(mod, "NAME", name)
         _log(args.quiet, f"[{step}/{total_steps}] Running {label}...")
-
         try:
             result = mod.run(
                 known_cve_ids=known_cve_ids,
                 known_poc_urls=known_poc_urls,
                 args=args,
-                last_run_nvd=last_run_nvd,
+                last_run_nvd=last_run_nvd if name == "nvd" else None,
             )
             cves = result.get("cves", [])
             pocs = result.get("pocs", [])
@@ -248,6 +251,20 @@ def main(argv: list[str] | None = None) -> None:
         except Exception as e:
             print(f"  [ERROR] {label} failed: {e}", file=sys.stderr)
             source_results[name] = {"cves": 0, "pocs": 0, "error": str(e)}
+
+    # Run CVE sources first
+    for name in sorted(cve_source_names):
+        if name in selected_sources:
+            _run_source(name, selected_sources[name])
+
+    # Update known_cve_ids with CVEs discovered in this run
+    discovered_cve_ids = {c.id.upper() for c in all_cves}
+    known_cve_ids.update(discovered_cve_ids)
+
+    # ── Phase 1b: Run PoC sources (link to discovered CVEs) ───────────────
+    for name in sorted(poc_source_names):
+        if name in selected_sources:
+            _run_source(name, selected_sources[name])
 
     # ── Phase 2: Merge & deduplicate ─────────────────────────────────────
     step += 1
@@ -285,7 +302,8 @@ def main(argv: list[str] | None = None) -> None:
     print(report_text, end="")
 
     if not args.no_save:
-        path = save_report(render_report(cves, pocs, links, fmt="md"), fmt="md")
+        report_md = render_report(cves, pocs, links, fmt="md")
+        path = save_report(report_md, fmt="md")
         _log(args.quiet, f"  Report saved -> {path}")
 
     if not args.no_graph:
