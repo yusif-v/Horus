@@ -58,15 +58,15 @@ if [[ ! -d "$VENV_DIR" ]]; then
     echo "[horus-web] Creating virtual environment..."
     "$PYTHON" -m venv "$VENV_DIR"
     echo "[horus-web] Upgrading pip..."
-    "$VENV_DIR/bin/pip" install --upgrade pip setuptools -q
+    "$VENV_DIR/bin/pip" install --upgrade pip setuptools
     echo "[horus-web] Installing dependencies..."
-    "$VENV_DIR/bin/pip" install -e ".[web]" -q
+    "$VENV_DIR/bin/pip" install -e ".[web]"
     echo "[horus-web] Done."
 else
     # Check if Flask is installed; install if missing
     if ! "$VENV_DIR/bin/python3" -c "import flask" &>/dev/null; then
         echo "[horus-web] Installing missing dependencies..."
-        "$VENV_DIR/bin/pip" install -e ".[web]" -q
+        "$VENV_DIR/bin/pip" install -e ".[web]"
     fi
 fi
 

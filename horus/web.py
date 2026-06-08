@@ -20,6 +20,7 @@ from horus.config import STATE_DIR
 from horus.storage.db import connect
 
 DB_PATH = STATE_DIR / "horus.db"
+PER_PAGE = 20
 
 app = Flask(__name__)
 
@@ -41,6 +42,26 @@ def _row_to_dict(row) -> dict:
 
 def _rows_to_dicts(rows) -> list[dict]:
     return [dict(r) for r in rows]
+
+
+def _safe_int(value: str, default: int = 1, min_val: int = 1, max_val: int = 10000) -> int:
+    """Safely parse an integer from query string with bounds checking."""
+    try:
+        return max(min_val, min(int(value), max_val))
+    except (ValueError, TypeError):
+        return default
+
+
+def render_page(template: str, title: str, active: str = "", **context) -> str:
+    """Render a page template inside the base template."""
+    page_html = render_template_string(template, **context)
+    return render_template_string(
+        BASE_TEMPLATE,
+        title=title,
+        content=page_html,
+        active=active,
+        search_query=context.get("search_query", ""),
+    )
 
 
 # ─── Data access ─────────────────────────────────────────────────────────────
@@ -421,7 +442,7 @@ CVE_DETAIL_TEMPLATE = """
     </div>
   </div>
   <div class="cve-score">
-    <div class="score" style="color:{% if data.cve.cvss_score >= 9 %}var(--critical){% elif data.cve.cvss_score >= 7 %}var(--high){% elif data.cve.cvss_score >= 4 %}var(--orange){% else %}var(--green){% endif %};">
+    <div class="score" style="color:{% if data.cve.cvss_score is not none and data.cve.cvss_score >= 9 %}var(--critical){% elif data.cve.cvss_score is not none and data.cve.cvss_score >= 7 %}var(--high){% elif data.cve.cvss_score is not none and data.cve.cvss_score >= 4 %}var(--orange){% else %}var(--green){% endif %};">
       {{ data.cve.cvss_score or 'N/A' }}
     </div>
     <div class="severity">CVSS Score</div>
@@ -524,7 +545,7 @@ LIST_TEMPLATE = """
           {% if cell.type == 'cve_link' %}<a href="/cve/{{ row[cell.key] }}" class="id">{{ row[cell.key] }}</a>
           {% elif cell.type == 'poc_link' %}<a href="{{ row[cell.key] }}" target="_blank" style="font-family:monospace;font-size:.75rem;">{{ row[cell.key][:50] }}...</a>
           {% elif cell.type == 'badge' %}<span class="badge badge-{{ row[cell.key]|lower }}">{{ row[cell.key] }}</span>
-          {% elif cell.type == 'score' %}<span style="color:{% if row[cell.key] >= 9 %}var(--critical){% elif row[cell.key] >= 7 %}var(--high){% elif row[cell.key] >= 4 %}var(--orange){% else %}var(--green){% endif %};font-weight:600;">{{ row[cell.key] }}</span>
+          {% elif cell.type == 'score' %}<span style="color:{% if row[cell.key] is not none and row[cell.key] >= 9 %}var(--critical){% elif row[cell.key] is not none and row[cell.key] >= 7 %}var(--high){% elif row[cell.key] is not none and row[cell.key] >= 4 %}var(--orange){% else %}var(--green){% endif %};font-weight:600;">{{ row[cell.key] }}</span>
           {% elif cell.type == 'stars' %}★ {{ row[cell.key] }}
           {% elif cell.type == 'truncate' %}{{ row[cell.key][:120] if row[cell.key] else '—' }}
           {% else %}{{ row[cell.key] or '—' }}{% endif %}
@@ -555,81 +576,88 @@ LIST_TEMPLATE = """
 
 @app.route("/")
 def dashboard():
-    stats = get_stats()
-    page_html = render_template_string(DASHBOARD_TEMPLATE, stats=stats)
-    return render_template_string(
-        BASE_TEMPLATE,
-        title="Dashboard",
-        content=page_html,
-        active="dashboard",
-        search_query="",
-    )
+    try:
+        stats = get_stats()
+    except Exception as e:
+        return render_template_string(
+            BASE_TEMPLATE, title="Error",
+            content=f'<h2>Database Error</h2><p>{e}</p>',
+            active="", search_query="",
+        ), 500
+    return render_page(DASHBOARD_TEMPLATE, title="Dashboard", active="dashboard", stats=stats)
 
 
 @app.route("/search")
 def search():
     query = request.args.get("q", "").strip()
-    page = int(request.args.get("page", 1))
+    page = _safe_int(request.args.get("page", "1"))
     if not query:
         return redirect(url_for("dashboard"))
-    results, total = search_cves(query, page=page)
-    page_html = render_template_string(
-        SEARCH_TEMPLATE,
-        query=query, results=results, total=total,
-        page=page, per_page=20,
-    )
-    return render_template_string(
-        BASE_TEMPLATE,
-        title=f"Search: {query}",
-        content=page_html,
-        active="",
+    try:
+        results, total = search_cves(query, page=page, per_page=PER_PAGE)
+    except Exception as e:
+        return render_template_string(
+            BASE_TEMPLATE, title="Error",
+            content=f'<h2>Search Error</h2><p>{e}</p>',
+            active="", search_query=query,
+        ), 500
+    return render_page(
+        SEARCH_TEMPLATE, title=f"Search: {query}", active="",
+        query=query, results=results, total=total, page=page, per_page=PER_PAGE,
         search_query=query,
     )
 
 
 @app.route("/cve/<cve_id>")
 def cve_detail(cve_id):
-    data = get_cve_detail(cve_id)
-    if not data:
-        not_found = f'<h2>CVE not found</h2><p>The CVE <code>{cve_id}</code> was not found in the database. <a href="/search?q={cve_id}">Search for it?</a></p>'
+    try:
+        data = get_cve_detail(cve_id)
+    except Exception as e:
         return render_template_string(
-            BASE_TEMPLATE,
-            title=f"CVE Not Found",
-            content=not_found,
-            active="",
-            search_query="",
+            BASE_TEMPLATE, title="Error",
+            content=f'<h2>Database Error</h2><p>{e}</p>',
+            active="", search_query="",
+        ), 500
+    if not data:
+        not_found = render_template_string(
+            '<h2>CVE not found</h2><p>The CVE <code>{{ cve_id }}</code> was not found. <a href="/search?q={{ cve_id }}">Search?</a></p>',
+            cve_id=cve_id,
+        )
+        return render_template_string(
+            BASE_TEMPLATE, title="CVE Not Found", content=not_found,
+            active="", search_query="",
         ), 404
-    page_html = render_template_string(CVE_DETAIL_TEMPLATE, data=data)
-    return render_template_string(
-        BASE_TEMPLATE,
-        title=data["cve"]["id"],
-        content=page_html,
-        active="",
-        search_query="",
+    return render_page(
+        CVE_DETAIL_TEMPLATE, title=data["cve"]["id"], active="", data=data,
     )
 
 
 @app.route("/cves")
 def list_cves():
-    page = int(request.args.get("page", 1))
+    page = _safe_int(request.args.get("page", "1"))
     severity = request.args.get("severity")
     kev_only = request.args.get("kev")
 
-    with _db() as conn:
-        where = ""
-        params: list = []
-        if severity:
-            where = "WHERE cvss_severity = ?"
-            params = [severity.upper()]
-        if kev_only:
-            where = "WHERE kev = 1" if not where else where + " AND kev = 1"
-
-        total = conn.execute(f"SELECT COUNT(*) FROM cve {where}", params).fetchone()[0]
-        offset = (page - 1) * 20
-        rows = _rows_to_dicts(conn.execute(
-            f"SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at FROM cve {where} ORDER BY cvss_score DESC NULLS LAST LIMIT 20 OFFSET ?",
-            params + [offset]
-        ).fetchall())
+    try:
+        with _db() as conn:
+            where, params = "", []
+            if severity:
+                where = "WHERE cvss_severity = ?"
+                params = [severity.upper()]
+            if kev_only:
+                where = "WHERE kev = 1" if not where else where + " AND kev = 1"
+            total = conn.execute(f"SELECT COUNT(*) FROM cve {where}", params).fetchone()[0]
+            offset = (page - 1) * PER_PAGE
+            rows = _rows_to_dicts(conn.execute(
+                f"SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at FROM cve {where} ORDER BY cvss_score DESC NULLS LAST LIMIT ? OFFSET ?",
+                params + [PER_PAGE, offset]
+            ).fetchall())
+    except Exception as e:
+        return render_template_string(
+            BASE_TEMPLATE, title="Error",
+            content=f'<h2>Database Error</h2><p>{e}</p>',
+            active="cves", search_query="",
+        ), 500
 
     filters = [
         {"label": "All", "url": "/cves", "active": not severity and not kev_only},
@@ -639,81 +667,77 @@ def list_cves():
         {"label": "Low", "url": "/cves?severity=LOW", "active": severity == "LOW"},
         {"label": "KEV Only", "url": "/cves?kev=1", "active": bool(kev_only)},
     ]
-
     columns = ["ID", "CVSS", "Severity", "Description", "Published"]
     cells = [
-        {"type": "cve_link", "key": "id"},
-        {"type": "score", "key": "cvss_score"},
-        {"type": "badge", "key": "cvss_severity"},
-        {"type": "truncate", "key": "description"},
+        {"type": "cve_link", "key": "id"}, {"type": "score", "key": "cvss_score"},
+        {"type": "badge", "key": "cvss_severity"}, {"type": "truncate", "key": "description"},
         {"type": "plain", "key": "published_at"},
     ]
+    prev_q = f"&severity={severity}" if severity else ""
+    if kev_only:
+        prev_q += "&kev=1"
 
-    page_html = render_template_string(
-        LIST_TEMPLATE,
-        title="CVEs", rows=rows, total=total, page=page, per_page=20,
+    return render_page(
+        LIST_TEMPLATE, title="CVEs", active="cves",
+        rows=rows, total=total, page=page, per_page=PER_PAGE,
         filters=filters, columns=columns, cells=cells,
-        prev_url=f"/cves?page={page - 1}{'&severity=' + severity if severity else ''}{'&kev=1' if kev_only else ''}" if page > 1 else None,
-        next_url=f"/cves?page={page + 1}{'&severity=' + severity if severity else ''}{'&kev=1' if kev_only else ''}" if page * 20 < total else None,
-    )
-    return render_template_string(
-        BASE_TEMPLATE,
-        title="CVEs",
-        content=page_html,
-        active="cves",
-        search_query="",
+        prev_url=f"/cves?page={page - 1}{prev_q}" if page > 1 else None,
+        next_url=f"/cves?page={page + 1}{prev_q}" if page * PER_PAGE < total else None,
     )
 
 
 @app.route("/pocs")
 def list_pocs():
-    page = int(request.args.get("page", 1))
+    page = _safe_int(request.args.get("page", "1"))
     source = request.args.get("source")
-    rows, total = fetch_pocs(page=page, source_filter=source)
 
-    # Get available sources for filter
-    with _db() as conn:
-        sources = [r[0] for r in conn.execute("SELECT DISTINCT source FROM poc ORDER BY source").fetchall()]
+    try:
+        rows, total = fetch_pocs(page=page, per_page=PER_PAGE, source_filter=source)
+        with _db() as conn:
+            sources = [r[0] for r in conn.execute("SELECT DISTINCT source FROM poc ORDER BY source").fetchall()]
+    except Exception as e:
+        return render_template_string(
+            BASE_TEMPLATE, title="Error",
+            content=f'<h2>Database Error</h2><p>{e}</p>',
+            active="pocs", search_query="",
+        ), 500
 
     filters = [{"label": "All", "url": "/pocs", "active": not source}]
     for s in sources:
         filters.append({"label": s, "url": f"/pocs?source={s}", "active": source == s})
-
     columns = ["URL", "Source", "Stars", "Age", "Description"]
     cells = [
-        {"type": "poc_link", "key": "url"},
-        {"type": "badge", "key": "source"},
-        {"type": "stars", "key": "stars"},
-        {"type": "plain", "key": "age_days"},
+        {"type": "poc_link", "key": "url"}, {"type": "badge", "key": "source"},
+        {"type": "stars", "key": "stars"}, {"type": "plain", "key": "age_days"},
         {"type": "truncate", "key": "description"},
     ]
+    src_q = f"&source={source}" if source else ""
 
-    page_html = render_template_string(
-        LIST_TEMPLATE,
-        title="Proof of Concepts", rows=rows, total=total, page=page, per_page=20,
+    return render_page(
+        LIST_TEMPLATE, title="Proof of Concepts", active="pocs",
+        rows=rows, total=total, page=page, per_page=PER_PAGE,
         filters=filters, columns=columns, cells=cells,
-        prev_url=f"/pocs?page={page - 1}{'&source=' + source if source else ''}" if page > 1 else None,
-        next_url=f"/pocs?page={page + 1}{'&source=' + source if source else ''}" if page * 20 < total else None,
-    )
-    return render_template_string(
-        BASE_TEMPLATE,
-        title="Proof of Concepts",
-        content=page_html,
-        active="pocs",
-        search_query="",
+        prev_url=f"/pocs?page={page - 1}{src_q}" if page > 1 else None,
+        next_url=f"/pocs?page={page + 1}{src_q}" if page * PER_PAGE < total else None,
     )
 
 
 @app.route("/api/stats")
 def api_stats():
     """JSON API endpoint for stats."""
-    return jsonify(get_stats())
+    try:
+        return jsonify(get_stats())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/cve/<cve_id>")
 def api_cve(cve_id):
     """JSON API endpoint for CVE detail."""
-    data = get_cve_detail(cve_id)
+    try:
+        data = get_cve_detail(cve_id)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     if not data:
         return jsonify({"error": "not found"}), 404
     return jsonify(data)
