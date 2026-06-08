@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from . import __version__
+
 GITHUB_QUERIES = [
     'CVE-2026 exploit poc',
     'CVE-2025 exploit poc',
@@ -26,8 +28,6 @@ LOW_VALUE_KEYWORDS = [
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = PROJECT_ROOT / 'state'
-STATE_FILE = STATE_DIR / 'seen_items.json'
-LAST_RUN_FILE = STATE_DIR / 'last_run.json'
 
 REPORTS_DIR = PROJECT_ROOT / 'reports'
 
@@ -35,6 +35,6 @@ MAX_REPO_AGE_DAYS = 30
 MIN_REPO_STARS = 10
 NVD_LOOKBACK_DAYS = 2
 NVD_MAX_LOOKBACK_DAYS = 14  # cap when using last-run timestamp
-HTTP_TIMEOUT = 15
+HTTP_TIMEOUT = 30
 
-USER_AGENT = 'Mozilla/5.0 (compatible; Horus-PoC-Scanner/0.2)'
+USER_AGENT = f'Mozilla/5.0 (compatible; Horus-PoC-Scanner/{__version__})'

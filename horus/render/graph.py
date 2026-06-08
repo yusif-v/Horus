@@ -7,6 +7,8 @@ Floating nodes (no edges and no real description) are filtered out so the
 graph stays readable.
 """
 
+
+from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime

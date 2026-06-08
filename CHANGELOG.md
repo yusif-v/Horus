@@ -5,6 +5,35 @@ All notable changes to Horus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-06-07
+
+### Added
+- **Plugin architecture** — complete refactor. Sources and enrichers are now self-discovering plugins. Adding a new source = creating ONE file in `sources/` with a `run()` function. No other files change. Flags `--no-<source>` and `--skip-<enricher>` auto-generated.
+- **X/Twitter Chrome auth source** (`horus/sources/x_twitter.py` + `horus/core/xsearch.py`) — birdnode-compatible X search using Chrome cookie authentication. Extracts auth_token+ct0 from Chrome's encrypted cookie DB, dynamically discovers GraphQL query IDs from JS bundles, POSTs to SearchTimeline endpoint. No API key, no Nitter, no browser needed.
+- **Exploit-DB source** (`horus/sources/exploitdb.py`) — searches exploit-db.com for each new CVE. Rate-limited to 1 query/2s, max 50 per run.
+- **CISA KEV enricher** (`horus/enrichers/kev.py`) — fetches Known Exploited Vulnerabilities catalog, marks matching CVEs.
+- **EPSS score enricher** (`horus/enrichers/epss.py`) — fetches Exploit Prediction Scoring System probabilities from FIRST.org API.
+- **Composite exploitability score** — computed from CVSS (×0.4), EPSS (×0.3), KEV bonus (+2.0), PoC count bonus. Stored in `cve.exploitability_score`.
+- New DB columns: `cve.epss_score`, `cve.kev`, `cve.exploitability_score`, `poc.fetched_date`.
+- New DB indexes: `idx_cve_epss_score`, `idx_cve_kev`.
+- `--list-sources` flag to show all discovered plugins.
+- `--sources A,B` / `--enrichers A,B` flags to run only specific plugins.
+- Report output now shows KEV badge, EPSS percentage, PoC source tag, and exploitability score.
+
+### Changed
+- **NVD filtering** — removed `is_fresh_poc()` keyword filter for CVEs. Was dropping valid entries; NVD results are inherently relevant.
+- **Merge pipeline** — `merge_findings()` now accepts CVE and PoC lists from any Source, deduplicates by ID/URL.
+- **CVE model** — added `epss_score`, `kev`, `exploitability_score` fields.
+- **PoC model** — source enum expanded: `github|exploit-db|nitter|twitter|x|manual`.
+- **DB persistence** — `persist_cve()` writes new columns, computes exploitability score.
+- **Module reorganization** — `epss.py` and `kev.py` moved from `sources/` to `enrichers/`. `xsearch.py` moved to `core/` (utility, not a plugin).
+
+### Removed
+- Hardcoded source imports from `cli.py` — replaced with plugin discovery via `pkgutil`.
+- `--use-nitter` flag — Nitter is no longer the Twitter source.
+- Old `twitter.py`, `nitter.py` from `sources/`.
+- `is_fresh_poc` import from `nvd.py`.
+
 ## [0.5.0] - 2026-05-21
 
 ### Added

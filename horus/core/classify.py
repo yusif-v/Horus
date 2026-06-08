@@ -4,6 +4,8 @@ Both classifiers return values drawn strictly from the closed vocabularies
 in `horus.vocab`. Anything outside the vocab is dropped.
 """
 
+
+from __future__ import annotations
 from .vocab import (
     ATTACK_TAGS,
     CWE_TO_TAG,
