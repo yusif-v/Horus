@@ -11,7 +11,11 @@ CREATE TABLE IF NOT EXISTS cve (
     published_at    TEXT,
     epss_score      REAL,                       -- EPSS probability (0-1)
     kev             INTEGER DEFAULT 0,          -- CISA Known Exploited (0/1)
-    exploitability_score REAL,                  -- computed: weighted composite
+    exploitability_score REAL,                  -- legacy: kept for backward compat
+    social_mentions INTEGER DEFAULT 0,          -- how many X posts mention this CVE
+    poc_source_count INTEGER DEFAULT 0,         -- how many distinct signal sources have PoCs
+    reputation_score REAL,                      -- computed composite (0-10)
+    confidence      TEXT DEFAULT 'high',        -- high | medium | low
     first_seen      TEXT NOT NULL,
     last_seen       TEXT NOT NULL
 );
@@ -94,3 +98,19 @@ CREATE INDEX IF NOT EXISTS idx_cve_product_product_id  ON cve_product(product_id
 CREATE INDEX IF NOT EXISTS idx_cve_attack_tag_tag      ON cve_attack_tag(tag);
 CREATE INDEX IF NOT EXISTS idx_poc_cve_cve_id          ON poc_cve(cve_id);
 CREATE INDEX IF NOT EXISTS idx_poc_source              ON poc(source);
+
+CREATE INDEX IF NOT EXISTS idx_cve_reputation_score     ON cve(reputation_score);
+CREATE INDEX IF NOT EXISTS idx_cve_social_mentions      ON cve(social_mentions);
+CREATE INDEX IF NOT EXISTS idx_cve_poc_source_count     ON cve(poc_source_count);
+CREATE INDEX IF NOT EXISTS idx_cve_confidence           ON cve(confidence);
+
+-- ─── Watchlist (signal-only CVEs not yet in NVD) ──────────────────────────
+
+CREATE TABLE IF NOT EXISTS cve_watchlist (
+    id              TEXT PRIMARY KEY,
+    first_seen      TEXT NOT NULL,
+    social_mentions INTEGER DEFAULT 0,
+    source          TEXT NOT NULL,     -- which signal source found it
+    confidence      TEXT DEFAULT 'low',
+    resolved        INTEGER DEFAULT 0  -- 1 when NVD confirms it
+);

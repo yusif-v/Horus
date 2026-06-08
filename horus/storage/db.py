@@ -132,10 +132,38 @@ def _migrate_indexes(conn: sqlite3.Connection) -> None:
         conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {cols}")
 
 
+def _migrate_columns(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after the initial schema (idempotent).
+
+    SQLite's CREATE TABLE IF NOT EXISTS does not add columns to an
+    existing table, so we manage post-v0.7 columns explicitly here.
+    Must run BEFORE _init_schema because some indexes in schema.sql
+    reference these columns.
+    """
+    # Skip if the cve table doesn't exist yet — schema init will create it
+    # with these columns already in place.
+    has_table = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='cve'"
+    ).fetchone()
+    if not has_table:
+        return
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(cve)")}
+    additions = [
+        ("social_mentions",  "INTEGER DEFAULT 0"),
+        ("poc_source_count", "INTEGER DEFAULT 0"),
+        ("reputation_score", "REAL"),
+        ("confidence",       "TEXT DEFAULT 'high'"),
+    ]
+    for col, decl in additions:
+        if col not in existing:
+            conn.execute(f"ALTER TABLE cve ADD COLUMN {col} {decl}")
+
+
 def initialize() -> tuple[int, int]:
     """Idempotent setup: schema + vocab + index migration + one-shot migration. Returns
     (cves_migrated, pocs_migrated) — both 0 on subsequent runs."""
     with connect() as conn:
+        _migrate_columns(conn)
         _init_schema(conn)
         _seed_vocab(conn)
         _migrate_indexes(conn)
@@ -184,27 +212,31 @@ def _upsert_product(
     return cur.lastrowid
 
 
-def _compute_exploitability(cve: CVE) -> float | None:
-    """Compute a composite exploitability score (0-10).
+def _compute_reputation(cve: CVE) -> float:
+    """Compute a composite reputation score (0-10).
 
     Weighted formula:
-      - CVSS base score (0-10): weight 0.4
-      - EPSS probability (0-1) scaled to 0-10: weight 0.3
-      - KEV bonus: +2.0 if in CISA KEV
-      - PoC availability bonus: +1.0 (applied at merge time, not here)
+      - CVSS base score (0-10): weight 0.35
+      - EPSS probability (0-1) scaled to 0-10: weight 0.25
+      - KEV bonus: +1.5 if in CISA KEV
+      - Social mentions: min(social_mentions * 0.15, 1.0)
+      - PoC source count: min(poc_source_count * 0.5, 1.5)
 
-    Returns None if no CVSS score is available.
+    Returns 0.0 if no CVSS score is available.
     """
     if cve.cvss_score is None:
-        return None
+        return 0.0
 
-    score = cve.cvss_score * 0.4
+    score = cve.cvss_score * 0.35
 
     if cve.epss_score is not None:
-        score += cve.epss_score * 10 * 0.3
+        score += cve.epss_score * 10 * 0.25
 
     if cve.kev:
-        score += 2.0
+        score += 1.5
+
+    score += min(cve.social_mentions * 0.15, 1.0)
+    score += min(cve.poc_source_count * 0.5, 1.5)
 
     return min(score, 10.0)
 
@@ -212,15 +244,16 @@ def _compute_exploitability(cve: CVE) -> float | None:
 def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
     now = _now()
 
-    # Compute exploitability score before persisting
-    exploitable = _compute_exploitability(cve)
+    # Compute reputation score before persisting
+    reputation = _compute_reputation(cve)
 
     conn.execute(
         '''INSERT INTO cve
               (id, description, cvss_score, cvss_severity, published_at,
-               epss_score, kev, exploitability_score,
+               epss_score, kev, reputation_score, confidence,
+               social_mentions, poc_source_count,
                first_seen, last_seen)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              description           = COALESCE(excluded.description, cve.description),
              cvss_score            = COALESCE(excluded.cvss_score, cve.cvss_score),
@@ -228,13 +261,17 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
              published_at          = COALESCE(excluded.published_at, cve.published_at),
              epss_score            = COALESCE(excluded.epss_score, cve.epss_score),
              kev                   = MAX(excluded.kev, cve.kev),
-             exploitability_score  = COALESCE(excluded.exploitability_score, cve.exploitability_score),
+             reputation_score      = COALESCE(excluded.reputation_score, cve.reputation_score),
+             confidence            = COALESCE(excluded.confidence, cve.confidence),
+             social_mentions       = COALESCE(excluded.social_mentions, cve.social_mentions),
+             poc_source_count      = COALESCE(excluded.poc_source_count, cve.poc_source_count),
              last_seen             = excluded.last_seen
         ''',
         (
             cve.id, cve.description, cve.cvss_score, cve.cvss_severity,
             cve.published_at.isoformat() if cve.published_at else None,
-            cve.epss_score, cve.kev, exploitable,
+            cve.epss_score, cve.kev, reputation, cve.confidence,
+            cve.social_mentions, cve.poc_source_count,
             now, now,
         ),
     )
@@ -302,3 +339,25 @@ def link_poc_to_cve(conn: sqlite3.Connection, poc_url: str, cve_id: str) -> bool
         (poc_url, cve_id),
     )
     return True
+
+
+def persist_watchlist(conn: sqlite3.Connection, cve_id: str, source: str, social_mentions: int = 0) -> None:
+    """Insert or update a CVE watchlist entry for signal-only CVEs not yet in NVD."""
+    now = _now()
+    conn.execute(
+        '''INSERT INTO cve_watchlist (id, first_seen, social_mentions, source, confidence, resolved)
+           VALUES (?, ?, ?, ?, 'low', 0)
+           ON CONFLICT(id) DO UPDATE SET
+             social_mentions = cve_watchlist.social_mentions + excluded.social_mentions,
+             resolved = 0
+        ''',
+        (cve_id.upper(), now, social_mentions, source),
+    )
+
+
+def resolve_watchlist(conn: sqlite3.Connection, cve_id: str) -> None:
+    """Mark a watchlist entry as resolved (confirmed by NVD)."""
+    conn.execute(
+        'UPDATE cve_watchlist SET resolved = 1 WHERE id = ?',
+        (cve_id.upper(),),
+    )

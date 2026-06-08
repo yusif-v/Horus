@@ -42,6 +42,9 @@ class CVE:
     sources: list[str] = field(default_factory=list)
     epss_score: float | None = None          # EPSS probability (0-1)
     kev: int = 0                             # CISA Known Exploited (0/1)
-    exploitability_score: float | None = None  # computed composite
+    social_mentions: int = 0                 # how many X posts mention this CVE
+    poc_source_count: int = 0                # how many distinct signal sources have PoCs
+    reputation_score: float = 0.0            # computed composite (0-10)
+    confidence: str = "high"                 # high=NVD, medium=NVD+signal, low=signal-only
     first_seen: datetime = field(default_factory=datetime.utcnow)
     last_seen: datetime = field(default_factory=datetime.utcnow)

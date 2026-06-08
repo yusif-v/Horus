@@ -1,22 +1,47 @@
 # Horus
 
-**Version:** 0.7.0
+**Version:** 0.8.0
 
-Daily PoC research scanner. Searches GitHub, NVD, X/Twitter, and Exploit-DB for new vulnerability disclosures with proof-of-concept exploits. Enriches with CISA KEV and EPSS scores. Query any CVE from the local database for a full enrichment report. Requires Python 3.10+.
+Daily PoC research scanner — or a 24/7 server. Treats NVD as the single source of truth for CVE data; treats GitHub, X/Twitter and Exploit-DB as signals that build a CVE *reputation score*. Enriches with CISA KEV and EPSS. Query any CVE from the local database, or run as a daemon that polls each source on its own interval. Requires Python 3.10+.
 
 ## What it does
 
-- **GitHub**: Searches for new PoC/exploit repositories (filtered: <30d old, >10 stars, fresh PoC keywords)
-- **NVD**: Fetches recently published CVEs with CVSS scores, CWE IDs, and affected vendor/product/version ranges
-- **X/Twitter**: Searches for CVE mentions via Chrome cookie authentication (no API key needed) — birdnode-compatible GraphQL client
-- **Exploit-DB**: Looks up published exploits for each new CVE found by NVD
-- **Enrichment**: CISA KEV (known-exploited flag) + EPSS (exploit probability score) + composite exploitability score
-- **Classification**: Tags each CVE with attack type (rce, sql-injection, lpe, …) and product category from a locked vocabulary
-- **PoC linking**: All sources that reference known CVE IDs are attached to that CVE
-- **Persistence**: SQLite at `state/horus.db` — normalized schema with graph edges
-- **Reports**: Markdown + interactive Cytoscape.js graph every run
-- **Health check**: Database integrity validation (`--health-check`)
-- **CVE query**: Look up any CVE for a full enrichment report (`--query`)
+### Source classification (v0.8)
+- **Authoritative** — **NVD only**. CVE ID, description, CVSS, CWE, affected products come from NVD and nowhere else.
+- **Signal sources** — never create CVE records. They corroborate what NVD has already published.
+  - **GitHub**: PoC/exploit repositories (<30d old, >10 stars, fresh PoC keywords). Confidence: `high` (>100★), `medium` (>10★), `low` otherwise.
+  - **X/Twitter** (Chrome-cookie auth, birdnode-compatible): each tweet mentioning a CVE bumps that CVE's `social_mentions` counter; tweets that link to a `github.com` PoC repo feed that URL into the GitHub source for enrichment. **X never produces a PoC record on its own.**
+  - **Exploit-DB**: secondary PoC links via the GitLab mirror.
+- **Signal-only CVEs** (an ID that only appears in X but not yet in NVD) go to a low-confidence `cve_watchlist` table and are resolved automatically once NVD confirms them.
+
+### Reputation score
+A composite 0–10 score replaces the old `exploitability_score`:
+
+```
+reputation =
+    CVSS  * 0.35                         (0–3.5)
+  + EPSS * 10 * 0.25                     (0–2.5)
+  + KEV bonus            1.5             (0–1.5)
+  + min(social_mentions * 0.15, 1.0)     (0–1.0)
+  + min(poc_source_count * 0.5, 1.5)     (0–1.5)
+  + ubiquity bonus       1.0             ← nginx, php, wordpress,
+                                           openssl, kubernetes, openssh,
+                                           apache, mysql, chrome, linux
+                                           kernel, …
+  Total cap: 10.0
+```
+
+The ubiquity bonus reflects what the user asked for in v0.8: a critical CVE in a widely-deployed product (nginx, php, wordpress, openssl, kubernetes, …) outranks the same CVSS on a niche library.
+
+### Other features
+- **KEV / EPSS enrichment** — EPSS now backfills all unscored CVEs in the DB, not just the current batch.
+- **Classification** — attack tag (rce, sqli, lpe, …) + product category, locked vocabulary.
+- **PoC linking** — every PoC's CVE refs are wired into a graph edge.
+- **Persistence** — SQLite at `state/horus.db`, idempotent schema + column migrations.
+- **Reports** — Markdown + interactive Cytoscape.js graph.
+- **Health check** — `--health-check`.
+- **CVE query** — `--query CVE-XXXX-XXXX`.
+- **24/7 server mode** — `--server`, see below.
 
 ## Plugin Architecture
 
@@ -76,6 +101,87 @@ python3 -m horus --auth-status
 || `--auth-status` | Show GitHub auth status and exit ||
 || `--no-save` | Skip writing report to disk ||
 || `--no-graph` | Skip writing the interactive graph HTML ||
+|| `--backfill-epss` | One-shot: score every unscored CVE in the DB and exit ||
+|| `--server` | Run as a 24/7 daemon, polling each source on its own interval (see below) ||
+|| `--server-once` | Run a single server poll cycle then exit — handy for cron/testing ||
+|| `--config PATH` | YAML/JSON config file for server mode ||
+
+## 24/7 Server Mode (v0.8)
+
+Long-running daemon that polls each source on its own interval and maintains the database. Designed to run as a systemd unit or Docker container; ready to feed into a downstream consumer.
+
+```bash
+# Start the daemon with default intervals
+python3 -m horus --server
+
+# One poll cycle then exit (useful for cron / testing)
+python3 -m horus --server-once
+
+# With a custom config
+python3 -m horus --server --config /etc/horus/config.yaml
+
+# Or run the server module directly
+python3 -m horus.server --config /etc/horus/config.yaml
+python3 -m horus.server --once
+```
+
+### Default poll intervals
+
+| Source / Enricher | Interval | Rationale |
+|-------------------|----------|-----------|
+| `nvd`        | 1 h  | NVD publishes roughly every 2 h |
+| `x_twitter`  | 30 m | Social signal moves fastest |
+| `github`     | 1 h  | GitHub search API rate limits |
+| `exploit_db` | 2 h  | Slower-moving |
+| `epss`       | 24 h | EPSS CSV refreshes once a day |
+| `kev`        | 24 h | CISA KEV refreshes ~daily |
+
+Every minute the server re-checks which sources are due (i.e. their last-run timestamp is older than their interval) and runs only those. Last-run timestamps live in the SQLite `meta` table, so a restart picks up exactly where it left off.
+
+### Config file (YAML — JSON also accepted)
+
+```yaml
+# /etc/horus/config.yaml
+poll_intervals:
+  nvd: 3600          # seconds — change any of these to suit your feed cadence
+  x_twitter: 1800
+  github: 3600
+  exploit_db: 7200
+  epss: 86400
+  kev: 86400
+
+sources_enabled:
+  nvd: true
+  x_twitter: true
+  github: true
+  exploit_db: false  # turn a source off entirely
+
+check_every_seconds: 60  # how often the loop wakes up to look for due sources
+```
+
+PyYAML is optional — install it via `pip install -e ".[server]"`. Without it the server still loads JSON config (or falls back to defaults).
+
+### Running as a systemd service
+
+```ini
+# /etc/systemd/system/horus.service
+[Unit]
+Description=Horus CVE Intelligence Server
+After=network.target
+
+[Service]
+Type=simple
+User=horus
+WorkingDirectory=/opt/horus
+ExecStart=/opt/horus/.venv/bin/python -m horus.server --config /etc/horus/config.yaml
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`SIGTERM` and `SIGINT` are handled cleanly so `systemctl stop` / `docker stop` shut the loop down between cycles instead of mid-source.
 
 ## Web Interface
 

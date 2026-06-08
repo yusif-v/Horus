@@ -107,8 +107,19 @@ def get_stats() -> dict:
         # Average EPSS
         avg_epss = conn.execute("SELECT AVG(epss_score) FROM cve WHERE epss_score IS NOT NULL").fetchone()[0]
 
-        # Average exploitability
-        avg_exploit = conn.execute("SELECT AVG(exploitability_score) FROM cve WHERE exploitability_score IS NOT NULL").fetchone()[0]
+        # Average reputation
+        avg_exploit = conn.execute("SELECT AVG(reputation_score) FROM cve WHERE reputation_score IS NOT NULL").fetchone()[0]
+        avg_reputation = avg_exploit
+
+        # Social heat — CVEs the third-party feeds have actually been talking about
+        social_heat = conn.execute("SELECT COUNT(*) FROM cve WHERE social_mentions > 0").fetchone()[0]
+        social_mentions_total = conn.execute("SELECT COALESCE(SUM(social_mentions), 0) FROM cve").fetchone()[0]
+
+        # Watchlist (signal-only CVEs not yet in NVD)
+        try:
+            watchlist_count = conn.execute("SELECT COUNT(*) FROM cve_watchlist WHERE resolved = 0").fetchone()[0]
+        except Exception:
+            watchlist_count = 0
 
         # Severity breakdown
         severity_breakdown = _rows_to_dicts(conn.execute(
@@ -200,6 +211,10 @@ def get_stats() -> dict:
         "cves_with_pocs": cves_with_pocs,
         "avg_epss": avg_epss,
         "avg_exploit": avg_exploit,
+        "avg_reputation": avg_reputation,
+        "social_heat": social_heat,
+        "social_mentions_total": social_mentions_total,
+        "watchlist_count": watchlist_count,
         "severity_breakdown": severity_breakdown,
         "epss_buckets": epss_buckets,
         "sources": sources,
@@ -367,6 +382,14 @@ BASE_TEMPLATE = """<!DOCTYPE html>
   --mono:      'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
 }
 html, body { height: 100%; }
+/* Reserve vertical scrollbar space on every page so switching between
+   short pages (Overview) and long ones (Triage, CVEs) doesn't horizontally
+   shift the centered .container. Falls back to overflow-y:scroll on
+   browsers without scrollbar-gutter support. */
+html {
+  scrollbar-gutter: stable;
+  overflow-y: scroll;
+}
 body {
   background:
     radial-gradient(1200px 600px at 75% -200px, rgba(255,182,39,.04), transparent 60%),
@@ -417,10 +440,19 @@ a:hover { color: var(--accent); }
 .nav {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  padding: 0 1.5rem;
   display: flex; align-items: center; gap: 2rem;
   height: 64px;
+  /* Match .container so the logo + page title share a vertical baseline. */
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  width: 100%;
 }
+.nav-wrap {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.nav-wrap > .nav { border-bottom: none; }
 .nav .logo {
   font-family: var(--serif);
   font-style: italic;
@@ -908,11 +940,12 @@ tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);    
   <span class="sep">│</span>
   <span>LAST INGEST · {{ db_last_update[:16] if db_last_update else '—' }}</span>
   <div class="right">
-    <span>BUILD · HORUS v0.5</span>
+    <span>BUILD · HORUS v0.8</span>
     <span class="sep">│</span>
     <span>{{ now }}</span>
   </div>
 </div>
+<div class="nav-wrap">
 <nav class="nav">
   <a href="/" class="logo">Horus<span class="dot">.</span><span class="sub">CVE INTEL</span></a>
   <div class="links">
@@ -925,6 +958,7 @@ tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);    
     <input type="text" name="q" placeholder="CVE-ID OR KEYWORD" value="{{ search_query|default('') }}" autocomplete="off">
   </form>
 </nav>
+</div>
 <div class="container">
 {{ content|safe }}
 </div>
@@ -1239,11 +1273,11 @@ CVE_DETAIL_TEMPLATE = """
       <div class="track"><div class="f info" style="width: {{ (data.cve.epss_score * 100)|int }}%;"></div></div>
     </div>
     {% endif %}
-    {% if data.cve.exploitability_score is not none %}
+    {% if data.cve.reputation_score is not none %}
     <div class="gauge">
-      <div class="label">Exploitability</div>
-      <div class="val">{{ "%.1f"|format(data.cve.exploitability_score) }}<span style="font-size:1rem;color:var(--text-dim);">/10</span></div>
-      <div class="track"><div class="f" style="width: {{ (data.cve.exploitability_score * 10)|int }}%;"></div></div>
+      <div class="label">Reputation</div>
+      <div class="val">{{ "%.1f"|format(data.cve.reputation_score) }}<span style="font-size:1rem;color:var(--text-dim);">/10</span></div>
+      <div class="track"><div class="f" style="width: {{ (data.cve.reputation_score * 10)|int }}%;"></div></div>
     </div>
     {% endif %}
   </div>
@@ -1468,7 +1502,7 @@ def list_cves():
             order_map = {
                 "cvss": "cvss_score DESC NULLS LAST",
                 "epss": "epss_score DESC NULLS LAST",
-                "exploit": "exploitability_score DESC NULLS LAST",
+                "exploit": "reputation_score DESC NULLS LAST",
                 "kev": "kev DESC, cvss_score DESC NULLS LAST",
                 "date": "published_at DESC NULLS LAST",
                 "newest": "first_seen DESC NULLS LAST",

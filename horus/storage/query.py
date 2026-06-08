@@ -190,8 +190,8 @@ def _render_text(data: dict) -> str:
     lines.append(f"  CVSS:     {score} {severity}" if score else "  CVSS:     N/A")
     lines.append(f"  EPSS:     {cve['epss_score']:.4f} ({cve['epss_score']*100:.2f}%)" if cve.get("epss_score") is not None else "  EPSS:     N/A")
     lines.append(f"  KEV:      {'YES — CISA Known Exploited' if cve.get('kev') else 'No'}")
-    expl = cve.get("exploitability_score")
-    lines.append(f"  Exploit:  {expl:.1f}/10" if expl is not None else "  Exploit:  N/A")
+    expl = cve.get("reputation_score")
+    lines.append(f"  Reputation:  {expl:.1f}/10" if expl is not None else "  Reputation:  N/A")
     lines.append(f"  Sources:  {', '.join(data['sources']) if data['sources'] else 'N/A'}")
     published = cve.get("published_at", "")
     lines.append(f"  Published: {published[:10] if published else 'N/A'}")
@@ -287,9 +287,9 @@ def _render_markdown(data: dict) -> str:
         badges.append("🔒 **CISA KEV**")
     if cve.get("epss_score") is not None:
         badges.append(f"📊 EPSS `{cve['epss_score']:.4f}` ({cve['epss_score']*100:.2f}%)")
-    expl = cve.get("exploitability_score")
+    expl = cve.get("reputation_score")
     if expl is not None:
-        badges.append(f"💥 Exploitability `{expl:.1f}/10`")
+        badges.append(f"🏆 Reputation `{expl:.1f}/10`")
 
     if badges:
         lines.append(" | ".join(badges))

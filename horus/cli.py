@@ -123,6 +123,22 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
         "--enrichers", type=str, default=None,
         help="Comma-separated list of enrichers to run (default: all enabled).",
     )
+    p.add_argument(
+        "--backfill-epss", action="store_true",
+        help="One-shot: score all unscored CVEs in the DB with EPSS, then exit.",
+    )
+    p.add_argument(
+        "--server", action="store_true",
+        help="Run as a 24/7 daemon polling sources on per-source intervals.",
+    )
+    p.add_argument(
+        "--server-once", action="store_true",
+        help="Run a single server poll cycle then exit (useful for testing/cron).",
+    )
+    p.add_argument(
+        "--config", type=str, default=None,
+        help="Path to YAML config file (server mode).",
+    )
 
     # Auto-generate --no-<name> flags for sources
     for name, mod in sorted(sources.items()):
@@ -179,6 +195,27 @@ def main(argv: list[str] | None = None) -> None:
         report.print()
         return
 
+    # --backfill-epss
+    if args.backfill_epss:
+        from .enrichers.epss import backfill_all
+        from .storage import db as _db
+        _db.initialize()
+        with _db.connect() as conn:
+            updated = backfill_all(conn)
+        print(f"EPSS backfill: {updated} CVEs updated")
+        return
+
+    # --server / --server-once
+    if args.server or args.server_once:
+        from .server import Server, load_config
+        cfg = load_config(args.config)
+        srv = Server(cfg)
+        if args.server_once:
+            srv.run_once()
+        else:
+            srv.start()
+        return
+
     # --auth-status
     if args.auth_status:
         tok = github_token()
@@ -229,8 +266,10 @@ def main(argv: list[str] | None = None) -> None:
     source_results: dict = {}
     step = 0
     total_steps = len(selected_sources) + len(selected_enrichers) + 2  # +merge +persist
+    all_social_signals: list[dict] = []
+    x_discovered_urls: list[str] = []
 
-    def _run_source(name: str, mod) -> None:
+    def _run_source(name: str, mod, **extra) -> dict:
         nonlocal step
         step += 1
         label = getattr(mod, "NAME", name)
@@ -241,16 +280,20 @@ def main(argv: list[str] | None = None) -> None:
                 known_poc_urls=known_poc_urls,
                 args=args,
                 last_run_nvd=last_run_nvd if name == "nvd" else None,
+                **extra,
             )
             cves = result.get("cves", [])
             pocs = result.get("pocs", [])
             all_cves.extend(cves)
             all_pocs.extend(pocs)
+            all_social_signals.extend(result.get("social_signals", []))
             source_results[name] = {"cves": len(cves), "pocs": len(pocs)}
             _log(args.quiet, f"  Found {len(cves)} CVEs, {len(pocs)} PoCs")
+            return result
         except Exception as e:
             print(f"  [ERROR] {label} failed: {e}", file=sys.stderr)
             source_results[name] = {"cves": 0, "pocs": 0, "error": str(e)}
+            return {}
 
     # Run CVE sources first
     for name in sorted(cve_source_names):
@@ -261,17 +304,29 @@ def main(argv: list[str] | None = None) -> None:
     discovered_cve_ids = {c.id.upper() for c in all_cves}
     known_cve_ids.update(discovered_cve_ids)
 
-    # ── Phase 1b: Run PoC sources (link to discovered CVEs) ───────────────
-    for name in sorted(poc_source_names):
-        if name in selected_sources:
-            _run_source(name, selected_sources[name])
+    # ── Phase 1b: Run PoC sources. x_twitter runs first so its discovered
+    # GitHub URLs can be enriched by the github source in the same pass.
+    poc_order = sorted(poc_source_names, key=lambda n: (n != "x_twitter", n))
+    for name in poc_order:
+        if name not in selected_sources:
+            continue
+        extra: dict = {}
+        if name == "github" and x_discovered_urls:
+            extra["x_discovered_urls"] = x_discovered_urls
+        result = _run_source(name, selected_sources[name], **extra)
+        if name == "x_twitter":
+            x_discovered_urls = result.get("x_discovered_urls", [])
 
     # ── Phase 2: Merge & deduplicate ─────────────────────────────────────
     step += 1
     _log(args.quiet, f"[{step}/{total_steps}] Merging and deduplicating...")
-    cves, pocs = merge_findings(all_cves, all_pocs)
+    cves, pocs, watchlist_counts = merge_findings(
+        all_cves, all_pocs, social_signals=all_social_signals,
+    )
     links = link_pocs_to_cves(cves, pocs)
     _log(args.quiet, f"  {len(cves)} unique CVEs, {len(pocs)} unique PoCs after dedup")
+    if watchlist_counts:
+        _log(args.quiet, f"  {len(watchlist_counts)} signal-only CVE IDs queued to watchlist")
 
     # ── Phase 3: Run enrichers ───────────────────────────────────────────
     for name, mod in sorted(selected_enrichers.items()):
@@ -294,6 +349,11 @@ def main(argv: list[str] | None = None) -> None:
             db.persist_poc(conn, poc)
             for ref in poc.cve_refs:
                 db.link_poc_to_cve(conn, poc.url, ref)
+        for cve_id, mentions in watchlist_counts.items():
+            db.persist_watchlist(conn, cve_id, source="x_twitter", social_mentions=mentions)
+        # NVD-confirmed CVEs flip any prior watchlist entry to resolved.
+        for cve in cves:
+            db.resolve_watchlist(conn, cve.id)
         for name in source_results:
             db.mark_run(conn, name)
 
