@@ -112,6 +112,10 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
         help="Run database health check and exit.",
     )
     p.add_argument(
+        "--query", type=str, default=None, metavar="CVE-XXXX-XXXX",
+        help="Query a CVE from the database and display enrichment report.",
+    )
+    p.add_argument(
         "--sources", type=str, default=None,
         help="Comma-separated list of sources to run (default: all enabled).",
     )
@@ -160,6 +164,12 @@ def main(argv: list[str] | None = None) -> None:
         for name, mod in sorted(enrichers.items()):
             enabled = getattr(mod, "DEFAULT_ENABLED", True)
             print(f"  {name:20s} {getattr(mod, 'NAME', name):30s} {'[on]' if enabled else '[off]'}")
+        return
+
+    # --query
+    if args.query:
+        from .storage.query import query_cve
+        print(query_cve(args.query, args.format))
         return
 
     # --health-check
