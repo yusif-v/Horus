@@ -7,7 +7,7 @@ setup(
     python_requires=">=3.10",
     extras_require={
         "web": ["flask>=3.0"],
-        "server": ["pyyaml"],
+        "server": ["flask>=3.0", "pyyaml", "gunicorn>=21.0"],
     },
     entry_points={
         "console_scripts": [

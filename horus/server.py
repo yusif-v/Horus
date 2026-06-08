@@ -26,7 +26,9 @@ Config file (YAML if PyYAML is installed; JSON also accepted):
 from __future__ import annotations
 
 import json
+import os
 import signal
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -51,10 +53,22 @@ ENRICHER_KEYS = {"epss", "kev"}
 
 
 @dataclass
+class WebConfig:
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8080
+    workers: int = 2
+    # If True and gunicorn isn't installed, fall back to Flask's dev server
+    # with a loud warning. Set False in prod to fail-fast instead.
+    allow_dev_fallback: bool = True
+
+
+@dataclass
 class Config:
     poll_intervals: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_POLL_INTERVALS))
     sources_enabled: dict[str, bool] = field(default_factory=dict)
     check_every_seconds: int = 60
+    web: WebConfig = field(default_factory=WebConfig)
 
     def interval(self, name: str) -> int:
         return self.poll_intervals.get(name, DEFAULT_POLL_INTERVALS.get(name, 3600))
@@ -89,6 +103,13 @@ def load_config(path: str | None) -> Config:
         cfg.sources_enabled.update({k: bool(v) for k, v in data["sources_enabled"].items()})
     if "check_every_seconds" in data:
         cfg.check_every_seconds = int(data["check_every_seconds"])
+    if "web" in data and isinstance(data["web"], dict):
+        w = data["web"]
+        cfg.web.enabled = bool(w.get("enabled", cfg.web.enabled))
+        cfg.web.host = str(w.get("host", cfg.web.host))
+        cfg.web.port = int(w.get("port", cfg.web.port))
+        cfg.web.workers = int(w.get("workers", cfg.web.workers))
+        cfg.web.allow_dev_fallback = bool(w.get("allow_dev_fallback", cfg.web.allow_dev_fallback))
     return cfg
 
 
@@ -109,11 +130,16 @@ def _last_run_epoch(conn, name: str) -> float:
 
 
 class Server:
-    """Polls each source on its own interval and runs the standard pipeline."""
+    """Polls each source on its own interval and runs the standard pipeline.
+
+    When `cfg.web.enabled`, also supervises a gunicorn child serving
+    `horus.web:app` for the duration of the server's lifetime.
+    """
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self._running = False
+        self._web_proc: subprocess.Popen | None = None
 
     # ── lifecycle ────────────────────────────────────────────────────────
 
@@ -123,22 +149,104 @@ class Server:
         signal.signal(signal.SIGTERM, self._on_signal)
         signal.signal(signal.SIGINT, self._on_signal)
         db.initialize()
+        if self.cfg.web.enabled:
+            self._start_web()
         self._log(f"server started; check_every={self.cfg.check_every_seconds}s")
-        while self._running:
-            try:
-                self.run_due()
-            except Exception as e:
-                print(f"  [ERROR] cycle failed: {e}", file=sys.stderr)
-            # Sleep in small slices so SIGTERM is responsive.
-            slept = 0
-            while self._running and slept < self.cfg.check_every_seconds:
-                time.sleep(1)
-                slept += 1
+        try:
+            while self._running:
+                try:
+                    self.run_due()
+                except Exception as e:
+                    print(f"  [ERROR] cycle failed: {e}", file=sys.stderr)
+                # Supervise the web child: if it died, restart it once per cycle.
+                if self.cfg.web.enabled:
+                    self._supervise_web()
+                # Sleep in small slices so SIGTERM is responsive.
+                slept = 0
+                while self._running and slept < self.cfg.check_every_seconds:
+                    time.sleep(1)
+                    slept += 1
+        finally:
+            self._stop_web()
         self._log("server stopped")
 
     def _on_signal(self, signum, frame) -> None:
         self._log(f"received signal {signum}, shutting down")
         self._running = False
+
+    # ── web supervision ──────────────────────────────────────────────────
+
+    def _start_web(self) -> None:
+        host = self.cfg.web.host
+        port = self.cfg.web.port
+        workers = self.cfg.web.workers
+        try:
+            import gunicorn  # noqa: F401
+            cmd = [
+                sys.executable, "-m", "gunicorn",
+                "horus.web:app",
+                "--bind", f"{host}:{port}",
+                "--workers", str(workers),
+                "--worker-class", "sync",
+                "--timeout", "60",
+                "--access-logfile", "-",
+                "--error-logfile", "-",
+                "--log-level", "info",
+                # Tie children to this group so SIGTERM kills the lot cleanly.
+                "--graceful-timeout", "20",
+            ]
+            self._log(f"starting web (gunicorn {workers}w) on http://{host}:{port}")
+            self._web_proc = subprocess.Popen(cmd, start_new_session=True)
+            return
+        except ImportError:
+            pass
+
+        if not self.cfg.web.allow_dev_fallback:
+            raise RuntimeError(
+                "gunicorn not installed and web.allow_dev_fallback=false. "
+                'Install it: pip install -e ".[server]"'
+            )
+        # Dev-server fallback in a daemon thread. NOT for real production.
+        import threading
+        from . import web as _web
+        self._log(f"[WARN] gunicorn not installed; using Flask dev server on http://{host}:{port}")
+        t = threading.Thread(
+            target=_web.app.run,
+            kwargs={"host": host, "port": port, "debug": False, "use_reloader": False},
+            daemon=True,
+            name="horus-web-dev",
+        )
+        t.start()
+
+    def _supervise_web(self) -> None:
+        proc = self._web_proc
+        if proc is None:
+            return
+        rc = proc.poll()
+        if rc is not None:
+            self._log(f"[WARN] web child exited (rc={rc}); restarting")
+            self._web_proc = None
+            self._start_web()
+
+    def _stop_web(self) -> None:
+        proc = self._web_proc
+        if proc is None:
+            return
+        self._log("stopping web child")
+        try:
+            # SIGTERM the gunicorn process group; gunicorn forwards to workers.
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            proc.wait(timeout=25)
+        except subprocess.TimeoutExpired:
+            self._log("[WARN] web did not exit in 25s; killing")
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+        self._web_proc = None
 
     # ── cycles ───────────────────────────────────────────────────────────
 

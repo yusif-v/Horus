@@ -157,9 +157,24 @@ sources_enabled:
   exploit_db: false  # turn a source off entirely
 
 check_every_seconds: 60  # how often the loop wakes up to look for due sources
+
+# Web UI — when enabled, the server supervises a gunicorn child for the
+# Flask app on :port. Omit / set enabled=false to run pollers only.
+web:
+  enabled: true
+  host: 0.0.0.0
+  port: 8080
+  workers: 2              # gunicorn sync workers
+  allow_dev_fallback: false  # fail fast in prod if gunicorn isn't installed
 ```
 
-PyYAML is optional — install it via `pip install -e ".[server]"`. Without it the server still loads JSON config (or falls back to defaults).
+Install the full server stack (Flask + PyYAML + gunicorn) with:
+
+```bash
+pip install -e ".[server]"
+```
+
+Without `pyyaml` the server still loads JSON config (or falls back to defaults). Without `gunicorn`, the web supervisor falls back to the Flask dev server **only if `allow_dev_fallback: true`** — in production set it to `false` so misconfiguration is loud.
 
 ### Running as a systemd service
 
@@ -181,7 +196,33 @@ RestartSec=30
 WantedBy=multi-user.target
 ```
 
-`SIGTERM` and `SIGINT` are handled cleanly so `systemctl stop` / `docker stop` shut the loop down between cycles instead of mid-source.
+`SIGTERM` and `SIGINT` are handled cleanly so `systemctl stop` / `docker stop` shut the loop down between cycles instead of mid-source. The gunicorn child is started in its own process group so the same signal cleanly terminates all workers.
+
+### Docker
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY . .
+RUN pip install --no-cache-dir -e ".[server]"
+VOLUME ["/data"]
+ENV HORUS_DB_PATH=/data/horus.db
+EXPOSE 8080
+CMD ["python", "-m", "horus", "--server", "--config", "/data/config.yaml"]
+```
+
+```bash
+docker build -t horus:0.8 .
+docker run -d --name horus -p 8080:8080 -v $(pwd)/state:/data horus:0.8
+```
+
+### Production checklist
+
+- `web.allow_dev_fallback: false` so a missing gunicorn fails fast instead of starting Flask's single-threaded dev server.
+- Front gunicorn with nginx/Caddy if you're exposing publicly — gunicorn's HTTP parser isn't hardened for the open internet.
+- Mount `state/` on persistent storage (`state/horus.db` is the source of truth; the JSON files are migration leftovers).
+- The `/api/stats` JSON endpoint is suitable as a liveness probe (returns 200 + counts).
+- Set a Github token via `GITHUB_TOKEN` env var to get the 5000/hr rate limit instead of 60/hr.
 
 ## Web Interface
 
