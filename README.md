@@ -2,7 +2,7 @@
 
 **Version:** 0.7.0
 
-Daily PoC research scanner. Searches GitHub, NVD, X/Twitter, and Exploit-DB for new vulnerability disclosures with proof-of-concept exploits. Enriches with CISA KEV and EPSS scores. Requires Python 3.10+.
+Daily PoC research scanner. Searches GitHub, NVD, X/Twitter, and Exploit-DB for new vulnerability disclosures with proof-of-concept exploits. Enriches with CISA KEV and EPSS scores. Query any CVE from the local database for a full enrichment report. Requires Python 3.10+.
 
 ## What it does
 
@@ -15,16 +15,18 @@ Daily PoC research scanner. Searches GitHub, NVD, X/Twitter, and Exploit-DB for 
 - **PoC linking**: All sources that reference known CVE IDs are attached to that CVE
 - **Persistence**: SQLite at `state/horus.db` — normalized schema with graph edges
 - **Reports**: Markdown + interactive Cytoscape.js graph every run
+- **Health check**: Database integrity validation (`--health-check`)
+- **CVE query**: Look up any CVE for a full enrichment report (`--query`)
 
 ## Plugin Architecture
 
 Sources and enrichers are **self-discovering plugins**. Adding a new source = creating ONE file in `horus/sources/` with a `run()` function. No other files change.
 
 ```bash
-python3 -m horus --list-sources    # show all discovered plugins
-python3 -m horus --sources github,nvd  # run only specific sources
-python3 -m horus --no-exploitdb    # skip a source (auto-generated flag)
-python3 -m horus --skip-kev        # skip an enricher (auto-generated flag)
+python3 -m horus --list-sources          # show all discovered plugins
+python3 -m horus --sources github,nvd    # run only specific sources
+python3 -m horus --no-exploitdb          # skip a source (auto-generated flag)
+python3 -m horus --skip-kev              # skip an enricher (auto-generated flag)
 ```
 
 ## Usage
@@ -36,10 +38,23 @@ python3 -m horus
 # Common options
 python3 -m horus --min-cvss 7.0          # NVD: only High/Critical
 python3 -m horus --max-results 10         # cap items per source
-python3 -m horus --format md             # markdown output (e.g. for Telegram)
+python3 -m horus --format md             # markdown output
 python3 -m horus --quiet                 # suppress progress on stderr
-python3 -m horus --no-exploitdb --skip-kev  # skip specific plugins
-python3 -m horus --list-sources          # list all plugins
+python3 -m horus --no-exploitdb --skip-kev
+
+# Look up a CVE from the database
+python3 -m horus --query CVE-2026-11413
+python3 -m horus --query 2026-11413      # CVE- prefix auto-added
+python3 -m horus --query CVE-2026-11413 --format md
+
+# Keyword search (if exact CVE not found)
+python3 -m horus --query log4j
+
+# Database integrity check
+python3 -m horus --health-check
+
+# GitHub auth status
+python3 -m horus --auth-status
 ```
 
 ### Flags
@@ -56,6 +71,64 @@ python3 -m horus --list-sources          # list all plugins
 | `--enrichers A,B` | Run only these enrichers |
 | `--no-<name>` | Skip a source (auto-generated per source) |
 | `--skip-<name>` | Skip an enricher (auto-generated per enricher) |
+| `--query CVE-XXXX-XXXX` | Query a CVE enrichment report from the database |
+| `--health-check` | Run database integrity checks and exit |
+| `--auth-status` | Show GitHub auth status and exit |
+| `--no-save` | Skip writing report to disk |
+| `--no-graph` | Skip writing the interactive graph HTML |
+
+## Query Output
+
+When you look up a CVE with `--query`, Horus returns all enrichment data in a structured report:
+
+```
+============================================================
+  CVE ENRICHMENT REPORT: CVE-2026-11413
+============================================================
+
+  CVSS:     8.8 HIGH
+  EPSS:     0.0004 (0.04%)
+  KEV:      No
+  Exploit:  3.5/10
+  Sources:  nvd
+  Published: 2026-06-06
+
+  Description:
+    A security vulnerability has been detected in JingDong
+    JD Cloud Box AX6600...
+
+  Attack tags: buffer-overflow
+
+  CWEs: CWE-119, CWE-121
+
+  Affected products:
+    unknown/unknown [cms]
+
+  Linked PoCs (2):
+    https://github.com/.../CVE-2026-11413-poc ★42 [github]
+    https://x.com/.../status/... [x]
+
+  Related PoCs (mentioned) (3):
+    https://x.com/.../status/... [x]
+
+  Related CVEs (5):
+    CVE-2026-11414 [CVSS 7.5] (same attack tag)
+    CVE-2025-33109 [CVSS 9.8] (same product)
+    ...
+============================================================
+```
+
+**Report sections:**
+- CVSS score + severity
+- EPSS exploit probability
+- CISA KEV status
+- Composite exploitability score (0-10)
+- Attack tags + CWE IDs
+- Affected products with versions
+- **Linked PoCs** — formally linked (poc_cve table)
+- **Related PoCs** — mention this CVE in description
+- **Related CVEs** — same attack tags or same products
+- Source tracking + discovery timeline
 
 ## Data Sources
 
@@ -94,31 +167,78 @@ python3 -m horus --auth-status
 # GitHub auth: OK (token ...Xq7Z, limit 5000/hr)
 ```
 
+## Health Check
+
+Run `--health-check` to validate database integrity. Ten categories of checks, severity levels (error / warning / info):
+
+| Category | What it catches |
+|----------|----------------|
+| Schema | Missing tables, columns, indexes |
+| CVE data quality | Bad ID format, CVSS out of range, invalid severity, EPSS/KEV out of range, missing timestamps, empty descriptions, future dates, duplicate IDs |
+| PoC data quality | Invalid source enum, bad URL format, negative stars/age, missing timestamps, duplicate URLs |
+| Referential integrity | Orphan rows in all 7 join tables |
+| Enum consistency | Attack tags, products, sources against locked vocabularies |
+| Completeness | CVEs without sources, tags, descriptions |
+| Stale data | Records not updated in 30+ days |
+| Duplicates | Duplicate products, identical CVE descriptions |
+| Coverage | EPSS/KEV/CVSS/tag coverage percentages |
+
+```
+============================================================
+  HORUS DATABASE HEALTH REPORT
+============================================================
+
+── Statistics ──────────────────────────────────────────
+  total_cves: 45
+  cves_with_epss: 45/45 (100%)
+  cves_with_kev: 3
+  cves_with_attack_tags: 43/45 (95%)
+  cves_with_pocs: 12/45 (26%)
+  ...
+
+── Warnings (2) ───────────────────────────────
+  [WARN] [completeness] 2 CVEs without attack tags
+  [WARN] [stale] 5 CVEs not updated in 30+ days
+
+  PASSED with warnings
+============================================================
+```
+
 ## Output
 
 ```
 === Daily PoC Research Report — 2026-06-07 ===
 
-[1/6] Searching GitHub for new PoC repos...
-  Found 9 relevant repos
-[2/6] Fetching recent CVEs from NVD...
-  Found 15 relevant CVEs
-[3/6] Searching X/Twitter for CVE mentions...
-  Found 3 relevant tweets
-[4/6] Searching Exploit-DB for known CVEs...
-  Found 2 Exploit-DB entries
-[5/6] Merging and deduplicating findings...
+[1/6] Running GitHub PoC Repos...
+  Found 3 PoCs
+[2/6] Running NVD CVE Feed...
+  Found 15 CVEs
+[3/6] Running X/Twitter (Chrome Auth)...
+  Found 5 PoCs
+[4/6] Running Exploit-DB...
+[5/6] Merging and deduplicating...
+  15 unique CVEs, 8 unique PoCs after dedup
 [6/6] Persisting to database...
 
 --- Web Application (3 CVEs) ---
-[1] CVE-2026-3143 [CVSS 9.1 CRITICAL] [KEV] [EPSS 0.87]
-    Exploit POC for CVE_2026_3143 — RCE in nginx
-    ★ 558 stars | GitHub: rootsecdev/cve_2026_31431
-    X: @security_researcher (https://x.com/.../status/...)
-    EDB: https://www.exploit-db.com/exploits/52001
+
+  CVE-2026-3143 [CVSS 9.1 CRITICAL] [KEV] [EPSS 87.1%]
+    RCE in nginx via crafted HTTP request
+    tags: rce
+    affects: nginx/nginx 1.24.x, 1.25.x
+    PoC: https://github.com/... (558* [github])
+    PoC: https://x.com/.../1234 ([x])
+    PoC: https://www.exploit-db.com/exploits/52001 ([exploit-db])
     Exploitability: 8.5/10
 
-Total: 24 items | CVEs: 15 | PoCs: 9
+--- Standalone PoCs (5) ---
+
+  https://github.com/.../CVE-2026-99999-poc (42 3d)
+    PoC for zero-day in Apache Tomcat
+
+CVEs: 15 | Standalone PoCs: 5
+Report saved -> reports/2026/06/2026-06-07.md
+Graph saved  -> reports/2026/06/2026-06-07.graph.html
 ```
 
 ## Project Structure
@@ -149,7 +269,9 @@ Horus/
 │   │   └── epss.py       #   EPSS scores
 │   ├── storage/          # Local persistence (SQLite)
 │   │   ├── schema.sql    #   Idempotent DDL
-│   │   └── db.py         #   Schema init, migration, CRUD, exploitability scoring
+│   │   ├── db.py         #   Schema init, migration, CRUD
+│   │   ├── health.py     #   Database integrity checks
+│   │   └── query.py      #   CVE query + enrichment report
 │   └── render/           # Output formatting
 │       ├── report.py     #   Text / markdown renderer
 │       ├── persist.py    #   Save markdown report to disk
