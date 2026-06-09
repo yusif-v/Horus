@@ -54,7 +54,7 @@ ENRICHER_KEYS = {"epss", "kev"}
 
 @dataclass
 class WebConfig:
-    enabled: bool = False
+    enabled: bool = True
     host: str = "127.0.0.1"
     port: int = 8080
     workers: int = 2
@@ -291,11 +291,38 @@ class Server:
         No CLI gymnastics — server is a first-class pipeline consumer.
         """
         if not sources:
-            # Enrichers-only cycle: just backfill EPSS against the existing DB.
-            if "epss" in enrichers:
-                from .enrichers.epss import backfill_all
-                with db.connect() as conn:
+            # Enrichers-only cycle: backfill EPSS + run KEV against existing DB.
+            with db.connect() as conn:
+                if "epss" in enrichers:
+                    from .enrichers.epss import backfill_all
                     backfill_all(conn)
+                if "kev" in enrichers:
+                    from .enrichers.kev import enrich
+                    from .core.context import EnricherContext
+                    from .core.model import CVE
+                    # KEV needs CVE objects to mutate; fetch all from DB
+                    rows = conn.execute(
+                        "SELECT id, description, cvss_score, cvss_severity, published_at,"
+                        " epss_score, kev, social_mentions, poc_source_count,"
+                        " reputation_score, confidence"
+                        " FROM cve"
+                    ).fetchall()
+                    cves = []
+                    for r in rows:
+                        cves.append(CVE(
+                            id=r[0], description=r[1] or "",
+                            cvss_score=r[2], cvss_severity=r[3],
+                            published_at=r[4], epss_score=r[5],
+                            kev=r[6], social_mentions=r[7] or 0,
+                            poc_source_count=r[8] or 0,
+                            reputation_score=r[9] or 0.0,
+                            confidence=r[10] or "high",
+                        ))
+                    enrich(EnricherContext(cves=cves, pocs=[]))
+                    # Persist KEV flags back
+                    for cve in cves:
+                        if cve.kev:
+                            conn.execute("UPDATE cve SET kev = 1 WHERE id = ?", (cve.id,))
             return
 
         from .pipeline import PipelineOptions, run_pipeline

@@ -7,20 +7,24 @@ route or test. Returns plain dicts / lists of dicts.
 from __future__ import annotations
 
 import re
-import sqlite3
 
-from ..config import STATE_DIR
+from ..storage import db as _storage
 
-DB_PATH = STATE_DIR / "horus.db"
+# Re-export for tests that monkey-patch DB_PATH on the web module.
+DB_PATH = _storage.DB_PATH
 PER_PAGE_DEFAULT = 20
 
 
 # ── connection ──────────────────────────────────────────────────────────────
 
-def db_connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def db_connect():
+    """Open the SQLite DB via the storage layer's context manager.
+
+    One DB-access path across the whole codebase. Web is read-only so
+    the commit-on-clean-exit semantics from storage.db.connect() are
+    harmless.
+    """
+    return _storage.connect()
 
 
 def _row_to_dict(row) -> dict:

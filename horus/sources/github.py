@@ -22,6 +22,8 @@ from ..net.http import fetch_json
 
 NAME = "GitHub PoC Repos"
 DEFAULT_ENABLED = True
+KIND = "poc"
+CONSUMES = ["x_discovered_urls"]      # enriched in the same pass
 
 
 def _confidence_for_stars(stars: int | None) -> str:

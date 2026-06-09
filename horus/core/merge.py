@@ -95,19 +95,32 @@ def poc_from_exploitdb(raw: dict) -> PoC:
     )
 
 
+def poc_from_gitlab(raw: dict) -> PoC:
+    text = f'{raw.get("repo", "")} {raw.get("description", "")}'
+    return PoC(
+        url=raw.get("url", ""),
+        source="gitlab",
+        stars=raw.get("stars"),
+        age_days=raw.get("age_days"),
+        description=raw.get("description"),
+        cve_refs=raw.get("cves") or extract_cves(text),
+    )
+
+
 # Map source names to builder functions
 POC_BUILDERS = {
     "github": poc_from_github,
     "twitter": poc_from_twitter,
     "nitter": poc_from_nitter,
     "exploit-db": poc_from_exploitdb,
+    "gitlab": poc_from_gitlab,
 }
 
 
 def deduplicate_pocs(pocs: list[PoC]) -> list[PoC]:
     """Merge duplicate PoCs by URL, keeping the richest metadata."""
     seen: dict[str, PoC] = {}
-    source_priority = {"exploit-db": 3, "github": 2, "nitter": 1, "twitter": 0}
+    source_priority = {"exploit-db": 3, "github": 2, "gitlab": 2, "nitter": 1, "twitter": 0}
 
     for poc in pocs:
         if poc.url in seen:
@@ -214,7 +227,7 @@ def merge_findings(
     all_cves: list,
     all_pocs: list,
     social_signals: list | None = None,
-) -> tuple[list[CVE], list[PoC], dict[str, int]]:
+) -> tuple[list[CVE], list[PoC], list[tuple[str, str, int]]]:
     """Deduplicate CVEs and PoCs from all sources.
 
     CVEs are deduplicated by ID (NVD = authoritative; first seen wins).
@@ -223,11 +236,13 @@ def merge_findings(
     `social_mentions`.
 
     Returns:
-        (cves, pocs, watchlist_counts)
-        watchlist_counts maps {cve_id: mention_count} for CVE IDs that
-        appeared ONLY in third-party signals (no NVD record) — these are
-        low-confidence candidates that should go into cve_watchlist, not
-        the authoritative cve table.
+        (cves, pocs, watchlist_entries)
+        watchlist_entries is a list of (cve_id, source, mention_count)
+        for CVE IDs that appeared ONLY in third-party signals (no NVD
+        record). `source` is the name of the source that surfaced the
+        signal — taken from the signal dict's "source" key (the pipeline
+        stamps this). Persist these to cve_watchlist, not the
+        authoritative cve table.
     """
     # Deduplicate CVEs by ID — these all came from authoritative sources (NVD).
     seen_cves: dict[str, CVE] = {}
@@ -238,19 +253,19 @@ def merge_findings(
     known_ids = {c.id.upper() for c in cves}
 
     # Aggregate social signals: matched IDs bump social_mentions on the CVE;
-    # unmatched IDs become watchlist candidates.
-    watchlist_counts: dict[str, int] = {}
+    # unmatched IDs become watchlist candidates keyed by (cve_id, source).
+    watchlist: dict[tuple[str, str], int] = {}
     if social_signals:
         for signal in social_signals:
             cve_id = (signal.get("cve_id") or "").upper()
             if not cve_id:
                 continue
             if cve_id in known_ids:
-                # aggregate_social_signals would also work, but inline keeps
-                # the one-pass split simple.
                 next(c for c in cves if c.id.upper() == cve_id).social_mentions += 1
             else:
-                watchlist_counts[cve_id] = watchlist_counts.get(cve_id, 0) + 1
+                source = signal.get("source") or "unknown"
+                key = (cve_id, source)
+                watchlist[key] = watchlist.get(key, 0) + 1
 
     # Count distinct PoC sources per CVE
     poc_sources_per_cve: dict[str, set[str]] = {}
@@ -277,7 +292,8 @@ def merge_findings(
     # Deduplicate PoCs
     pocs = deduplicate_pocs(all_pocs)
 
-    return cves, pocs, watchlist_counts
+    watchlist_entries = [(cid, src, n) for (cid, src), n in watchlist.items()]
+    return cves, pocs, watchlist_entries
 
 
 def link_pocs_to_cves(cves: list[CVE], pocs: list[PoC]) -> dict[str, list[PoC]]:

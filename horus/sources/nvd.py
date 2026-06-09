@@ -86,6 +86,9 @@ def _resolve_start(now: datetime, last_run_iso: str | None) -> datetime:
     return max(candidate, floor)
 
 
+KIND = "cve"      # produces authoritative CVE records
+
+
 def run(ctx) -> dict:
     """Fetch recent CVEs from NVD. Returns {"cves": [dict], "pocs": []}."""
     now = datetime.utcnow()

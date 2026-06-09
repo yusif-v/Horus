@@ -24,6 +24,9 @@ from ..net.xsearch import XSearch, XSearchError, XAuthError
 
 NAME = "X/Twitter (Chrome Auth)"
 DEFAULT_ENABLED = True
+KIND = "poc"
+PROVIDES = ["x_discovered_urls"]      # github source picks these up
+SOCIAL_SOURCE_NAME = "x_twitter"      # tagged on watchlist entries
 
 # Targeted search queries — GitHub-focused, no broad noise
 DEFAULT_QUERIES = [
@@ -92,6 +95,7 @@ def run(ctx) -> dict:
                     "replies": tweet.get("replies", 0),
                     "views": tweet.get("views", 0),
                     "screen_name": tweet.get("screenName", ""),
+                    "source": SOCIAL_SOURCE_NAME,
                 })
 
             # GitHub URL discovery: extract GitHub repo URLs from tweet

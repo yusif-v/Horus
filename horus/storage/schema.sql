@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS cve (
 
 CREATE TABLE IF NOT EXISTS poc (
     url             TEXT PRIMARY KEY,
-    source          TEXT NOT NULL,              -- github | exploit-db | packetstorm | nitter | twitter | manual
+    source          TEXT NOT NULL,              -- github | gitlab | exploit-db | packetstorm | nitter | twitter | manual
     stars           INTEGER,
     age_days        INTEGER,
     description     TEXT,

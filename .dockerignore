@@ -1,0 +1,49 @@
+# State
+state/
+
+# Reports
+reports/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docs (not needed in image)
+CHANGELOG.md
+*.md
+
+# Tests (not needed in image)
+tests/
+
+# Misc
+.dockerignore
+Dockerfile
+docker-compose*.yaml
+graphify-out/
+.remember/
+CLAUDE.local.md

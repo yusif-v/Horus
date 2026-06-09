@@ -221,9 +221,12 @@ def _compute_reputation(cve: CVE) -> float:
       - KEV bonus: +1.5 if in CISA KEV
       - Social mentions: min(social_mentions * 0.15, 1.0)
       - PoC source count: min(poc_source_count * 0.5, 1.5)
+      - Ubiquity bonus: +1.0 if affects a widely-deployed product
 
     Returns 0.0 if no CVSS score is available.
     """
+    from ..core.merge import cve_affects_ubiquitous
+
     if cve.cvss_score is None:
         return 0.0
 
@@ -237,6 +240,9 @@ def _compute_reputation(cve: CVE) -> float:
 
     score += min(cve.social_mentions * 0.15, 1.0)
     score += min(cve.poc_source_count * 0.5, 1.5)
+
+    if cve_affects_ubiquitous(cve):
+        score += 1.0
 
     return min(score, 10.0)
 

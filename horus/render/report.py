@@ -150,7 +150,7 @@ def _render_markdown(cves: list[CVE], pocs: list[PoC], links: dict[str, list[PoC
                     w(f'  PoC: [{poc.url}]({poc.url}) {poc.stars or 0}*{src_tag}')
 
     if standalone:
-        w(f'\\n## Standalone PoCs ({len(standalone)})\\n')
+        w(f'\n## Standalone PoCs ({len(standalone)})\n')
         for poc in sorted(standalone, key=lambda p: p.stars or 0, reverse=True):
             refs = f' -- refs: {", ".join(poc.cve_refs)}' if poc.cve_refs else ''
             src_tag = ' [tweet]' if poc.source in ('twitter', 'x') else ''

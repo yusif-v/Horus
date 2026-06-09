@@ -27,6 +27,11 @@ from .render.persist import save_report
 from .render.report import render_report
 from .storage import db
 
+# Plugin attribute names — what the pipeline reads off each module.
+_KIND_CVE = "cve"
+_KIND_POC = "poc"
+_DEFAULT_KIND = _KIND_POC   # safest assumption for plugins that forget to declare
+
 
 # ── Plugin discovery ─────────────────────────────────────────────────────────
 
@@ -173,13 +178,14 @@ def run_pipeline(
         step += 1
         label = getattr(mod, "NAME", name)
         log(f"[{step}/{total_steps}] running {label}...")
+        provided = {"x_discovered_urls": x_discovered_urls} if name == "github" else {}
         ctx = SourceContext(
             known_cve_ids=known_cve_ids,
             known_poc_urls=known_poc_urls,
             max_results=opts.max_results,
             min_cvss=opts.min_cvss,
             last_run=last_runs.get(name),
-            x_discovered_urls=x_discovered_urls if name == "github" else [],
+            provided=provided,
         )
         try:
             result = mod.run(ctx) or {}
@@ -244,8 +250,8 @@ def run_pipeline(
             db.persist_poc(conn, poc)
             for ref in poc.cve_refs:
                 db.link_poc_to_cve(conn, poc.url, ref)
-        for cve_id, mentions in watchlist_counts.items():
-            db.persist_watchlist(conn, cve_id, source="x_twitter", social_mentions=mentions)
+        for cve_id, source, mentions in watchlist_counts:
+            db.persist_watchlist(conn, cve_id, source=source, social_mentions=mentions)
         for cve in cves:
             db.resolve_watchlist(conn, cve.id)
         for name in source_results:

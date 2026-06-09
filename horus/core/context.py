@@ -48,9 +48,17 @@ class SourceContext:
     # NVD uses it for adaptive lookback; other sources ignore it.
     last_run: str | None = None
 
-    # Inter-source handoff: URLs surfaced by x_twitter that github
-    # should enrich (stars, age) in the same pass.
-    x_discovered_urls: list[str] = field(default_factory=list)
+    # Generic inter-source handoff: keys produced earlier in this cycle
+    # by sources that declared `PROVIDES = [...]`. A consumer source
+    # declares `CONSUMES = ["x_discovered_urls"]` and reads
+    # `ctx.provided["x_discovered_urls"]`. No magic-string branching in
+    # the pipeline.
+    provided: dict[str, list] = field(default_factory=dict)
+
+    @property
+    def x_discovered_urls(self) -> list[str]:
+        """Back-compat shortcut for github source."""
+        return self.provided.get("x_discovered_urls", [])
 
 
 @dataclass
