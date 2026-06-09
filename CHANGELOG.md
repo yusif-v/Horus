@@ -5,6 +5,93 @@ All notable changes to Horus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `docs/plans/oss-readiness.md` — roadmap to publishable open-source
+  status (LICENSE, CI, PyPI, badges, contributor docs). Not tied to a
+  specific version — these are ongoing chores.
+
+### Changed
+- **Package restructure.** No behavior change; pure structural. See
+  `docs/architecture.md` for the full map.
+  - `horus/pipeline.py` (new) is the single source of truth for the
+    sources → merge → enrich → persist → render flow. `cli.main` and
+    `server.Server` both call `run_pipeline(opts)` — kills the
+    synthesised-argv hack server.py used to drive cli.main.
+  - `horus/config/` split into `paths.py` + `queries.py` + `tunables.py`
+    with flat re-exports for back-compat.
+  - `horus/net/` collects the transport layer (`http.py`, `auth.py`,
+    `xsearch.py`) that was scattered across `core/` and `sources/`.
+  - `horus/web/` is now a package with `routes/` blueprints,
+    `templates/*.html` as real Jinja files, and `static/horus.css`
+    extracted from the old inline 600-line CSS string.
+  - `tests/` (new): 30 pytest tests pinning the reputation formula,
+    v0.7 → v0.8 schema migration, plugin discovery, and every web
+    route. `/api/stats` JSON contract locked.
+  - `PLAN_v0.8.md` moved from repo root to `docs/plans/v0.8.md`.
+    `docs/architecture.md` added.
+
+## [0.8.0] - 2026-06-09
+
+### Added
+- **Source-purity model.** NVD is the only authoritative source for
+  CVE data. GitHub, X/Twitter, and Exploit-DB are demoted to signal
+  sources that corroborate NVD records but never create their own.
+- **Reputation score** (`reputation_score`, 0–10) replacing the old
+  `exploitability_score`. Formula:
+  - CVSS × 0.35
+  - + EPSS × 10 × 0.25
+  - + 1.5 if KEV
+  - + min(social_mentions × 0.15, 1.0)
+  - + min(poc_source_count × 0.5, 1.5)
+  - + 1.0 if affected product is in the ubiquitous-impact set
+    (nginx, php, wordpress, openssl, kubernetes, openssh, apache,
+    mysql, chrome, linux kernel, …)
+- **Watchlist** (`cve_watchlist` table) for CVE IDs mentioned only by
+  third-party signals (no NVD record yet). Auto-resolves once NVD
+  confirms them.
+- **24/7 server mode** (`horus/server.py`, `--server`,
+  `--server-once`, `--config`). Per-source poll intervals (NVD 1h,
+  X 30m, GitHub 1h, Exploit-DB 2h, EPSS/KEV daily), YAML/JSON config,
+  SIGTERM-clean main loop.
+- **Production web supervisor.** With `web.enabled: true` the server
+  spawns gunicorn as a subprocess in its own process group (clean
+  signal propagation across the whole tree), supervises it across
+  cycles, and falls back to Flask's dev server only when
+  `allow_dev_fallback: true`.
+- **`--backfill-epss` CLI flag.** EPSS now scores every previously
+  unscored CVE in the DB after the current batch, not just the batch.
+- **Web UI v0.8.** Reputation column, social-mentions / confidence /
+  watchlist counts surfaced via `/api/stats`.
+
+### Changed
+- **X/Twitter source** no longer creates PoC records with `source="x"`.
+  Each tweet mentioning a CVE increments `social_mentions`; tweets
+  linking to a `github.com` PoC repo feed that URL into the GitHub
+  source for star/age enrichment in the same pass.
+- **GitHub source** accepts `x_discovered_urls` from the X source.
+- **DB schema** gains `social_mentions`, `poc_source_count`,
+  `reputation_score`, `confidence` on `cve`. Migration runs
+  `ALTER TABLE` against existing v0.7 databases *before* `schema.sql`
+  so its new indexes don't reference columns that don't exist yet.
+
+### Fixed
+- **Scrollbar layout shift** between pages. Short pages (Overview) had
+  no vertical scrollbar; long ones (Triage, CVEs) did. `margin: 0 auto`
+  re-centered the container, visibly shifting the title horizontally on
+  navigation. Fixed with `scrollbar-gutter: stable` +
+  `overflow-y: scroll`.
+- **Nav / page-title misalignment** on wide screens. The nav was
+  full-width while `.container` was centered at `max-width: 1320px`,
+  so the logo and the page title under it didn't share a left edge.
+  `.nav` now mirrors the container's `max-width` and `margin: 0 auto`,
+  wrapped in `.nav-wrap` so the surface band still spans edge to edge.
+- **Path-traversal hardening** in `horus/sources/github.py` for URLs
+  surfaced by X. Rejects empty / `.` / `..` segments and url-quotes
+  before forming `api.github.com/repos/...`.
+- **Web UI version string** bumped from `HORUS v0.5` to `HORUS v0.8`.
+
 ## [0.7.0] - 2026-06-07
 
 ### Added
