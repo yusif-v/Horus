@@ -16,8 +16,8 @@ from datetime import datetime
 
 from ..config import GITHUB_QUERIES, MAX_REPO_AGE_DAYS, MIN_REPO_STARS
 from ..core.filters import extract_cves, is_fresh_poc
-from .auth import github_token
-from .http import fetch_json
+from ..net.auth import github_token
+from ..net.http import fetch_json
 
 
 NAME = "GitHub PoC Repos"

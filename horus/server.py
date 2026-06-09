@@ -286,27 +286,29 @@ class Server:
     # ── pipeline invocation ──────────────────────────────────────────────
 
     def _invoke_pipeline(self, sources: list[str], enrichers: list[str]) -> None:
-        """Drive cli.main with a synthesized argv: quiet, no graph, no report file."""
-        from .cli import main as cli_main
-        argv: list[str] = ["--quiet", "--no-save", "--no-graph"]
-        if sources:
-            argv += ["--sources", ",".join(sources)]
-        else:
-            # No sources due — only enrichers. cli.main requires at least one
-            # source to do anything; skip and just run enrichers via the
-            # backfill path.
+        """Run the shared pipeline for the given source/enricher subset.
+
+        No CLI gymnastics — server is a first-class pipeline consumer.
+        """
+        if not sources:
+            # Enrichers-only cycle: just backfill EPSS against the existing DB.
             if "epss" in enrichers:
                 from .enrichers.epss import backfill_all
                 with db.connect() as conn:
                     backfill_all(conn)
             return
-        if enrichers:
-            argv += ["--enrichers", ",".join(enrichers)]
-        try:
-            cli_main(argv)
-        except SystemExit:
-            # argparse may raise on bad combo — keep the server alive.
-            pass
+
+        from .pipeline import PipelineOptions, make_runner_args, run_pipeline
+        run_pipeline(PipelineOptions(
+            runner_args=make_runner_args(),
+            source_filter=set(sources),
+            enricher_filter=set(enrichers) if enrichers else set(),
+            quiet=True,
+            save_report_md=False,
+            save_graph_html=False,
+            print_report=False,
+            log=lambda m: self._log(m),
+        ))
 
     # ── logging ──────────────────────────────────────────────────────────
 

@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow" style="color:var(--critical);">System error</div>
+<h1 class="page-title">Something went wrong.</h1>
+<div class="panel"><div class="panel-body" style="font-family:var(--mono);font-size:13px;color:var(--text-mid);white-space:pre-wrap;">{{ msg }}</div></div>
+{% endblock %}

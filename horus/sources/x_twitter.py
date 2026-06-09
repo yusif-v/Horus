@@ -19,7 +19,7 @@ import sys
 from ..core.filters import extract_cves
 
 # Reuse the standalone xsearch module for auth + API
-from ..core.xsearch import XSearch, XSearchError, XAuthError
+from ..net.xsearch import XSearch, XSearchError, XAuthError
 
 
 NAME = "X/Twitter (Chrome Auth)"

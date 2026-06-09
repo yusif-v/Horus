@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">Threat posture · live</div>
+<h1 class="page-title">Operating <em>picture</em>.</h1>
+<p class="page-subtitle">Aggregated CVE and exploit intelligence from NVD, CISA KEV, EPSS, GitHub PoC, and Exploit-DB. Numbers reflect the current state of the local index.</p>
+
+<div class="posture">
+  <div class="cell">
+    <div class="k">Actionable now</div>
+    <div class="v warn">{{ stats.actionable }}</div>
+    <div class="meta">KEV <strong>{{ stats.kev_count }}</strong> · EPSS≥0.5 with PoC <strong>{{ stats.imminent }}</strong></div>
+    <div class="tick">01</div>
+  </div>
+  <div class="cell">
+    <div class="k">Weaponized</div>
+    <div class="v danger">{{ stats.weaponized }}</div>
+    <div class="meta">CVSS≥9 with public PoC</div>
+    <div class="tick">02</div>
+  </div>
+  <div class="cell">
+    <div class="k">Imminent (EPSS≥0.5)</div>
+    <div class="v">{{ stats.imminent }}</div>
+    <div class="meta">avg EPSS <strong>{{ "%.2f%%"|format(stats.avg_epss * 100) if stats.avg_epss else '—' }}</strong></div>
+    <div class="tick">03</div>
+  </div>
+  <div class="cell">
+    <div class="k">PoCs linked</div>
+    <div class="v info">{{ stats.linked_pocs }}</div>
+    <div class="meta">across <strong>{{ stats.cves_with_pocs }}</strong> CVEs</div>
+    <div class="tick">04</div>
+  </div>
+</div>
+
+{% if stats.kev_cves %}
+<div class="section">
+  <div class="section-head">
+    <h2>Known exploited <em style="font-family:var(--serif);font-style:italic;color:var(--critical);">/ kev</em></h2>
+    <span class="count">{{ stats.kev_count }} total</span>
+    <div class="actions"><a href="/triage?lens=kev">View all →</a></div>
+  </div>
+  <div class="panel">
+    <div class="panel-body flush">
+      <table>
+        <thead><tr><th>CVE</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>Vector summary</th></tr></thead>
+        <tbody>
+        {% for cve in stats.kev_cves %}
+        <tr class="sev-{{ cve.cvss_severity }}">
+          <td><a href="/cve/{{ cve.id }}" class="cve-id-cell">{{ cve.id }}</a></td>
+          <td><span class="num strong">{{ cve.cvss_score or '—' }}</span></td>
+          <td>{% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }}</span>{% else %}—{% endif %}</td>
+          <td>{% if cve.epss_score is not none %}<span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span><span class="epss-text">{{ "%.1f%%"|format(cve.epss_score * 100) }}</span>{% else %}—{% endif %}</td>
+          <td class="desc-cell" style="max-width:480px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ cve.description[:140] if cve.description else '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="two-col">
+  {% if stats.severity_breakdown %}
+  <div>
+    <div class="section-head">
+      <h2>Severity mix</h2>
+      <span class="count">{{ stats.cve_count }} indexed</span>
+    </div>
+    <div class="panel"><div class="panel-body">
+      <div class="bar-chart">
+      {% set sev_max = stats.severity_breakdown|map(attribute='cnt')|max %}
+      {% for sev in stats.severity_breakdown %}
+        <div class="bar-row">
+          <span class="bar-label">{{ sev.cvss_severity }}</span>
+          <div class="bar-track"><div class="bar-fill {{ sev.cvss_severity|lower }}" style="width: {{ (sev.cnt / sev_max * 100)|int }}%;"></div></div>
+          <span class="bar-value">{{ sev.cnt }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+
+  {% if stats.epss_buckets %}
+  <div>
+    <div class="section-head">
+      <h2>Exploit probability</h2>
+      <span class="count">EPSS · {{ stats.with_epss }} scored</span>
+    </div>
+    <div class="panel"><div class="panel-body">
+      <div class="bar-chart">
+      {% set epss_max = stats.epss_buckets|map(attribute='cnt')|max %}
+      {% set epss_classes = {'Very High (≥0.5)': 'epss-vhigh', 'High (0.1-0.5)': 'epss-high', 'Medium (0.01-0.1)': 'epss-med', 'Low (<0.01)': 'epss-low'} %}
+      {% for bucket in stats.epss_buckets %}
+        <div class="bar-row">
+          <span class="bar-label">{{ bucket.bucket }}</span>
+          <div class="bar-track"><div class="bar-fill {{ epss_classes.get(bucket.bucket, 'epss-low') }}" style="width: {{ (bucket.cnt / epss_max * 100)|int }}%;"></div></div>
+          <span class="bar-value">{{ bucket.cnt }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="section-head">
+    <h2>Highest <em>EPSS</em></h2>
+    <span class="count">most likely to be exploited</span>
+    <div class="actions"><a href="/cves?sort=epss">All by EPSS →</a></div>
+  </div>
+  <div class="panel">
+    <div class="panel-body flush">
+      <table>
+        <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>KEV</th><th>Description</th></tr></thead>
+        <tbody>
+        {% for cve in stats.highest_epss %}
+        <tr class="sev-{{ cve.cvss_severity }}">
+          <td><a href="/cve/{{ cve.id }}" class="cve-id-cell">{{ cve.id }}</a></td>
+          <td><span class="num strong">{{ cve.cvss_score or '—' }}</span></td>
+          <td><span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span><span class="badge badge-epss">{{ "%.2f%%"|format(cve.epss_score * 100) }}</span></td>
+          <td>{% if cve.kev %}<span class="badge badge-kev">KEV</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+          <td class="desc-cell" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{% if cve.description %}{{ cve.description[:140] }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="two-col">
+  <div>
+    <div class="section-head"><h2>Recent ingest</h2><span class="count">last 10</span></div>
+    <div class="panel"><div class="panel-body flush">
+      <table>
+        <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>Published</th></tr></thead>
+        <tbody>
+        {% for cve in stats.recent_cves %}
+        <tr class="sev-{{ cve.cvss_severity }}">
+          <td><a href="/cve/{{ cve.id }}" class="cve-id-cell">{{ cve.id }}</a></td>
+          <td><span class="num strong">{{ cve.cvss_score or '—' }}</span> {% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity[:3] }}</span>{% endif %}</td>
+          <td>{% if cve.epss_score is not none %}<span class="epss-text">{{ "%.1f%%"|format(cve.epss_score * 100) }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+          <td><span class="num">{{ cve.published_at[:10] if cve.published_at else '—' }}</span></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div></div>
+  </div>
+  <div>
+    <div class="section-head"><h2>Top PoCs <em>by reach</em></h2><span class="count">★ ranked</span></div>
+    <div class="panel"><div class="panel-body flush">
+      <table>
+        <thead><tr><th>Source</th><th>Stars</th><th>URL</th></tr></thead>
+        <tbody>
+        {% for poc in stats.top_pocs %}
+        <tr>
+          <td><span class="badge badge-source">{{ poc.source }}</span></td>
+          <td><span class="num strong" style="color:var(--accent);">★ {{ poc.stars }}</span></td>
+          <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="{{ poc.url }}" target="_blank" style="font-family:var(--mono);font-size:12px;">{{ poc.url[:55] }}…</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div></div>
+  </div>
+</div>
+
+{% if stats.top_tags %}
+<div class="section">
+  <div class="section-head"><h2>Attack surface</h2><span class="count">top vectors observed</span></div>
+  <div class="panel"><div class="panel-body">
+    {% set max_tag = stats.top_tags|map(attribute='cnt')|max %}
+    <div class="tag-cloud">
+      {% for tag in stats.top_tags %}
+      <span class="badge badge-tag {% if tag.cnt > max_tag * 0.6 %}large{% endif %}">{{ tag.tag }} · {{ tag.cnt }}</span>
+      {% endfor %}
+    </div>
+  </div></div>
+</div>
+{% endif %}
+
+<div class="two-col">
+  {% if stats.monthly_cves %}
+  <div>
+    <div class="section-head"><h2>Publication tempo</h2><span class="count">last 6 months</span></div>
+    <div class="panel"><div class="panel-body">
+      <div class="bar-chart">
+      {% set month_max = stats.monthly_cves|map(attribute='cnt')|max %}
+      {% for m in stats.monthly_cves %}
+        <div class="bar-row">
+          <span class="bar-label">{{ m.month }}</span>
+          <div class="bar-track"><div class="bar-fill monthly" style="width: {{ (m.cnt / month_max * 100)|int }}%;"></div></div>
+          <span class="bar-value">{{ m.cnt }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+
+  {% if stats.sources %}
+  <div>
+    <div class="section-head"><h2>PoC sources</h2><span class="count">{{ stats.poc_count }} artifacts</span></div>
+    <div class="panel"><div class="panel-body">
+      <div class="bar-chart">
+      {% set src_max = stats.sources|map(attribute='cnt')|max %}
+      {% for src in stats.sources %}
+        <div class="bar-row">
+          <span class="bar-label">{{ src.source }}</span>
+          <div class="bar-track"><div class="bar-fill epss-high" style="width: {{ (src.cnt / src_max * 100)|int }}%;"></div></div>
+          <span class="bar-value">{{ src.cnt }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+</div>
+
+{% if stats.categories %}
+<div class="section">
+  <div class="section-head"><h2>Affected product categories</h2><span class="count">{{ stats.categories|length }} categories</span></div>
+  <div class="panel"><div class="panel-body">
+    <div class="tag-cloud">
+    {% for cat in stats.categories %}
+    <span class="badge badge-tag {% if cat.cnt > 50 %}large{% endif %}">{{ cat.category }} · {{ cat.cnt }}</span>
+    {% endfor %}
+    </div>
+  </div></div>
+</div>
+{% endif %}
+{% endblock %}

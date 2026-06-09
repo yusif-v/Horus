@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">Query</div>
+<h1 class="page-title">"{{ query }}" <em>· {{ total }} match{% if total != 1 %}es{% endif %}</em></h1>
+
+{% if results %}
+<div class="panel"><div class="panel-body">
+{% for cve in results %}
+<div class="result-item">
+  <a href="/cve/{{ cve.id }}" class="result-id">{{ cve.id }}</a>
+  <div class="result-meta">
+    {% if cve.cvss_score %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }} · {{ cve.cvss_score }}</span>{% endif %}
+    {% if cve.kev %}<span class="badge badge-kev">KEV</span>{% endif %}
+    {% if cve.epss_score is not none %}
+    <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span>
+    <span class="badge badge-epss">EPSS {{ "%.2f%%"|format(cve.epss_score * 100) }}</span>
+    {% endif %}
+    {% if cve.published_at %}<span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">{{ cve.published_at[:10] }}</span>{% endif %}
+  </div>
+  <div class="result-desc">{{ cve.description[:240] if cve.description else '—' }}</div>
+</div>
+{% endfor %}
+</div></div>
+
+{% if total > per_page %}
+<div class="pagination">
+  {% if page > 1 %}<a href="/search?q={{ query }}&page={{ page - 1 }}">← Prev</a>{% endif %}
+  <span class="current">{{ page }} / {{ (total / per_page)|round(0, 'ceil')|int }}</span>
+  {% if page * per_page < total %}<a href="/search?q={{ query }}&page={{ page + 1 }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="panel"><div class="panel-body" style="padding:3rem 2rem;text-align:center;">
+  <div style="font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--text-dim);text-transform:uppercase;margin-bottom:.5rem;">No results</div>
+  <div style="color:var(--text-mid);">No CVEs in the local index match "<span style="font-family:var(--mono);color:var(--text);">{{ query }}</span>".</div>
+</div></div>
+{% endif %}
+{% endblock %}

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sys
 
-from ..sources.http import fetch_json
+from ..net.http import fetch_json
 
 
 NAME = "CISA KEV"

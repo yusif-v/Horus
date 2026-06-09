@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 from ..config import NVD_LOOKBACK_DAYS, NVD_MAX_LOOKBACK_DAYS
 from ..core.filters import extract_cves
-from .http import fetch_json
+from ..net.http import fetch_json
 
 
 NAME = "NVD CVE Feed"

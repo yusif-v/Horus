@@ -1,156 +1,88 @@
-"""Horus — Daily PoC Research Scanner.
+"""Horus CLI — argparse + dispatch.
 
-Plugin-based architecture. Sources, enrichers, and renderers are
-self-contained modules that register themselves. Adding a new source
-means creating a single file in sources/ — no other files change.
+All actual pipeline work lives in `horus.pipeline`. This module's job
+is to:
+  - build the argument parser dynamically from discovered plugins
+  - dispatch one-shot commands (--query, --health-check, --backfill-epss,
+    --server, --auth-status, --list-sources)
+  - hand the parsed args to `run_pipeline` for the default scan flow
 
 Usage:
     python3 -m horus
-    python3 -m horus --min-cvss 7.0 --format md
-    python3 -m horus --no-twitter --no-exploitdb
-    python3 -m horus --sources github,nvd  # only these sources
-    python3 -m horus --list-sources        # show available sources
+    python3 -m horus --sources nvd,github --format md
+    python3 -m horus --server --config /etc/horus/config.yaml
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib
-import pkgutil
 import sys
-from pathlib import Path
 
 from . import __version__
-from .core.merge import merge_findings, link_pocs_to_cves
-from .render.graph import save_graph
-from .render.persist import save_report
-from .render.report import render_report
-from .sources.auth import github_token
-from .storage import db
+from .net.auth import github_token
+from .pipeline import (
+    PipelineOptions,
+    discover_enrichers,
+    discover_sources,
+    run_pipeline,
+)
 
 
-# ── Plugin discovery ────────────────────────────────────────────────────────
-
-def _discover_plugins(package_name: str, required_export: str = "run") -> dict:
-    """Discover plugin modules in a package directory.
-
-    Only modules that export `required_export` (a callable) are included.
-    This filters out utility modules like auth.py, http.py.
-    """
-    package_path = Path(__file__).parent / package_name
-    plugins = {}
-
-    for finder, name, ispkg in pkgutil.iter_modules([str(package_path)]):
-        if name.startswith("_"):
-            continue
-        try:
-            mod = importlib.import_module(f".{name}", f"horus.{package_name}")
-            # Only include if it has the required export
-            if hasattr(mod, required_export) and callable(getattr(mod, required_export)):
-                plugins[name] = mod
-            elif required_export == "enrich" and hasattr(mod, "enrich"):
-                plugins[name] = mod
-        except ImportError as e:
-            print(f"  [WARN] Could not load {package_name}/{name}: {e}", file=sys.stderr)
-
-    return plugins
-
-
-def _get_source_plugins() -> dict:
-    """Discover all source modules in sources/."""
-    return _discover_plugins("sources", required_export="run")
-
-
-def _get_enricher_plugins() -> dict:
-    """Discover all enricher modules in enrichers/."""
-    return _discover_plugins("enrichers", required_export="enrich")
-
-
-# ── CLI ─────────────────────────────────────────────────────────────────────
+# ── Argument parser ─────────────────────────────────────────────────────────
 
 def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
-    """Build CLI parser dynamically from discovered plugins."""
+    """Build the CLI parser dynamically from discovered plugins."""
     p = argparse.ArgumentParser(
         prog="horus",
         description="Daily PoC research scanner — plugin-based CVE & PoC aggregator.",
     )
     p.add_argument("--version", action="version", version=f"horus {__version__}")
-    p.add_argument(
-        "--min-cvss", type=float, default=None,
-        help="Minimum CVSS base score for NVD items.",
-    )
-    p.add_argument(
-        "--max-results", type=int, default=None,
-        help="Cap items per source after sorting.",
-    )
-    p.add_argument(
-        "--format", choices=("text", "md"), default="text",
-        help="Output format (default: text).",
-    )
-    p.add_argument(
-        "--quiet", action="store_true",
-        help="Suppress progress lines on stderr.",
-    )
-    p.add_argument(
-        "--auth-status", action="store_true",
-        help="Print GitHub auth status and exit.",
-    )
-    p.add_argument(
-        "--no-save", action="store_true",
-        help="Skip writing the markdown report to reports/.",
-    )
-    p.add_argument(
-        "--no-graph", action="store_true",
-        help="Skip writing the interactive graph HTML.",
-    )
-    p.add_argument(
-        "--list-sources", action="store_true",
-        help="List all available sources and enrichers, then exit.",
-    )
-    p.add_argument(
-        "--health-check", action="store_true",
-        help="Run database health check and exit.",
-    )
-    p.add_argument(
-        "--query", type=str, default=None, metavar="CVE-XXXX-XXXX",
-        help="Query a CVE from the database and display enrichment report.",
-    )
-    p.add_argument(
-        "--sources", type=str, default=None,
-        help="Comma-separated list of sources to run (default: all enabled).",
-    )
-    p.add_argument(
-        "--enrichers", type=str, default=None,
-        help="Comma-separated list of enrichers to run (default: all enabled).",
-    )
-    p.add_argument(
-        "--backfill-epss", action="store_true",
-        help="One-shot: score all unscored CVEs in the DB with EPSS, then exit.",
-    )
-    p.add_argument(
-        "--server", action="store_true",
-        help="Run as a 24/7 daemon polling sources on per-source intervals.",
-    )
-    p.add_argument(
-        "--server-once", action="store_true",
-        help="Run a single server poll cycle then exit (useful for testing/cron).",
-    )
-    p.add_argument(
-        "--config", type=str, default=None,
-        help="Path to YAML config file (server mode).",
-    )
 
-    # Auto-generate --no-<name> flags for sources
+    # Scan tunables
+    p.add_argument("--min-cvss", type=float, default=None,
+                   help="Minimum CVSS base score for NVD items.")
+    p.add_argument("--max-results", type=int, default=None,
+                   help="Cap items per source after sorting.")
+    p.add_argument("--format", choices=("text", "md"), default="text",
+                   help="Output format (default: text).")
+    p.add_argument("--quiet", action="store_true",
+                   help="Suppress progress lines on stderr.")
+    p.add_argument("--no-save", action="store_true",
+                   help="Skip writing the markdown report to reports/.")
+    p.add_argument("--no-graph", action="store_true",
+                   help="Skip writing the interactive graph HTML.")
+    p.add_argument("--sources", type=str, default=None,
+                   help="Comma-separated list of sources to run (default: all enabled).")
+    p.add_argument("--enrichers", type=str, default=None,
+                   help="Comma-separated list of enrichers to run (default: all enabled).")
+
+    # One-shot commands
+    p.add_argument("--list-sources", action="store_true",
+                   help="List available sources and enrichers, then exit.")
+    p.add_argument("--health-check", action="store_true",
+                   help="Run database health check and exit.")
+    p.add_argument("--query", type=str, default=None, metavar="CVE-XXXX-XXXX",
+                   help="Query a CVE from the database and display its enrichment report.")
+    p.add_argument("--auth-status", action="store_true",
+                   help="Print GitHub auth status and exit.")
+    p.add_argument("--backfill-epss", action="store_true",
+                   help="Score every unscored CVE in the DB with EPSS, then exit.")
+
+    # Server mode
+    p.add_argument("--server", action="store_true",
+                   help="Run as a 24/7 daemon polling sources on per-source intervals.")
+    p.add_argument("--server-once", action="store_true",
+                   help="Run a single server poll cycle then exit (cron/testing).")
+    p.add_argument("--config", type=str, default=None,
+                   help="Path to YAML/JSON config file (server mode).")
+
+    # Auto-generated --no-<src> / --skip-<enricher> flags
     for name, mod in sorted(sources.items()):
-        flag = f"--no-{name}"
-        help_text = f"Skip the {getattr(mod, 'NAME', name)} source."
-        p.add_argument(flag, action="store_true", help=help_text)
-
-    # Auto-generate --skip-<name> flags for enrichers
+        p.add_argument(f"--no-{name}", action="store_true",
+                       help=f"Skip the {getattr(mod, 'NAME', name)} source.")
     for name, mod in sorted(enrichers.items()):
-        flag = f"--skip-{name}"
-        help_text = f"Skip the {getattr(mod, 'NAME', name)} enrichment."
-        p.add_argument(flag, action="store_true", help=help_text)
+        p.add_argument(f"--skip-{name}", action="store_true",
+                       help=f"Skip the {getattr(mod, 'NAME', name)} enrichment.")
 
     return p
 
@@ -160,216 +92,91 @@ def _log(quiet: bool, msg: str) -> None:
         print(msg, file=sys.stderr)
 
 
-# ── Main pipeline ───────────────────────────────────────────────────────────
+# ── One-shot command handlers ───────────────────────────────────────────────
+
+def _cmd_list_sources(sources: dict, enrichers: dict) -> None:
+    print("Sources:")
+    for name, mod in sorted(sources.items()):
+        on = "[on]" if getattr(mod, "DEFAULT_ENABLED", True) else "[off]"
+        print(f"  {name:20s} {getattr(mod, 'NAME', name):30s} {on}")
+    print("\nEnrichers:")
+    for name, mod in sorted(enrichers.items()):
+        on = "[on]" if getattr(mod, "DEFAULT_ENABLED", True) else "[off]"
+        print(f"  {name:20s} {getattr(mod, 'NAME', name):30s} {on}")
+
+
+def _cmd_query(args) -> None:
+    from .storage.query import query_cve
+    print(query_cve(args.query, args.format))
+
+
+def _cmd_health_check() -> None:
+    from .storage.health import run_health_check
+    run_health_check().print()
+
+
+def _cmd_backfill_epss() -> None:
+    from .enrichers.epss import backfill_all
+    from .storage import db
+    db.initialize()
+    with db.connect() as conn:
+        updated = backfill_all(conn)
+    print(f"EPSS backfill: {updated} CVEs updated")
+
+
+def _cmd_server(args) -> None:
+    from .server import Server, load_config
+    cfg = load_config(args.config)
+    srv = Server(cfg)
+    if args.server_once:
+        srv.run_once()
+    else:
+        srv.start()
+
+
+def _cmd_auth_status() -> None:
+    tok = github_token()
+    if tok:
+        print(f"GitHub auth: OK (token ...{tok[-4:]}, limit 5000/hr)")
+    else:
+        print("GitHub auth: none (unauthenticated, limit 60/hr)")
+
+
+# ── Entry point ─────────────────────────────────────────────────────────────
 
 def main(argv: list[str] | None = None) -> None:
-    # Discover plugins
-    sources = _get_source_plugins()
-    enrichers = _get_enricher_plugins()
-
-    # Parse args
+    sources = discover_sources()
+    enrichers = discover_enrichers()
     args = _build_parser(sources, enrichers).parse_args(argv)
 
-    # --list-sources
-    if args.list_sources:
-        print("Sources:")
-        for name, mod in sorted(sources.items()):
-            enabled = getattr(mod, "DEFAULT_ENABLED", True)
-            print(f"  {name:20s} {getattr(mod, 'NAME', name):30s} {'[on]' if enabled else '[off]'}")
-        print("\nEnrichers:")
-        for name, mod in sorted(enrichers.items()):
-            enabled = getattr(mod, "DEFAULT_ENABLED", True)
-            print(f"  {name:20s} {getattr(mod, 'NAME', name):30s} {'[on]' if enabled else '[off]'}")
-        return
-
-    # --query
-    if args.query:
-        from .storage.query import query_cve
-        print(query_cve(args.query, args.format))
-        return
-
-    # --health-check
-    if args.health_check:
-        from .storage.health import run_health_check
-        report = run_health_check()
-        report.print()
-        return
-
-    # --backfill-epss
-    if args.backfill_epss:
-        from .enrichers.epss import backfill_all
-        from .storage import db as _db
-        _db.initialize()
-        with _db.connect() as conn:
-            updated = backfill_all(conn)
-        print(f"EPSS backfill: {updated} CVEs updated")
-        return
-
-    # --server / --server-once
+    # One-shot commands fall through here.
+    if args.list_sources:   return _cmd_list_sources(sources, enrichers)
+    if args.query:          return _cmd_query(args)
+    if args.health_check:   return _cmd_health_check()
+    if args.backfill_epss:  return _cmd_backfill_epss()
     if args.server or args.server_once:
-        from .server import Server, load_config
-        cfg = load_config(args.config)
-        srv = Server(cfg)
-        if args.server_once:
-            srv.run_once()
-        else:
-            srv.start()
-        return
+        return _cmd_server(args)
+    if args.auth_status:    return _cmd_auth_status()
 
-    # --auth-status
-    if args.auth_status:
-        tok = github_token()
-        if tok:
-            print(f"GitHub auth: OK (token ...{tok[-4:]}, limit 5000/hr)")
-        else:
-            print("GitHub auth: none (unauthenticated, limit 60/hr)")
-        return
+    # Default flow: full scan via the shared pipeline.
+    source_filter = set(args.sources.split(",")) if args.sources else None
+    enricher_filter = set(args.enrichers.split(",")) if args.enrichers else None
 
-    # Initialize DB
-    cves_migrated, pocs_migrated = db.initialize()
-    if cves_migrated or pocs_migrated:
-        _log(args.quiet, f"  Migrated {cves_migrated} CVEs and {pocs_migrated} PoCs from legacy state")
-
-    # Determine which sources to run
-    if args.sources:
-        selected_sources = {k: v for k, v in sources.items() if k in args.sources.split(",")}
-    else:
-        selected_sources = {}
-        for name, mod in sources.items():
-            default = getattr(mod, "DEFAULT_ENABLED", True)
-            if default and not getattr(args, f"no_{name}", False):
-                selected_sources[name] = mod
-
-    # Determine which enrichers to run
-    if args.enrichers:
-        selected_enrichers = {k: v for k, v in enrichers.items() if k in args.enrichers.split(",")}
-    else:
-        selected_enrichers = {}
-        for name, mod in enrichers.items():
-            default = getattr(mod, "DEFAULT_ENABLED", True)
-            if default and not getattr(args, f"skip_{name}", False):
-                selected_enrichers[name] = mod
-
-    # Load known IDs from DB
-    with db.connect() as conn:
-        known_cve_ids = db.list_known_cve_ids(conn)
-        known_poc_urls = db.list_known_poc_urls(conn)
-        last_run_nvd = db.get_last_run(conn, "nvd")
-
-    # ── Phase 1a: Run CVE sources (discover new CVEs) ────────────────────
-    # CVE sources run first so their discovered IDs are available to PoC sources
-    cve_source_names = {"nvd"}  # source names that primarily discover CVEs
-    poc_source_names = set(selected_sources.keys()) - cve_source_names
-
-    all_cves: list = []
-    all_pocs: list = []
-    source_results: dict = {}
-    step = 0
-    total_steps = len(selected_sources) + len(selected_enrichers) + 2  # +merge +persist
-    all_social_signals: list[dict] = []
-    x_discovered_urls: list[str] = []
-
-    def _run_source(name: str, mod, **extra) -> dict:
-        nonlocal step
-        step += 1
-        label = getattr(mod, "NAME", name)
-        _log(args.quiet, f"[{step}/{total_steps}] Running {label}...")
-        try:
-            result = mod.run(
-                known_cve_ids=known_cve_ids,
-                known_poc_urls=known_poc_urls,
-                args=args,
-                last_run_nvd=last_run_nvd if name == "nvd" else None,
-                **extra,
-            )
-            cves = result.get("cves", [])
-            pocs = result.get("pocs", [])
-            all_cves.extend(cves)
-            all_pocs.extend(pocs)
-            all_social_signals.extend(result.get("social_signals", []))
-            source_results[name] = {"cves": len(cves), "pocs": len(pocs)}
-            _log(args.quiet, f"  Found {len(cves)} CVEs, {len(pocs)} PoCs")
-            return result
-        except Exception as e:
-            print(f"  [ERROR] {label} failed: {e}", file=sys.stderr)
-            source_results[name] = {"cves": 0, "pocs": 0, "error": str(e)}
-            return {}
-
-    # Run CVE sources first
-    for name in sorted(cve_source_names):
-        if name in selected_sources:
-            _run_source(name, selected_sources[name])
-
-    # Update known_cve_ids with CVEs discovered in this run
-    discovered_cve_ids = {c.id.upper() for c in all_cves}
-    known_cve_ids.update(discovered_cve_ids)
-
-    # ── Phase 1b: Run PoC sources. x_twitter runs first so its discovered
-    # GitHub URLs can be enriched by the github source in the same pass.
-    poc_order = sorted(poc_source_names, key=lambda n: (n != "x_twitter", n))
-    for name in poc_order:
-        if name not in selected_sources:
-            continue
-        extra: dict = {}
-        if name == "github" and x_discovered_urls:
-            extra["x_discovered_urls"] = x_discovered_urls
-        result = _run_source(name, selected_sources[name], **extra)
-        if name == "x_twitter":
-            x_discovered_urls = result.get("x_discovered_urls", [])
-
-    # ── Phase 2: Merge & deduplicate ─────────────────────────────────────
-    step += 1
-    _log(args.quiet, f"[{step}/{total_steps}] Merging and deduplicating...")
-    cves, pocs, watchlist_counts = merge_findings(
-        all_cves, all_pocs, social_signals=all_social_signals,
+    run_pipeline(
+        PipelineOptions(
+            runner_args=args,
+            source_filter=source_filter,
+            enricher_filter=enricher_filter,
+            quiet=args.quiet,
+            save_report_md=not args.no_save,
+            save_graph_html=not args.no_graph,
+            output_fmt=args.format,
+            print_report=True,
+            log=lambda m: _log(args.quiet, m),
+        ),
+        sources=sources,
+        enrichers=enrichers,
     )
-    links = link_pocs_to_cves(cves, pocs)
-    _log(args.quiet, f"  {len(cves)} unique CVEs, {len(pocs)} unique PoCs after dedup")
-    if watchlist_counts:
-        _log(args.quiet, f"  {len(watchlist_counts)} signal-only CVE IDs queued to watchlist")
-
-    # ── Phase 3: Run enrichers ───────────────────────────────────────────
-    for name, mod in sorted(selected_enrichers.items()):
-        step += 1
-        label = getattr(mod, "NAME", name)
-        _log(args.quiet, f"[{step}/{total_steps}] Running {label}...")
-
-        try:
-            mod.enrich(cves=cves, pocs=pocs, args=args)
-        except Exception as e:
-            print(f"  [ERROR] {label} failed: {e}", file=sys.stderr)
-
-    # ── Phase 4: Persist ─────────────────────────────────────────────────
-    step += 1
-    _log(args.quiet, f"[{step}/{total_steps}] Persisting to database...")
-    with db.connect() as conn:
-        for cve in cves:
-            db.persist_cve(conn, cve)
-        for poc in pocs:
-            db.persist_poc(conn, poc)
-            for ref in poc.cve_refs:
-                db.link_poc_to_cve(conn, poc.url, ref)
-        for cve_id, mentions in watchlist_counts.items():
-            db.persist_watchlist(conn, cve_id, source="x_twitter", social_mentions=mentions)
-        # NVD-confirmed CVEs flip any prior watchlist entry to resolved.
-        for cve in cves:
-            db.resolve_watchlist(conn, cve.id)
-        for name in source_results:
-            db.mark_run(conn, name)
-
-    # ── Phase 5: Output ──────────────────────────────────────────────────
-    report_text = render_report(cves, pocs, links, fmt=args.format)
-    print(report_text, end="")
-
-    if not args.no_save:
-        report_md = render_report(cves, pocs, links, fmt="md")
-        path = save_report(report_md, fmt="md")
-        _log(args.quiet, f"  Report saved -> {path}")
-
-    if not args.no_graph:
-        with db.connect() as conn:
-            graph_path = save_graph(conn)
-        _log(args.quiet, f"  Graph saved  -> {graph_path}")
 
 
 if __name__ == "__main__":

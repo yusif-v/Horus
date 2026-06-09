@@ -509,6 +509,19 @@ Skip with `--no-graph`.
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
+See [docs/architecture.md](docs/architecture.md) for the package layout and dependency rules.
+See [docs/plans/](docs/plans/) for design documents.
+
+## Tests
+
+```bash
+.venv/bin/pip install pytest
+.venv/bin/python -m pytest tests/ -q
+```
+
+The suite covers the reputation-score formula, idempotent v0.7 → v0.8
+schema migration, plugin discovery, and every web route (with the
+`/api/stats` contract pinned).
 
 ## Cron
 

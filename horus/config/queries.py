@@ -1,0 +1,23 @@
+"""Search-query strings and keyword filter lists for the source plugins."""
+
+GITHUB_QUERIES = [
+    "CVE-2026 exploit poc",
+    "CVE-2025 exploit poc",
+    "0day exploit github",
+    "RCE PoC CVE",
+    "vulnerability exploit proof-of-concept",
+]
+
+FRESH_POC_KEYWORDS = [
+    "poc", "exploit", "proof of concept", "proof-of-concept", "rce",
+    "remote code execution", "0day", "zero-day", "lpe", "privilege escalation",
+    "sql injection", "xss", "csrf", "ssrf", "arbitrary code",
+    "command injection", "file inclusion", "deserialization", "buffer overflow",
+    "use-after-free", "heap overflow", "sandbox escape", "kernel",
+]
+
+LOW_VALUE_KEYWORDS = [
+    "awesome", "collection", "list", "archive", "database", "knowledge base",
+    "cve list", "cve database", "vulnerability database", "security advisories",
+    "weekly digest", "daily digest", "newsletter", "curated list",
+]

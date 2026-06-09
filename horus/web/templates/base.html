@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }} — Horus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='horus.css') }}">
+</head>
+<body>
+<div class="rail">
+  <span><span class="pulse"></span> SYSTEM ONLINE</span>
+  <span class="sep">│</span>
+  <span>DB · {{ rail.cve_n|default('—') }} CVE / {{ rail.poc_n|default('—') }} POC</span>
+  <span class="sep">│</span>
+  <span>LAST INGEST · {{ rail.last[:16] if rail.last else '—' }}</span>
+  <div class="right">
+    <span>BUILD · HORUS v{{ version }}</span>
+    <span class="sep">│</span>
+    <span>{{ now }}</span>
+  </div>
+</div>
+<div class="nav-wrap">
+<nav class="nav">
+  <a href="/" class="logo">Horus<span class="dot">.</span><span class="sub">CVE INTEL</span></a>
+  <div class="links">
+    <a href="/" class="{% if active == 'dashboard' %}active{% endif %}">Overview</a>
+    <a href="/triage" class="{% if active == 'triage' %}active{% endif %}">Triage</a>
+    <a href="/cves" class="{% if active == 'cves' %}active{% endif %}">CVEs</a>
+    <a href="/pocs" class="{% if active == 'pocs' %}active{% endif %}">PoCs</a>
+  </div>
+  <form class="search" action="/search" method="get">
+    <input type="text" name="q" placeholder="CVE-ID OR KEYWORD" value="{{ search_query|default('') }}" autocomplete="off">
+  </form>
+</nav>
+</div>
+<div class="container">
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>
