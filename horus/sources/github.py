@@ -35,28 +35,21 @@ def _confidence_for_stars(stars: int | None) -> str:
     return "low"
 
 
-def run(
-    known_cve_ids: set[str],
-    known_poc_urls: set[str],
-    args,
-    x_discovered_urls: list[str] | None = None,
-    **kwargs,
-) -> dict:
+def run(ctx) -> dict:
     """Search GitHub for new PoC repos. Returns {"cves": [], "pocs": [dict]}.
 
-    Args:
-        x_discovered_urls: GitHub URLs discovered by X/Twitter source.
-            These are fetched for metadata enrichment and added as PoCs
-            with source="github" and discovered_via="x".
+    Also enriches any GitHub URLs `ctx.x_discovered_urls` (surfaced by
+    x_twitter earlier in this cycle) — these get full repo metadata
+    and are tagged with `discovered_via="x"`.
     """
     results = []
     token = github_token()
     auth_headers = {"Authorization": f"Bearer {token}"} if token else None
 
     # Process X-discovered URLs first
-    if x_discovered_urls:
-        for gh_url in x_discovered_urls:
-            if gh_url in known_poc_urls:
+    if ctx.x_discovered_urls:
+        for gh_url in ctx.x_discovered_urls:
+            if gh_url in ctx.known_poc_urls:
                 continue
             # Extract owner/repo from URL
             parts = gh_url.rstrip("/").split("/")
@@ -72,7 +65,7 @@ def run(
             except Exception as e:
                 print(f"  [WARN] GitHub enrichment failed for '{gh_url}': {e}", file=sys.stderr)
                 # Still add it as a basic PoC even if enrichment fails
-                known_poc_urls.add(gh_url)
+                ctx.known_poc_urls.add(gh_url)
                 results.append({
                     "source": "github",
                     "repo": f"{owner}/{repo}",
@@ -106,7 +99,7 @@ def run(
             combined = f'{data.get("full_name", "")} {description}'
             cves = extract_cves(combined)
 
-            known_poc_urls.add(html_url)
+            ctx.known_poc_urls.add(html_url)
             results.append({
                 "source": "github",
                 "repo": data.get("full_name", ""),
@@ -140,7 +133,7 @@ def run(
             created_at = item.get("created_at", "")
             stars = item.get("stargazers_count", 0)
 
-            if not html_url or html_url in known_poc_urls:
+            if not html_url or html_url in ctx.known_poc_urls:
                 continue
 
             try:
@@ -158,7 +151,7 @@ def run(
             if not is_fresh_poc(combined):
                 continue
 
-            known_poc_urls.add(html_url)
+            ctx.known_poc_urls.add(html_url)
             results.append({
                 "source": "github",
                 "repo": item.get("full_name", ""),
@@ -172,8 +165,8 @@ def run(
             })
 
     results.sort(key=lambda x: x.get("stars", 0), reverse=True)
-    if args.max_results is not None:
-        results = results[: args.max_results]
+    if ctx.max_results is not None:
+        results = results[: ctx.max_results]
 
     from ..core.merge import poc_from_github
     pocs = [poc_from_github(r) for r in results]

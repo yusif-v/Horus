@@ -141,7 +141,6 @@ def get_stats() -> dict:
         "cve_count": cve_count, "poc_count": poc_count, "kev_count": kev_count,
         "with_epss": with_epss, "linked_pocs": linked_pocs, "cves_with_pocs": cves_with_pocs,
         "avg_epss": avg_epss,
-        "avg_exploit": avg_reputation,         # back-compat alias
         "avg_reputation": avg_reputation,
         "social_heat": social_heat,
         "social_mentions_total": social_mentions_total,

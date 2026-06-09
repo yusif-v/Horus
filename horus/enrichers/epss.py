@@ -60,12 +60,13 @@ def _download_epss_scores() -> dict[str, float]:
     return scores
 
 
-def enrich(cves, pocs, args, **kwargs) -> None:
+def enrich(ctx) -> None:
     """Enrich CVEs with EPSS scores. Mutates CVEs in-place.
 
     After scoring the current batch, backfills ALL unscored CVEs
     in the database from the same CSV download.
     """
+    cves = ctx.cves
     scores = _download_epss_scores()
     if not scores:
         return

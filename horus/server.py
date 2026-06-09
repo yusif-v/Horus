@@ -298,9 +298,8 @@ class Server:
                     backfill_all(conn)
             return
 
-        from .pipeline import PipelineOptions, make_runner_args, run_pipeline
+        from .pipeline import PipelineOptions, run_pipeline
         run_pipeline(PipelineOptions(
-            runner_args=make_runner_args(),
             source_filter=set(sources),
             enricher_filter=set(enrichers) if enrichers else set(),
             quiet=True,

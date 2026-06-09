@@ -41,12 +41,7 @@ _GITHUB_URL_RE = re.compile(
 )
 
 
-def run(
-    known_cve_ids: set[str],
-    known_poc_urls: set[str],
-    args,
-    **kwargs,
-) -> dict:
+def run(ctx) -> dict:
     """Search X for CVE mentions.
 
     Returns:
@@ -107,7 +102,7 @@ def run(
                 parts = gh_url.rstrip("/").split("/")
                 if len(parts) >= 5:
                     gh_url = "/".join(parts[:5])
-                if gh_url in known_poc_urls or gh_url in github_poc_urls:
+                if gh_url in ctx.known_poc_urls or gh_url in github_poc_urls:
                     continue
                 github_poc_urls[gh_url] = {
                     "url": gh_url,
@@ -126,8 +121,8 @@ def run(
     # Build PoC dicts from discovered GitHub URLs
     poc_dicts = list(github_poc_urls.values())
 
-    if args.max_results is not None:
-        poc_dicts = poc_dicts[: args.max_results]
+    if ctx.max_results is not None:
+        poc_dicts = poc_dicts[: ctx.max_results]
 
     from ..core.merge import poc_from_github
     pocs = [poc_from_github(r) for r in poc_dicts]

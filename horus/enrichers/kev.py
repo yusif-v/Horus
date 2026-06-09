@@ -16,8 +16,10 @@ DEFAULT_ENABLED = True
 KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 
 
-def enrich(cves, pocs, args, **kwargs) -> None:
+def enrich(ctx) -> None:
     """Mark CVEs that appear in the CISA KEV catalog. Mutates CVEs in-place."""
+    cves = ctx.cves
+
     try:
         data = fetch_json(KEV_URL)
     except Exception as e:

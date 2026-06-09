@@ -86,16 +86,10 @@ def _resolve_start(now: datetime, last_run_iso: str | None) -> datetime:
     return max(candidate, floor)
 
 
-def run(
-    known_cve_ids: set[str],
-    known_poc_urls: set[str],
-    args,
-    last_run_nvd: str | None = None,
-    **kwargs,
-) -> dict:
+def run(ctx) -> dict:
     """Fetch recent CVEs from NVD. Returns {"cves": [dict], "pocs": []}."""
     now = datetime.utcnow()
-    start = _resolve_start(now, last_run_nvd).strftime("%Y-%m-%dT%H:%M:%S.000")
+    start = _resolve_start(now, ctx.last_run).strftime("%Y-%m-%dT%H:%M:%S.000")
     end = now.strftime("%Y-%m-%dT%H:%M:%S.000")
 
     results = []
@@ -137,10 +131,10 @@ def run(
 
             score, severity = _extract_cvss(cve.get("metrics", {}))
 
-            if args.min_cvss is not None and (score is None or score < args.min_cvss):
+            if ctx.min_cvss is not None and (score is None or score < ctx.min_cvss):
                 continue
 
-            if cve_id in known_cve_ids or cve_id in seen_this_run:
+            if cve_id in ctx.known_cve_ids or cve_id in seen_this_run:
                 continue
             seen_this_run.add(cve_id)
 
@@ -169,8 +163,8 @@ def run(
             break
 
     results.sort(key=lambda x: x.get("cvss_score") or 0, reverse=True)
-    if args.max_results is not None:
-        results = results[: args.max_results]
+    if ctx.max_results is not None:
+        results = results[: ctx.max_results]
 
     from ..core.merge import cve_from_nvd
     cves = [cve_from_nvd(r) for r in results]

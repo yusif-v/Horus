@@ -161,12 +161,17 @@ def main(argv: list[str] | None = None) -> None:
     # Default flow: full scan via the shared pipeline.
     source_filter = set(args.sources.split(",")) if args.sources else None
     enricher_filter = set(args.enrichers.split(",")) if args.enrichers else None
+    disabled_sources = {n for n in sources if getattr(args, f"no_{n}", False)}
+    disabled_enrichers = {n for n in enrichers if getattr(args, f"skip_{n}", False)}
 
     run_pipeline(
         PipelineOptions(
-            runner_args=args,
             source_filter=source_filter,
             enricher_filter=enricher_filter,
+            disabled_sources=disabled_sources,
+            disabled_enrichers=disabled_enrichers,
+            max_results=args.max_results,
+            min_cvss=args.min_cvss,
             quiet=args.quiet,
             save_report_md=not args.no_save,
             save_graph_html=not args.no_graph,
