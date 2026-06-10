@@ -294,7 +294,32 @@ Each Exploit-DB PoC becomes a structured card, not just a link.
 
 ---
 
-## Architecture Improvements
+## Web UI
+
+### v0.9 — Dashboard Filters & News Feed
+*See `docs/plans/web-v0.9.md` for full specification.*
+
+**Feature 1: Clickable Tag Filters**
+- Attack surface tags on dashboard are clickable → `/cves?tag=rce`
+- Product categories are clickable → `/cves?category=web-server`
+- Severity filters → `/cves?severity=Critical`
+- Filters are combinable and preserved in pagination
+- Filter chips show active filters with remove button
+
+**Feature 2: News Feed**
+- "Latest intelligence" section on dashboard
+- Sources: X/Twitter (existing), RSS feeds (BleepingComputer, THN, SecurityWeek, CISA), vendor advisories, GitHub releases
+- Deduplication by URL, title similarity, CVE overlap
+- Urgency classification: critical/high/normal/low
+- Each news item links to related CVEs
+- Full `/news` page with source/urgency/CVE filtering
+- Server mode: RSS every 15min, vendor advisories every hour
+
+### v1.0 — Advanced Web Features
+- Real-time WebSocket updates
+- Personalized news feed (watchlist-based)
+- News → CVE auto-linking
+- Threat level indicator (green/yellow/orange/red)
 
 ### A. Async Pipeline
 **Status:** NOT STARTED
