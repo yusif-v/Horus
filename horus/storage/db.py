@@ -5,37 +5,38 @@ used to live under state/ (seen_items.json, last_run.json) — those are
 migrated once on first run and then renamed to .migrated.
 """
 
-
 from __future__ import annotations
+
 import json
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import STATE_DIR
 from ..core.model import CVE, PoC
 from ..core.vocab import ATTACK_TAGS, CWE_TO_TAG
 
-DB_PATH = STATE_DIR / 'horus.db'
-SCHEMA_PATH = Path(__file__).parent / 'schema.sql'
+DB_PATH = STATE_DIR / "horus.db"
+SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 # Legacy JSON file paths — kept here for migration only.
-STATE_FILE = STATE_DIR / 'seen_items.json'
-LAST_RUN_FILE = STATE_DIR / 'last_run.json'
+STATE_FILE = STATE_DIR / "seen_items.json"
+LAST_RUN_FILE = STATE_DIR / "last_run.json"
 
 
 def _now() -> str:
-    return datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 @contextmanager
-def connect():
+def connect() -> Iterator[sqlite3.Connection]:
     """Open the DB, commit on clean exit, always close."""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute('PRAGMA foreign_keys = ON')
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
         conn.commit()
@@ -45,22 +46,24 @@ def connect():
 
 # ─── Schema + vocab seeding ──────────────────────────────────────────────
 
+
 def _init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_PATH.read_text())
 
 
 def _seed_vocab(conn: sqlite3.Connection) -> None:
     conn.executemany(
-        'INSERT OR IGNORE INTO attack_tag (name) VALUES (?)',
+        "INSERT OR IGNORE INTO attack_tag (name) VALUES (?)",
         [(t,) for t in sorted(ATTACK_TAGS)],
     )
     conn.executemany(
-        'INSERT OR IGNORE INTO cwe (id, attack_tag) VALUES (?, ?)',
+        "INSERT OR IGNORE INTO cwe (id, attack_tag) VALUES (?, ?)",
         list(CWE_TO_TAG.items()),
     )
 
 
 # ─── One-shot JSON migration ─────────────────────────────────────────────
+
 
 def _migrate_from_json(conn: sqlite3.Connection) -> tuple[int, int]:
     """Import legacy state/seen_items.json + last_run.json. Returns
@@ -76,42 +79,40 @@ def _migrate_from_json(conn: sqlite3.Connection) -> tuple[int, int]:
         except (json.JSONDecodeError, OSError):
             keys = []
         for key in keys:
-            if key.startswith('nvd:'):
+            if key.startswith("nvd:"):
                 cve_id = key[4:]
                 conn.execute(
-                    'INSERT OR IGNORE INTO cve (id, first_seen, last_seen)'
-                    ' VALUES (?, ?, ?)',
+                    "INSERT OR IGNORE INTO cve (id, first_seen, last_seen) VALUES (?, ?, ?)",
                     (cve_id, now, now),
                 )
                 conn.execute(
-                    'INSERT OR IGNORE INTO cve_source (cve_id, source)'
-                    ' VALUES (?, ?)',
-                    (cve_id, 'nvd'),
+                    "INSERT OR IGNORE INTO cve_source (cve_id, source) VALUES (?, ?)",
+                    (cve_id, "nvd"),
                 )
                 cve_count += 1
-            elif key.startswith('github:'):
+            elif key.startswith("github:"):
                 slug = key[7:]
-                url = f'https://github.com/{slug}'
+                url = f"https://github.com/{slug}"
                 conn.execute(
-                    'INSERT OR IGNORE INTO poc'
-                    ' (url, source, first_seen, last_seen)'
-                    ' VALUES (?, ?, ?, ?)',
-                    (url, 'github', now, now),
+                    "INSERT OR IGNORE INTO poc"
+                    " (url, source, first_seen, last_seen)"
+                    " VALUES (?, ?, ?, ?)",
+                    (url, "github", now, now),
                 )
                 poc_count += 1
-        STATE_FILE.rename(STATE_FILE.with_suffix('.json.migrated'))
+        STATE_FILE.rename(STATE_FILE.with_suffix(".json.migrated"))
 
     if LAST_RUN_FILE.exists():
         try:
             lr = json.loads(LAST_RUN_FILE.read_text())
             for k, v in lr.items():
                 conn.execute(
-                    'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
-                    (f'last_run.{k}', v),
+                    "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                    (f"last_run.{k}", v),
                 )
         except (json.JSONDecodeError, OSError):
             pass
-        LAST_RUN_FILE.rename(LAST_RUN_FILE.with_suffix('.json.migrated'))
+        LAST_RUN_FILE.rename(LAST_RUN_FILE.with_suffix(".json.migrated"))
 
     return cve_count, poc_count
 
@@ -149,10 +150,10 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
         return
     existing = {row[1] for row in conn.execute("PRAGMA table_info(cve)")}
     additions = [
-        ("social_mentions",  "INTEGER DEFAULT 0"),
+        ("social_mentions", "INTEGER DEFAULT 0"),
         ("poc_source_count", "INTEGER DEFAULT 0"),
         ("reputation_score", "REAL"),
-        ("confidence",       "TEXT DEFAULT 'high'"),
+        ("confidence", "TEXT DEFAULT 'high'"),
     ]
     for col, decl in additions:
         if col not in existing:
@@ -172,44 +173,52 @@ def initialize() -> tuple[int, int]:
 
 # ─── Read helpers ────────────────────────────────────────────────────────
 
+
 def list_known_cve_ids(conn: sqlite3.Connection) -> set[str]:
-    return {row[0] for row in conn.execute('SELECT id FROM cve')}
+    return {row[0] for row in conn.execute("SELECT id FROM cve")}
 
 
 def list_known_poc_urls(conn: sqlite3.Connection) -> set[str]:
-    return {row[0] for row in conn.execute('SELECT url FROM poc')}
+    return {row[0] for row in conn.execute("SELECT url FROM poc")}
 
 
 def get_last_run(conn: sqlite3.Connection, source: str) -> str | None:
     row = conn.execute(
-        'SELECT value FROM meta WHERE key = ?', (f'last_run.{source}',),
+        "SELECT value FROM meta WHERE key = ?",
+        (f"last_run.{source}",),
     ).fetchone()
     return row[0] if row else None
 
 
 def mark_run(conn: sqlite3.Connection, source: str) -> None:
     conn.execute(
-        'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
-        (f'last_run.{source}', _now()),
+        "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+        (f"last_run.{source}", _now()),
     )
 
 
 # ─── Persistence ─────────────────────────────────────────────────────────
 
+
 def _upsert_product(
-    conn: sqlite3.Connection, vendor: str, product: str, category: str,
+    conn: sqlite3.Connection,
+    vendor: str,
+    product: str,
+    category: str,
 ) -> int:
     row = conn.execute(
-        'SELECT id FROM product WHERE vendor = ? AND product = ?',
+        "SELECT id FROM product WHERE vendor = ? AND product = ?",
         (vendor, product),
     ).fetchone()
     if row:
-        return row[0]
+        return int(row[0])
     cur = conn.execute(
-        'INSERT INTO product (vendor, product, category) VALUES (?, ?, ?)',
+        "INSERT INTO product (vendor, product, category) VALUES (?, ?, ?)",
         (vendor, product, category),
     )
-    return cur.lastrowid
+    pid = cur.lastrowid
+    assert pid is not None
+    return pid
 
 
 def _compute_reputation(cve: CVE) -> float:
@@ -254,7 +263,7 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
     reputation = _compute_reputation(cve)
 
     conn.execute(
-        '''INSERT INTO cve
+        """INSERT INTO cve
               (id, description, cvss_score, cvss_severity, published_at,
                epss_score, kev, reputation_score, confidence,
                social_mentions, poc_source_count,
@@ -272,44 +281,52 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
              social_mentions       = COALESCE(excluded.social_mentions, cve.social_mentions),
              poc_source_count      = COALESCE(excluded.poc_source_count, cve.poc_source_count),
              last_seen             = excluded.last_seen
-        ''',
+        """,
         (
-            cve.id, cve.description, cve.cvss_score, cve.cvss_severity,
+            cve.id,
+            cve.description,
+            cve.cvss_score,
+            cve.cvss_severity,
             cve.published_at.isoformat() if cve.published_at else None,
-            cve.epss_score, cve.kev, reputation, cve.confidence,
-            cve.social_mentions, cve.poc_source_count,
-            now, now,
+            cve.epss_score,
+            cve.kev,
+            reputation,
+            cve.confidence,
+            cve.social_mentions,
+            cve.poc_source_count,
+            now,
+            now,
         ),
     )
 
     for tag in cve.attack_tags:
         conn.execute(
-            'INSERT OR IGNORE INTO cve_attack_tag (cve_id, tag) VALUES (?, ?)',
+            "INSERT OR IGNORE INTO cve_attack_tag (cve_id, tag) VALUES (?, ?)",
             (cve.id, tag),
         )
 
     for cwe_id in cve.cwe_ids:
-        conn.execute('INSERT OR IGNORE INTO cwe (id) VALUES (?)', (cwe_id,))
+        conn.execute("INSERT OR IGNORE INTO cwe (id) VALUES (?)", (cwe_id,))
         conn.execute(
-            'INSERT OR IGNORE INTO cve_cwe (cve_id, cwe_id) VALUES (?, ?)',
+            "INSERT OR IGNORE INTO cve_cwe (cve_id, cwe_id) VALUES (?, ?)",
             (cve.id, cwe_id),
         )
 
     for ap in cve.affected:
         product_id = _upsert_product(conn, ap.vendor, ap.product, ap.category)
-        versions = '; '.join(ap.versions) if ap.versions else None
+        versions = "; ".join(ap.versions) if ap.versions else None
         conn.execute(
-            '''INSERT INTO cve_product (cve_id, product_id, versions)
+            """INSERT INTO cve_product (cve_id, product_id, versions)
                VALUES (?, ?, ?)
                ON CONFLICT(cve_id, product_id) DO UPDATE
                  SET versions = excluded.versions
-            ''',
+            """,
             (cve.id, product_id, versions),
         )
 
     for source in cve.sources:
         conn.execute(
-            'INSERT OR IGNORE INTO cve_source (cve_id, source) VALUES (?, ?)',
+            "INSERT OR IGNORE INTO cve_source (cve_id, source) VALUES (?, ?)",
             (cve.id, source),
         )
 
@@ -317,7 +334,7 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
 def persist_poc(conn: sqlite3.Connection, poc: PoC) -> None:
     now = _now()
     conn.execute(
-        '''INSERT INTO poc
+        """INSERT INTO poc
               (url, source, stars, age_days, description, first_seen, last_seen)
            VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(url) DO UPDATE SET
@@ -325,7 +342,7 @@ def persist_poc(conn: sqlite3.Connection, poc: PoC) -> None:
              age_days    = excluded.age_days,
              description = excluded.description,
              last_seen   = excluded.last_seen
-        ''',
+        """,
         (poc.url, poc.source, poc.stars, poc.age_days, poc.description, now, now),
     )
 
@@ -337,26 +354,29 @@ def link_poc_to_cve(conn: sqlite3.Connection, poc_url: str, cve_id: str) -> bool
     CVE is unknown and the link was skipped.
     """
     if not conn.execute(
-        'SELECT 1 FROM cve WHERE id = ?', (cve_id,),
+        "SELECT 1 FROM cve WHERE id = ?",
+        (cve_id,),
     ).fetchone():
         return False
     conn.execute(
-        'INSERT OR IGNORE INTO poc_cve (poc_url, cve_id) VALUES (?, ?)',
+        "INSERT OR IGNORE INTO poc_cve (poc_url, cve_id) VALUES (?, ?)",
         (poc_url, cve_id),
     )
     return True
 
 
-def persist_watchlist(conn: sqlite3.Connection, cve_id: str, source: str, social_mentions: int = 0) -> None:
+def persist_watchlist(
+    conn: sqlite3.Connection, cve_id: str, source: str, social_mentions: int = 0
+) -> None:
     """Insert or update a CVE watchlist entry for signal-only CVEs not yet in NVD."""
     now = _now()
     conn.execute(
-        '''INSERT INTO cve_watchlist (id, first_seen, social_mentions, source, confidence, resolved)
+        """INSERT INTO cve_watchlist (id, first_seen, social_mentions, source, confidence, resolved)
            VALUES (?, ?, ?, ?, 'low', 0)
            ON CONFLICT(id) DO UPDATE SET
              social_mentions = cve_watchlist.social_mentions + excluded.social_mentions,
              resolved = 0
-        ''',
+        """,
         (cve_id.upper(), now, social_mentions, source),
     )
 
@@ -364,6 +384,6 @@ def persist_watchlist(conn: sqlite3.Connection, cve_id: str, source: str, social
 def resolve_watchlist(conn: sqlite3.Connection, cve_id: str) -> None:
     """Mark a watchlist entry as resolved (confirmed by NVD)."""
     conn.execute(
-        'UPDATE cve_watchlist SET resolved = 1 WHERE id = ?',
+        "UPDATE cve_watchlist SET resolved = 1 WHERE id = ?",
         (cve_id.upper(),),
     )

@@ -9,7 +9,6 @@ import sys
 
 from ..net.http import fetch_json
 
-
 NAME = "CISA KEV"
 DEFAULT_ENABLED = True
 

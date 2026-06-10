@@ -16,8 +16,7 @@ def test_initialize_creates_v08_columns_on_fresh_db(tmp_path, monkeypatch):
     db.initialize()
     with sqlite3.connect(db.DB_PATH) as conn:
         cols = _columns(conn, "cve")
-    for required in ("social_mentions", "poc_source_count",
-                     "reputation_score", "confidence"):
+    for required in ("social_mentions", "poc_source_count", "reputation_score", "confidence"):
         assert required in cols, f"missing column: {required}"
 
 
@@ -50,6 +49,5 @@ def test_migration_adds_columns_to_existing_v07_cve_table(tmp_path, monkeypatch)
     db.initialize()
     with sqlite3.connect(db_path) as conn:
         cols = _columns(conn, "cve")
-    for required in ("social_mentions", "poc_source_count",
-                     "reputation_score", "confidence"):
+    for required in ("social_mentions", "poc_source_count", "reputation_score", "confidence"):
         assert required in cols, f"migration missed: {required}"

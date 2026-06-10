@@ -24,8 +24,10 @@ def search():
         "search.html",
         title=f"Search: {query}",
         query=query,
-        results=results, total=total,
-        page=pg, per_page=PER_PAGE_DEFAULT,
+        results=results,
+        total=total,
+        page=pg,
+        per_page=PER_PAGE_DEFAULT,
         search_query=query,
     )
 
@@ -41,6 +43,6 @@ def cve_detail(cve_id):
             "error.html",
             title="CVE Not Found",
             msg=f"No record for {cve_id} in the local index. "
-                f"Try a keyword search: /search?q={cve_id}",
+            f"Try a keyword search: /search?q={cve_id}",
         ), 404
     return page("cve_detail.html", title=data["cve"]["id"], data=data)

@@ -7,23 +7,26 @@ Floating nodes (no edges and no real description) are filtered out so the
 graph stays readable.
 """
 
-
 from __future__ import annotations
+
 import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from ..config import REPORTS_DIR
-
 
 # ---------------------------------------------------------------------------
 # Data extraction
 # ---------------------------------------------------------------------------
 
-def _fetch_graph(conn: sqlite3.Connection) -> tuple[list[dict], list[dict]]:
-    nodes: list[dict] = []
-    edges: list[dict] = []
+
+def _fetch_graph(
+    conn: sqlite3.Connection,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
 
     cves_with_edges: set[str] = set()
     products_with_edges: set[int] = set()
@@ -31,94 +34,125 @@ def _fetch_graph(conn: sqlite3.Connection) -> tuple[list[dict], list[dict]]:
 
     # Edges first, so we know which nodes are connected
     for cve_id, tag in conn.execute(
-        'SELECT cve_id, tag FROM cve_attack_tag',
+        "SELECT cve_id, tag FROM cve_attack_tag",
     ):
-        edges.append({'data': {
-            'source': f'cve:{cve_id}', 'target': f'tag:{tag}', 'kind': 'tagged',
-        }})
+        edges.append(
+            {
+                "data": {
+                    "source": f"cve:{cve_id}",
+                    "target": f"tag:{tag}",
+                    "kind": "tagged",
+                }
+            }
+        )
         cves_with_edges.add(cve_id)
         tags_with_edges.add(tag)
 
     for cve_id, product_id in conn.execute(
-        'SELECT cve_id, product_id FROM cve_product',
+        "SELECT cve_id, product_id FROM cve_product",
     ):
-        edges.append({'data': {
-            'source': f'cve:{cve_id}', 'target': f'product:{product_id}',
-            'kind': 'affects',
-        }})
+        edges.append(
+            {
+                "data": {
+                    "source": f"cve:{cve_id}",
+                    "target": f"product:{product_id}",
+                    "kind": "affects",
+                }
+            }
+        )
         cves_with_edges.add(cve_id)
         products_with_edges.add(product_id)
 
     for poc_url, cve_id in conn.execute(
-        'SELECT poc_url, cve_id FROM poc_cve',
+        "SELECT poc_url, cve_id FROM poc_cve",
     ):
-        edges.append({'data': {
-            'source': f'poc:{poc_url}', 'target': f'cve:{cve_id}',
-            'kind': 'references',
-        }})
+        edges.append(
+            {
+                "data": {
+                    "source": f"poc:{poc_url}",
+                    "target": f"cve:{cve_id}",
+                    "kind": "references",
+                }
+            }
+        )
         cves_with_edges.add(cve_id)
 
-    pocs_with_edges = {
-        row[0] for row in conn.execute('SELECT DISTINCT poc_url FROM poc_cve')
-    }
+    pocs_with_edges = {row[0] for row in conn.execute("SELECT DISTINCT poc_url FROM poc_cve")}
 
     # CVE nodes: keep if connected or if it has real description
     for cve_id, desc, score, severity in conn.execute(
-        'SELECT id, description, cvss_score, cvss_severity FROM cve',
+        "SELECT id, description, cvss_score, cvss_severity FROM cve",
     ):
         if cve_id not in cves_with_edges and not desc:
             continue
-        nodes.append({'data': {
-            'id': f'cve:{cve_id}',
-            'label': cve_id,
-            'kind': 'cve',
-            'cvss': score or 0,
-            'severity': severity or '',
-            'description': (desc or '')[:240],
-        }})
+        nodes.append(
+            {
+                "data": {
+                    "id": f"cve:{cve_id}",
+                    "label": cve_id,
+                    "kind": "cve",
+                    "cvss": score or 0,
+                    "severity": severity or "",
+                    "description": (desc or "")[:240],
+                }
+            }
+        )
 
     # PoC nodes: keep if connected or if it has stars
     for url, stars, description in conn.execute(
-        'SELECT url, stars, description FROM poc',
+        "SELECT url, stars, description FROM poc",
     ):
         if url not in pocs_with_edges and not stars:
             continue
-        label = url.rsplit('/', 1)[-1] if '/' in url else url
-        nodes.append({'data': {
-            'id': f'poc:{url}',
-            'label': label,
-            'kind': 'poc',
-            'url': url,
-            'stars': stars or 0,
-            'description': (description or '')[:240],
-        }})
+        label = url.rsplit("/", 1)[-1] if "/" in url else url
+        nodes.append(
+            {
+                "data": {
+                    "id": f"poc:{url}",
+                    "label": label,
+                    "kind": "poc",
+                    "url": url,
+                    "stars": stars or 0,
+                    "description": (description or "")[:240],
+                }
+            }
+        )
 
     # Product nodes: only connected, skip the unknown placeholder
     for pid, vendor, product, category in conn.execute(
-        'SELECT id, vendor, product, category FROM product',
+        "SELECT id, vendor, product, category FROM product",
     ):
         if pid not in products_with_edges:
             continue
-        if vendor == 'unknown' and product == 'unknown':
+        if vendor == "unknown" and product == "unknown":
             continue
-        nodes.append({'data': {
-            'id': f'product:{pid}',
-            'label': f'{vendor}/{product}' if vendor != product else product,
-            'kind': 'product',
-            'category': category,
-        }})
+        nodes.append(
+            {
+                "data": {
+                    "id": f"product:{pid}",
+                    "label": f"{vendor}/{product}" if vendor != product else product,
+                    "kind": "product",
+                    "category": category,
+                }
+            }
+        )
 
     # Attack tag nodes
     for tag in tags_with_edges:
-        nodes.append({'data': {
-            'id': f'tag:{tag}', 'label': tag, 'kind': 'tag',
-        }})
+        nodes.append(
+            {
+                "data": {
+                    "id": f"tag:{tag}",
+                    "label": tag,
+                    "kind": "tag",
+                }
+            }
+        )
 
     # Drop edges whose endpoints got filtered out
-    valid_ids = {n['data']['id'] for n in nodes}
+    valid_ids = {n["data"]["id"] for n in nodes}
     edges = [
-        e for e in edges
-        if e['data']['source'] in valid_ids and e['data']['target'] in valid_ids
+        e for e in edges if e["data"]["source"] in valid_ids and e["data"]["target"] in valid_ids
     ]
 
     return nodes, edges
@@ -301,18 +335,18 @@ def render_graph_html(conn: sqlite3.Connection, when: datetime | None = None) ->
     elements = nodes + edges
     now = when or datetime.now()
     return _HTML_TEMPLATE.format(
-        date=now.strftime('%Y-%m-%d'),
+        date=now.strftime("%Y-%m-%d"),
         node_count=len(nodes),
         edge_count=len(edges),
-        elements_json=json.dumps(elements, separators=(',', ':')),
+        elements_json=json.dumps(elements, separators=(",", ":")),
     )
 
 
 def save_graph(conn: sqlite3.Connection, when: datetime | None = None) -> Path:
     """Write reports/YYYY/MM/YYYY-MM-DD.graph.html."""
     now = when or datetime.now()
-    folder = REPORTS_DIR / f'{now.year:04d}' / f'{now.month:02d}'
+    folder = REPORTS_DIR / f"{now.year:04d}" / f"{now.month:02d}"
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f'{now.strftime("%Y-%m-%d")}.graph.html'
+    path = folder / f"{now.strftime('%Y-%m-%d')}.graph.html"
     path.write_text(render_graph_html(conn, now))
     return path

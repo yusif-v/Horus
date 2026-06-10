@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import render_template
 
@@ -18,7 +18,7 @@ def page(template: str, *, title: str, active: str = "", **context) -> str:
         active=active,
         rail=rail_stats(),
         version=__version__,
-        now=datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        now=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         **context,
     )
 

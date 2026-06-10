@@ -19,14 +19,13 @@ import sys
 from ..core.filters import extract_cves
 
 # Reuse the standalone xsearch module for auth + API
-from ..net.xsearch import XSearch, XSearchError, XAuthError
-
+from ..net.xsearch import XAuthError, XSearch, XSearchError
 
 NAME = "X/Twitter (Chrome Auth)"
 DEFAULT_ENABLED = True
 KIND = "poc"
-PROVIDES = ["x_discovered_urls"]      # github source picks these up
-SOCIAL_SOURCE_NAME = "x_twitter"      # tagged on watchlist entries
+PROVIDES = ["x_discovered_urls"]  # github source picks these up
+SOCIAL_SOURCE_NAME = "x_twitter"  # tagged on watchlist entries
 
 # Targeted search queries — GitHub-focused, no broad noise
 DEFAULT_QUERIES = [
@@ -39,7 +38,7 @@ DEFAULT_QUERIES = [
 
 # Regex to extract GitHub repo URLs from tweet text
 _GITHUB_URL_RE = re.compile(
-    r'https?://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+',
+    r"https?://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+",
     re.IGNORECASE,
 )
 
@@ -87,16 +86,18 @@ def run(ctx) -> dict:
 
             # Social signal: each tweet mentioning a CVE is a signal
             for cve_id in cves:
-                social_signals.append({
-                    "cve_id": cve_id,
-                    "tweet_url": tweet_url,
-                    "likes": tweet.get("likes", 0),
-                    "retweets": tweet.get("retweets", 0),
-                    "replies": tweet.get("replies", 0),
-                    "views": tweet.get("views", 0),
-                    "screen_name": tweet.get("screenName", ""),
-                    "source": SOCIAL_SOURCE_NAME,
-                })
+                social_signals.append(
+                    {
+                        "cve_id": cve_id,
+                        "tweet_url": tweet_url,
+                        "likes": tweet.get("likes", 0),
+                        "retweets": tweet.get("retweets", 0),
+                        "replies": tweet.get("replies", 0),
+                        "views": tweet.get("views", 0),
+                        "screen_name": tweet.get("screenName", ""),
+                        "source": SOCIAL_SOURCE_NAME,
+                    }
+                )
 
             # GitHub URL discovery: extract GitHub repo URLs from tweet
             gh_urls = _GITHUB_URL_RE.findall(text)
@@ -129,6 +130,7 @@ def run(ctx) -> dict:
         poc_dicts = poc_dicts[: ctx.max_results]
 
     from ..core.merge import poc_from_github
+
     pocs = [poc_from_github(r) for r in poc_dicts]
     return {
         "cves": [],

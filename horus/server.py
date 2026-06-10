@@ -12,6 +12,7 @@ Config file (YAML if PyYAML is installed; JSON also accepted):
       nvd: 3600
       x_twitter: 1800
       github: 3600
+      gitlab: 3600
       exploit_db: 7200
       epss: 86400
       kev: 86400
@@ -19,12 +20,14 @@ Config file (YAML if PyYAML is installed; JSON also accepted):
       nvd: true
       x_twitter: true
       github: true
+      gitlab: true
       exploit_db: false
     check_every_seconds: 60
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import signal
@@ -36,19 +39,19 @@ from pathlib import Path
 
 from .storage import db
 
-
 DEFAULT_POLL_INTERVALS: dict[str, int] = {
-    "nvd":         3600,    # 1h    — NVD updates roughly every 2h
-    "x_twitter":   1800,    # 30m   — social moves fast
-    "github":      3600,    # 1h    — search API rate-limited
-    "exploit_db":  7200,    # 2h    — slower moving
-    "epss":        86400,   # 24h   — daily CSV
-    "kev":         86400,   # 24h   — daily catalog
+    "nvd": 3600,  # 1h    — NVD updates roughly every 2h
+    "x_twitter": 1800,  # 30m   — social moves fast
+    "github": 3600,  # 1h    — search API rate-limited
+    "gitlab": 3600,  # 1h    — search API rate-limited
+    "exploit_db": 7200,  # 2h    — slower moving
+    "epss": 86400,  # 24h   — daily CSV
+    "kev": 86400,  # 24h   — daily catalog
 }
 
 # Sources are run by the main pipeline (CVE/PoC discovery); enrichers
 # are scheduled but applied to the current batch + DB backfill.
-SOURCE_KEYS = {"nvd", "x_twitter", "github", "exploit_db"}
+SOURCE_KEYS = {"nvd", "x_twitter", "github", "gitlab", "exploit_db"}
 ENRICHER_KEYS = {"epss", "kev"}
 
 
@@ -90,12 +93,16 @@ def load_config(path: str | None) -> Config:
     data: dict
     try:
         import yaml  # type: ignore
+
         data = yaml.safe_load(raw) or {}
     except ImportError:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as e:
-            print(f"  [WARN] PyYAML missing and config is not JSON ({e}); using defaults", file=sys.stderr)
+            print(
+                f"  [WARN] PyYAML missing and config is not JSON ({e}); using defaults",
+                file=sys.stderr,
+            )
             return cfg
     if "poll_intervals" in data and isinstance(data["poll_intervals"], dict):
         cfg.poll_intervals.update({k: int(v) for k, v in data["poll_intervals"].items()})
@@ -121,6 +128,7 @@ def _last_run_epoch(conn, name: str) -> float:
     # ISO 8601 'Z' suffix
     try:
         from datetime import datetime, timezone
+
         # strptime can't handle 'Z' directly on older versions
         if ts.endswith("Z"):
             ts = ts[:-1] + "+00:00"
@@ -182,18 +190,29 @@ class Server:
         workers = self.cfg.web.workers
         try:
             import gunicorn  # noqa: F401
+
             cmd = [
-                sys.executable, "-m", "gunicorn",
+                sys.executable,
+                "-m",
+                "gunicorn",
                 "horus.web:app",
-                "--bind", f"{host}:{port}",
-                "--workers", str(workers),
-                "--worker-class", "sync",
-                "--timeout", "60",
-                "--access-logfile", "-",
-                "--error-logfile", "-",
-                "--log-level", "info",
+                "--bind",
+                f"{host}:{port}",
+                "--workers",
+                str(workers),
+                "--worker-class",
+                "sync",
+                "--timeout",
+                "60",
+                "--access-logfile",
+                "-",
+                "--error-logfile",
+                "-",
+                "--log-level",
+                "info",
                 # Tie children to this group so SIGTERM kills the lot cleanly.
-                "--graceful-timeout", "20",
+                "--graceful-timeout",
+                "20",
             ]
             self._log(f"starting web (gunicorn {workers}w) on http://{host}:{port}")
             self._web_proc = subprocess.Popen(cmd, start_new_session=True)
@@ -208,7 +227,9 @@ class Server:
             )
         # Dev-server fallback in a daemon thread. NOT for real production.
         import threading
+
         from . import web as _web
+
         self._log(f"[WARN] gunicorn not installed; using Flask dev server on http://{host}:{port}")
         t = threading.Thread(
             target=_web.app.run,
@@ -233,19 +254,15 @@ class Server:
         if proc is None:
             return
         self._log("stopping web child")
-        try:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
             # SIGTERM the gunicorn process group; gunicorn forwards to workers.
             os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
-            pass
         try:
             proc.wait(timeout=25)
         except subprocess.TimeoutExpired:
             self._log("[WARN] web did not exit in 25s; killing")
-            try:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                pass
         self._web_proc = None
 
     # ── cycles ───────────────────────────────────────────────────────────
@@ -295,11 +312,13 @@ class Server:
             with db.connect() as conn:
                 if "epss" in enrichers:
                     from .enrichers.epss import backfill_all
+
                     backfill_all(conn)
                 if "kev" in enrichers:
-                    from .enrichers.kev import enrich
                     from .core.context import EnricherContext
                     from .core.model import CVE
+                    from .enrichers.kev import enrich
+
                     # KEV needs CVE objects to mutate; fetch all from DB
                     rows = conn.execute(
                         "SELECT id, description, cvss_score, cvss_severity, published_at,"
@@ -309,15 +328,21 @@ class Server:
                     ).fetchall()
                     cves = []
                     for r in rows:
-                        cves.append(CVE(
-                            id=r[0], description=r[1] or "",
-                            cvss_score=r[2], cvss_severity=r[3],
-                            published_at=r[4], epss_score=r[5],
-                            kev=r[6], social_mentions=r[7] or 0,
-                            poc_source_count=r[8] or 0,
-                            reputation_score=r[9] or 0.0,
-                            confidence=r[10] or "high",
-                        ))
+                        cves.append(
+                            CVE(
+                                id=r[0],
+                                description=r[1] or "",
+                                cvss_score=r[2],
+                                cvss_severity=r[3],
+                                published_at=r[4],
+                                epss_score=r[5],
+                                kev=r[6],
+                                social_mentions=r[7] or 0,
+                                poc_source_count=r[8] or 0,
+                                reputation_score=r[9] or 0.0,
+                                confidence=r[10] or "high",
+                            )
+                        )
                     enrich(EnricherContext(cves=cves, pocs=[]))
                     # Persist KEV flags back
                     for cve in cves:
@@ -326,27 +351,32 @@ class Server:
             return
 
         from .pipeline import PipelineOptions, run_pipeline
-        run_pipeline(PipelineOptions(
-            source_filter=set(sources),
-            enricher_filter=set(enrichers) if enrichers else set(),
-            quiet=True,
-            save_report_md=False,
-            save_graph_html=False,
-            print_report=False,
-            log=lambda m: self._log(m),
-        ))
+
+        run_pipeline(
+            PipelineOptions(
+                source_filter=set(sources),
+                enricher_filter=set(enrichers) if enrichers else set(),
+                quiet=True,
+                save_report_md=False,
+                save_graph_html=False,
+                print_report=False,
+                log=lambda m: self._log(m),
+            )
+        )
 
     # ── logging ──────────────────────────────────────────────────────────
 
     def _log(self, msg: str) -> None:
-        from datetime import datetime
-        ts = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        from datetime import datetime, timezone
+
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         print(f"[{ts}] horus.server: {msg}", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> None:
     """Entry point for `python3 -m horus.server`."""
     import argparse
+
     p = argparse.ArgumentParser(prog="horus.server", description="Horus 24/7 server mode")
     p.add_argument("--config", default=None, help="Path to YAML/JSON config file")
     p.add_argument("--once", action="store_true", help="Run a single cycle then exit")

@@ -1,12 +1,12 @@
 """Text filters: PoC relevance check and CVE extraction."""
 
-
 from __future__ import annotations
+
 import re
 
 from ..config import FRESH_POC_KEYWORDS, LOW_VALUE_KEYWORDS
 
-_CVE_RE = re.compile(r'CVE-\d{4}-\d{4,}', re.IGNORECASE)
+_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
 
 
 def is_fresh_poc(text: str) -> bool:

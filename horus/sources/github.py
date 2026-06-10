@@ -10,20 +10,20 @@ Confidence scoring:
 """
 
 from __future__ import annotations
+
 import sys
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..config import GITHUB_QUERIES, MAX_REPO_AGE_DAYS, MIN_REPO_STARS
 from ..core.filters import extract_cves, is_fresh_poc
 from ..net.auth import github_token
 from ..net.http import fetch_json
 
-
 NAME = "GitHub PoC Repos"
 DEFAULT_ENABLED = True
 KIND = "poc"
-CONSUMES = ["x_discovered_urls"]      # enriched in the same pass
+CONSUMES = ["x_discovered_urls"]  # enriched in the same pass
 
 
 def _confidence_for_stars(stars: int | None) -> str:
@@ -63,23 +63,27 @@ def run(ctx) -> dict:
                 continue
             api_url = f"https://api.github.com/repos/{urllib.parse.quote(owner, safe='')}/{urllib.parse.quote(repo, safe='')}"
             try:
-                data = fetch_json(api_url, accept="application/vnd.github.v3+json", headers=auth_headers)
+                data = fetch_json(
+                    api_url, accept="application/vnd.github.v3+json", headers=auth_headers
+                )
             except Exception as e:
                 print(f"  [WARN] GitHub enrichment failed for '{gh_url}': {e}", file=sys.stderr)
                 # Still add it as a basic PoC even if enrichment fails
                 ctx.known_poc_urls.add(gh_url)
-                results.append({
-                    "source": "github",
-                    "repo": f"{owner}/{repo}",
-                    "url": gh_url,
-                    "description": "",
-                    "cves": [],
-                    "stars": None,
-                    "created": "",
-                    "age_days": None,
-                    "discovered_via": "x",
-                    "confidence": "low",
-                })
+                results.append(
+                    {
+                        "source": "github",
+                        "repo": f"{owner}/{repo}",
+                        "url": gh_url,
+                        "description": "",
+                        "cves": [],
+                        "stars": None,
+                        "created": "",
+                        "age_days": None,
+                        "discovered_via": "x",
+                        "confidence": "low",
+                    }
+                )
                 continue
 
             html_url = data.get("html_url", gh_url)
@@ -89,7 +93,7 @@ def run(ctx) -> dict:
 
             try:
                 created = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%SZ")
-                age_days = (datetime.utcnow() - created).days
+                age_days = (datetime.now(timezone.utc).replace(tzinfo=None) - created).days
             except ValueError:
                 age_days = None
 
@@ -98,22 +102,24 @@ def run(ctx) -> dict:
             if stars < MIN_REPO_STARS:
                 continue
 
-            combined = f'{data.get("full_name", "")} {description}'
+            combined = f"{data.get('full_name', '')} {description}"
             cves = extract_cves(combined)
 
             ctx.known_poc_urls.add(html_url)
-            results.append({
-                "source": "github",
-                "repo": data.get("full_name", ""),
-                "url": html_url,
-                "description": description[:300],
-                "cves": cves,
-                "stars": stars,
-                "created": created_at[:10] if created_at else "",
-                "age_days": age_days,
-                "discovered_via": "x",
-                "confidence": _confidence_for_stars(stars),
-            })
+            results.append(
+                {
+                    "source": "github",
+                    "repo": data.get("full_name", ""),
+                    "url": html_url,
+                    "description": description[:300],
+                    "cves": cves,
+                    "stars": stars,
+                    "created": created_at[:10] if created_at else "",
+                    "age_days": age_days,
+                    "discovered_via": "x",
+                    "confidence": _confidence_for_stars(stars),
+                }
+            )
 
     # Standard GitHub search queries
     for query in GITHUB_QUERIES:
@@ -124,7 +130,9 @@ def run(ctx) -> dict:
         )
 
         try:
-            data = fetch_json(search_url, accept="application/vnd.github.v3+json", headers=auth_headers)
+            data = fetch_json(
+                search_url, accept="application/vnd.github.v3+json", headers=auth_headers
+            )
         except Exception as e:
             print(f"  [WARN] GitHub search failed for '{query}': {e}", file=sys.stderr)
             continue
@@ -140,7 +148,7 @@ def run(ctx) -> dict:
 
             try:
                 created = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%SZ")
-                age_days = (datetime.utcnow() - created).days
+                age_days = (datetime.now(timezone.utc).replace(tzinfo=None) - created).days
             except ValueError:
                 age_days = None
 
@@ -149,27 +157,30 @@ def run(ctx) -> dict:
             if stars < MIN_REPO_STARS:
                 continue
 
-            combined = f'{item.get("full_name", "")} {description}'
+            combined = f"{item.get('full_name', '')} {description}"
             if not is_fresh_poc(combined):
                 continue
 
             ctx.known_poc_urls.add(html_url)
-            results.append({
-                "source": "github",
-                "repo": item.get("full_name", ""),
-                "url": html_url,
-                "description": description[:300],
-                "cves": extract_cves(combined),
-                "stars": stars,
-                "created": created_at[:10] if created_at else "",
-                "age_days": age_days,
-                "confidence": _confidence_for_stars(stars),
-            })
+            results.append(
+                {
+                    "source": "github",
+                    "repo": item.get("full_name", ""),
+                    "url": html_url,
+                    "description": description[:300],
+                    "cves": extract_cves(combined),
+                    "stars": stars,
+                    "created": created_at[:10] if created_at else "",
+                    "age_days": age_days,
+                    "confidence": _confidence_for_stars(stars),
+                }
+            )
 
     results.sort(key=lambda x: x.get("stars", 0), reverse=True)
     if ctx.max_results is not None:
         results = results[: ctx.max_results]
 
     from ..core.merge import poc_from_github
+
     pocs = [poc_from_github(r) for r in results]
     return {"cves": [], "pocs": pocs}

@@ -16,12 +16,14 @@ from __future__ import annotations
 import importlib
 import pkgutil
 import sys
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
 
 from .core.context import EnricherContext, SourceContext
 from .core.merge import link_pocs_to_cves, merge_findings
+from .core.model import CVE, PoC
 from .render.graph import save_graph
 from .render.persist import save_report
 from .render.report import render_report
@@ -30,10 +32,11 @@ from .storage import db
 # Plugin attribute names — what the pipeline reads off each module.
 _KIND_CVE = "cve"
 _KIND_POC = "poc"
-_DEFAULT_KIND = _KIND_POC   # safest assumption for plugins that forget to declare
+_DEFAULT_KIND = _KIND_POC  # safest assumption for plugins that forget to declare
 
 
 # ── Plugin discovery ─────────────────────────────────────────────────────────
+
 
 def _discover_plugins(package_name: str, required_export: str = "run") -> dict[str, Any]:
     """Return {module_name: module} for plugins exporting `required_export`."""
@@ -77,31 +80,33 @@ class PipelineOptions:
     are funneled into each plugin's SourceContext. Plugins do not see
     these names.
     """
+
     source_filter: set[str] | None = None
     enricher_filter: set[str] | None = None
-    disabled_sources: set[str] = field(default_factory=set)     # explicit opt-out
+    disabled_sources: set[str] = field(default_factory=set)  # explicit opt-out
     disabled_enrichers: set[str] = field(default_factory=set)
     max_results: int | None = None
     min_cvss: float | None = None
     quiet: bool = False
     save_report_md: bool = True
     save_graph_html: bool = True
-    output_fmt: str = "text"        # 'text' | 'md'
+    output_fmt: str = "text"  # 'text' | 'md'
     print_report: bool = True
     log: Callable[[str], None] | None = None
 
 
 @dataclass
 class PipelineResult:
-    cves: list = field(default_factory=list)
-    pocs: list = field(default_factory=list)
-    links: dict = field(default_factory=dict)
-    watchlist_counts: dict[str, int] = field(default_factory=dict)
-    source_results: dict[str, dict] = field(default_factory=dict)
+    cves: list[CVE] = field(default_factory=list)
+    pocs: list[PoC] = field(default_factory=list)
+    links: dict[str, list[PoC]] = field(default_factory=dict)
+    watchlist_counts: list[tuple[str, str, int]] = field(default_factory=list)
+    source_results: dict[str, dict[str, Any]] = field(default_factory=dict)
     report_text: str = ""
 
 
 # ── Selection helpers ────────────────────────────────────────────────────────
+
 
 def _select(
     plugins: dict[str, Any],
@@ -116,12 +121,14 @@ def _select(
     if filter_ is not None:
         return {k: v for k, v in plugins.items() if k in filter_}
     return {
-        k: v for k, v in plugins.items()
+        k: v
+        for k, v in plugins.items()
         if getattr(v, "DEFAULT_ENABLED", True) and k not in disabled
     }
 
 
 # ── The pipeline ─────────────────────────────────────────────────────────────
+
 
 def run_pipeline(
     opts: PipelineOptions,
@@ -141,8 +148,7 @@ def run_pipeline(
         5.  render report + graph
     """
     log = opts.log or (
-        (lambda msg: None) if opts.quiet
-        else (lambda msg: print(msg, file=sys.stderr))
+        (lambda msg: None) if opts.quiet else (lambda msg: print(msg, file=sys.stderr))
     )
 
     if sources is None:
@@ -165,15 +171,15 @@ def run_pipeline(
         last_runs = {name: db.get_last_run(conn, name) for name in selected_sources}
 
     # Plumbing for the run loop
-    all_cves: list = []
-    all_pocs: list = []
-    all_social_signals: list[dict] = []
-    source_results: dict[str, dict] = {}
+    all_cves: list[CVE] = []
+    all_pocs: list[PoC] = []
+    all_social_signals: list[dict[str, Any]] = []
+    source_results: dict[str, dict[str, Any]] = {}
     step = 0
     total_steps = len(selected_sources) + len(selected_enrichers) + 2  # +merge +persist
     x_discovered_urls: list[str] = []
 
-    def _run_source(name: str, mod: Any) -> dict:
+    def _run_source(name: str, mod: Any) -> dict[str, Any]:
         nonlocal step
         step += 1
         label = getattr(mod, "NAME", name)
@@ -222,7 +228,9 @@ def run_pipeline(
     step += 1
     log(f"[{step}/{total_steps}] merging and deduplicating...")
     cves, pocs, watchlist_counts = merge_findings(
-        all_cves, all_pocs, social_signals=all_social_signals,
+        all_cves,
+        all_pocs,
+        social_signals=all_social_signals,
     )
     links = link_pocs_to_cves(cves, pocs)
     log(f"  {len(cves)} unique CVEs, {len(pocs)} unique PoCs after dedup")
@@ -271,7 +279,9 @@ def run_pipeline(
         log(f"  graph saved  -> {graph_path}")
 
     return PipelineResult(
-        cves=cves, pocs=pocs, links=links,
+        cves=cves,
+        pocs=pocs,
+        links=links,
         watchlist_counts=watchlist_counts,
         source_results=source_results,
         report_text=report_text,

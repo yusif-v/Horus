@@ -1,6 +1,7 @@
 """Minimal HTTP helper used by source modules."""
 
 from __future__ import annotations
+
 import json
 import time
 import urllib.error
@@ -17,9 +18,9 @@ def fetch_json(
     base_delay: float = 2.0,
 ) -> dict:
     """Fetch URL and parse JSON. Retries with exponential backoff on transient errors."""
-    final_headers = {'User-Agent': USER_AGENT}
+    final_headers = {"User-Agent": USER_AGENT}
     if accept:
-        final_headers['Accept'] = accept
+        final_headers["Accept"] = accept
     if headers:
         final_headers.update(headers)
 
@@ -34,20 +35,20 @@ def fetch_json(
             if e.code in (429, 500, 502, 503, 504):
                 last_error = e
                 # Respect Retry-After header if present
-                retry_after = e.headers.get('Retry-After')
+                retry_after = e.headers.get("Retry-After")
                 if retry_after:
                     try:
                         time.sleep(float(retry_after))
                         continue
                     except (ValueError, TypeError):
                         pass
-                delay = base_delay * (2 ** attempt)
+                delay = base_delay * (2**attempt)
                 time.sleep(delay)
                 continue
             raise
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             last_error = e
-            delay = base_delay * (2 ** attempt)
+            delay = base_delay * (2**attempt)
             time.sleep(delay)
             continue
 

@@ -272,6 +272,9 @@ a:hover { color: var(--accent); }
 
 /* ── Tables ──────────────────────────────────────────── */
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+table.fixed-cols { table-layout: fixed; }
+table.fixed-cols td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.fixed-cols td .desc-cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: none; }
 thead th {
   text-align: left;
   padding: .65rem 1rem;

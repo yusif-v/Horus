@@ -7,8 +7,8 @@ Priority:
   4. None — unauthenticated, 60 req/hr limit
 """
 
-
 from __future__ import annotations
+
 import os
 import subprocess
 from functools import lru_cache
@@ -16,15 +16,17 @@ from functools import lru_cache
 
 @lru_cache(maxsize=1)
 def github_token() -> str | None:
-    for var in ('GITHUB_TOKEN', 'GH_TOKEN'):
+    for var in ("GITHUB_TOKEN", "GH_TOKEN"):
         tok = os.environ.get(var)
         if tok:
             return tok.strip()
 
     try:
         proc = subprocess.run(
-            ['gh', 'auth', 'token'],
-            capture_output=True, text=True, timeout=5,
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if proc.returncode == 0:
             tok = proc.stdout.strip()

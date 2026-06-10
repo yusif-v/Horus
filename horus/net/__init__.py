@@ -8,8 +8,8 @@ Modules:
 Imported from sources/ and enrichers/; never imports from them.
 """
 
-from .http import fetch_json
 from .auth import github_token
-from .xsearch import XSearch, XSearchError, XAuthError
+from .http import fetch_json
+from .xsearch import XAuthError, XSearch, XSearchError
 
-__all__ = ["fetch_json", "github_token", "XSearch", "XSearchError", "XAuthError"]
+__all__ = ["XAuthError", "XSearch", "XSearchError", "fetch_json", "github_token"]

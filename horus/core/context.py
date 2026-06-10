@@ -53,7 +53,7 @@ class SourceContext:
     # declares `CONSUMES = ["x_discovered_urls"]` and reads
     # `ctx.provided["x_discovered_urls"]`. No magic-string branching in
     # the pipeline.
-    provided: dict[str, list] = field(default_factory=dict)
+    provided: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def x_discovered_urls(self) -> list[str]:
@@ -71,5 +71,5 @@ class EnricherContext:
     making the pipeline pass a CLI namespace through.
     """
 
-    cves: list["CVE"]
-    pocs: list["PoC"]
+    cves: list[CVE]
+    pocs: list[PoC]

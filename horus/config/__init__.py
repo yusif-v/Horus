@@ -8,21 +8,28 @@ Submodules:
 Top-level re-exports below preserve `from horus.config import X` callsites.
 """
 
-from .paths import PROJECT_ROOT, STATE_DIR, REPORTS_DIR
-from .queries import GITHUB_QUERIES, FRESH_POC_KEYWORDS, LOW_VALUE_KEYWORDS
+from .paths import PROJECT_ROOT, REPORTS_DIR, STATE_DIR
+from .queries import FRESH_POC_KEYWORDS, GITHUB_QUERIES, LOW_VALUE_KEYWORDS
 from .tunables import (
+    HTTP_TIMEOUT,
     MAX_REPO_AGE_DAYS,
     MIN_REPO_STARS,
     NVD_LOOKBACK_DAYS,
     NVD_MAX_LOOKBACK_DAYS,
-    HTTP_TIMEOUT,
     USER_AGENT,
 )
 
 __all__ = [
-    "PROJECT_ROOT", "STATE_DIR", "REPORTS_DIR",
-    "GITHUB_QUERIES", "FRESH_POC_KEYWORDS", "LOW_VALUE_KEYWORDS",
-    "MAX_REPO_AGE_DAYS", "MIN_REPO_STARS",
-    "NVD_LOOKBACK_DAYS", "NVD_MAX_LOOKBACK_DAYS",
-    "HTTP_TIMEOUT", "USER_AGENT",
+    "FRESH_POC_KEYWORDS",
+    "GITHUB_QUERIES",
+    "HTTP_TIMEOUT",
+    "LOW_VALUE_KEYWORDS",
+    "MAX_REPO_AGE_DAYS",
+    "MIN_REPO_STARS",
+    "NVD_LOOKBACK_DAYS",
+    "NVD_MAX_LOOKBACK_DAYS",
+    "PROJECT_ROOT",
+    "REPORTS_DIR",
+    "STATE_DIR",
+    "USER_AGENT",
 ]

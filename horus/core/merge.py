@@ -6,14 +6,16 @@ reputation scores.
 """
 
 from __future__ import annotations
-from datetime import datetime
+
+from datetime import datetime, timezone
+from typing import Any
 
 from .classify import classify_attack_tags, classify_product_category
 from .filters import extract_cves
 from .model import CVE, AffectedProduct, PoC
 
 
-def cve_from_nvd(raw: dict) -> CVE:
+def cve_from_nvd(raw: dict[str, Any]) -> CVE:
     """Build a CVE from an NVD result dict."""
     desc = raw.get("description", "")
     cwes = raw.get("cwe_ids", [])
@@ -21,16 +23,18 @@ def cve_from_nvd(raw: dict) -> CVE:
 
     affected: list[AffectedProduct] = []
     for ap in raw.get("affected", []):
-        affected.append(AffectedProduct(
-            vendor=ap.get("vendor", "unknown"),
-            product=ap.get("product", "unknown"),
-            versions=list(ap.get("versions", [])),
-            category=classify_product_category(ap.get("vendor", ""), ap.get("product", "")),
-        ))
+        affected.append(
+            AffectedProduct(
+                vendor=ap.get("vendor", "unknown"),
+                product=ap.get("product", "unknown"),
+                versions=list(ap.get("versions", [])),
+                category=classify_product_category(ap.get("vendor", ""), ap.get("product", "")),
+            )
+        )
     if not affected and category != "unknown":
         affected.append(AffectedProduct(vendor="unknown", product="unknown", category=category))
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     return CVE(
         id=raw["cve"],
         description=desc,
@@ -49,8 +53,8 @@ def cve_from_nvd(raw: dict) -> CVE:
     )
 
 
-def poc_from_github(raw: dict) -> PoC:
-    text = f'{raw.get("repo", "")} {raw.get("description", "")}'
+def poc_from_github(raw: dict[str, Any]) -> PoC:
+    text = f"{raw.get('repo', '')} {raw.get('description', '')}"
     return PoC(
         url=raw.get("url", ""),
         source="github",
@@ -61,7 +65,7 @@ def poc_from_github(raw: dict) -> PoC:
     )
 
 
-def poc_from_twitter(raw: dict) -> PoC:
+def poc_from_twitter(raw: dict[str, Any]) -> PoC:
     text = raw.get("description", "") or ""
     return PoC(
         url=raw.get("url", ""),
@@ -73,7 +77,7 @@ def poc_from_twitter(raw: dict) -> PoC:
     )
 
 
-def poc_from_nitter(raw: dict) -> PoC:
+def poc_from_nitter(raw: dict[str, Any]) -> PoC:
     return PoC(
         url=raw.get("url", ""),
         source="nitter",
@@ -84,7 +88,7 @@ def poc_from_nitter(raw: dict) -> PoC:
     )
 
 
-def poc_from_exploitdb(raw: dict) -> PoC:
+def poc_from_exploitdb(raw: dict[str, Any]) -> PoC:
     return PoC(
         url=raw.get("url", ""),
         source="exploit-db",
@@ -95,8 +99,8 @@ def poc_from_exploitdb(raw: dict) -> PoC:
     )
 
 
-def poc_from_gitlab(raw: dict) -> PoC:
-    text = f'{raw.get("repo", "")} {raw.get("description", "")}'
+def poc_from_gitlab(raw: dict[str, Any]) -> PoC:
+    text = f"{raw.get('repo', '')} {raw.get('description', '')}"
     return PoC(
         url=raw.get("url", ""),
         source="gitlab",
@@ -128,8 +132,9 @@ def deduplicate_pocs(pocs: list[PoC]) -> list[PoC]:
             existing.cve_refs = list(set(existing.cve_refs + poc.cve_refs))
             if poc.stars and (not existing.stars or poc.stars > existing.stars):
                 existing.stars = poc.stars
-            if poc.description and (not existing.description or
-                                    len(poc.description) > len(existing.description)):
+            if poc.description and (
+                not existing.description or len(poc.description) > len(existing.description)
+            ):
                 existing.description = poc.description
             if source_priority.get(poc.source, 0) > source_priority.get(existing.source, 0):
                 existing.source = poc.source
@@ -138,7 +143,7 @@ def deduplicate_pocs(pocs: list[PoC]) -> list[PoC]:
     return list(seen.values())
 
 
-def aggregate_social_signals(cves: list[CVE], social_signals: list[dict]) -> None:
+def aggregate_social_signals(cves: list[CVE], social_signals: list[dict[str, Any]]) -> None:
     """Take social signal dicts from X source and increment social_mentions on matching CVEs.
 
     Each signal dict has: {"cve_id": "CVE-2026-XXXX", "tweet_url": "...", "likes": N, ...}
@@ -156,27 +161,77 @@ def aggregate_social_signals(cves: list[CVE], social_signals: list[dict]) -> Non
 # against AffectedProduct.product/vendor.
 UBIQUITOUS_PRODUCTS = {
     # Web servers / proxies
-    "nginx", "apache", "httpd", "apache http server", "tomcat", "iis",
-    "haproxy", "envoy", "caddy", "traefik",
+    "nginx",
+    "apache",
+    "httpd",
+    "apache http server",
+    "tomcat",
+    "iis",
+    "haproxy",
+    "envoy",
+    "caddy",
+    "traefik",
     # Languages / runtimes
-    "php", "node.js", "nodejs", "python", "openjdk", "java", "ruby", "go",
+    "php",
+    "node.js",
+    "nodejs",
+    "python",
+    "openjdk",
+    "java",
+    "ruby",
+    "go",
     # CMS / app platforms
-    "wordpress", "drupal", "joomla", "magento", "moodle",
+    "wordpress",
+    "drupal",
+    "joomla",
+    "magento",
+    "moodle",
     # Databases
-    "mysql", "mariadb", "postgresql", "mongodb", "redis", "elasticsearch",
+    "mysql",
+    "mariadb",
+    "postgresql",
+    "mongodb",
+    "redis",
+    "elasticsearch",
     "sqlite",
     # Network / infra
-    "openssl", "openssh", "curl", "libxml2", "zlib", "glibc",
-    "systemd", "samba", "bind",
+    "openssl",
+    "openssh",
+    "curl",
+    "libxml2",
+    "zlib",
+    "glibc",
+    "systemd",
+    "samba",
+    "bind",
     # Cloud / orchestration
-    "kubernetes", "docker", "containerd", "kafka", "rabbitmq",
+    "kubernetes",
+    "docker",
+    "containerd",
+    "kafka",
+    "rabbitmq",
     # Browsers / clients
-    "chrome", "firefox", "safari", "edge",
+    "chrome",
+    "firefox",
+    "safari",
+    "edge",
     # Frameworks
-    "spring", "spring framework", "spring boot", "django", "laravel",
-    "rails", "ruby on rails", "express", "next.js", "react",
+    "spring",
+    "spring framework",
+    "spring boot",
+    "django",
+    "laravel",
+    "rails",
+    "ruby on rails",
+    "express",
+    "next.js",
+    "react",
     # OS / hypervisors
-    "windows", "linux kernel", "macos", "vmware esxi", "vsphere",
+    "windows",
+    "linux kernel",
+    "macos",
+    "vmware esxi",
+    "vsphere",
 }
 
 
@@ -224,9 +279,9 @@ def compute_reputation_score(cve: CVE) -> float:
 
 
 def merge_findings(
-    all_cves: list,
-    all_pocs: list,
-    social_signals: list | None = None,
+    all_cves: list[CVE],
+    all_pocs: list[PoC],
+    social_signals: list[dict[str, Any]] | None = None,
 ) -> tuple[list[CVE], list[PoC], list[tuple[str, str, int]]]:
     """Deduplicate CVEs and PoCs from all sources.
 

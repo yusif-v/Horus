@@ -36,6 +36,7 @@ app = create_app()
 def main() -> None:
     """`python -m horus.web` — dev server only. Use gunicorn in production."""
     import argparse
+
     p = argparse.ArgumentParser(description="Horus web interface (dev server)")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8080)
@@ -47,7 +48,9 @@ def main() -> None:
         print("Run 'python3 -m horus' first to populate the database.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Horus web starting at http://{args.host}:{args.port} (dev server — use gunicorn for prod)")
+    print(
+        f"Horus web starting at http://{args.host}:{args.port} (dev server — use gunicorn for prod)"
+    )
     app.run(host=args.host, port=args.port, debug=args.debug)
 
 

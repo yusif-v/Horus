@@ -27,8 +27,8 @@ from .pipeline import (
     run_pipeline,
 )
 
-
 # ── Argument parser ─────────────────────────────────────────────────────────
+
 
 def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
     """Build the CLI parser dynamically from discovered plugins."""
@@ -39,50 +39,86 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"horus {__version__}")
 
     # Scan tunables
-    p.add_argument("--min-cvss", type=float, default=None,
-                   help="Minimum CVSS base score for NVD items.")
-    p.add_argument("--max-results", type=int, default=None,
-                   help="Cap items per source after sorting.")
-    p.add_argument("--format", choices=("text", "md"), default="text",
-                   help="Output format (default: text).")
-    p.add_argument("--quiet", action="store_true",
-                   help="Suppress progress lines on stderr.")
-    p.add_argument("--no-save", action="store_true",
-                   help="Skip writing the markdown report to reports/.")
-    p.add_argument("--no-graph", action="store_true",
-                   help="Skip writing the interactive graph HTML.")
-    p.add_argument("--sources", type=str, default=None,
-                   help="Comma-separated list of sources to run (default: all enabled).")
-    p.add_argument("--enrichers", type=str, default=None,
-                   help="Comma-separated list of enrichers to run (default: all enabled).")
+    p.add_argument(
+        "--min-cvss", type=float, default=None, help="Minimum CVSS base score for NVD items."
+    )
+    p.add_argument(
+        "--max-results", type=int, default=None, help="Cap items per source after sorting."
+    )
+    p.add_argument(
+        "--format", choices=("text", "md"), default="text", help="Output format (default: text)."
+    )
+    p.add_argument("--quiet", action="store_true", help="Suppress progress lines on stderr.")
+    p.add_argument(
+        "--no-save", action="store_true", help="Skip writing the markdown report to reports/."
+    )
+    p.add_argument(
+        "--no-graph", action="store_true", help="Skip writing the interactive graph HTML."
+    )
+    p.add_argument(
+        "--sources",
+        type=str,
+        default=None,
+        help="Comma-separated list of sources to run (default: all enabled).",
+    )
+    p.add_argument(
+        "--enrichers",
+        type=str,
+        default=None,
+        help="Comma-separated list of enrichers to run (default: all enabled).",
+    )
 
     # One-shot commands
-    p.add_argument("--list-sources", action="store_true",
-                   help="List available sources and enrichers, then exit.")
-    p.add_argument("--health-check", action="store_true",
-                   help="Run database health check and exit.")
-    p.add_argument("--query", type=str, default=None, metavar="CVE-XXXX-XXXX",
-                   help="Query a CVE from the database and display its enrichment report.")
-    p.add_argument("--auth-status", action="store_true",
-                   help="Print GitHub auth status and exit.")
-    p.add_argument("--backfill-epss", action="store_true",
-                   help="Score every unscored CVE in the DB with EPSS, then exit.")
+    p.add_argument(
+        "--list-sources",
+        action="store_true",
+        help="List available sources and enrichers, then exit.",
+    )
+    p.add_argument(
+        "--health-check", action="store_true", help="Run database health check and exit."
+    )
+    p.add_argument(
+        "--query",
+        type=str,
+        default=None,
+        metavar="CVE-XXXX-XXXX",
+        help="Query a CVE from the database and display its enrichment report.",
+    )
+    p.add_argument("--auth-status", action="store_true", help="Print GitHub auth status and exit.")
+    p.add_argument(
+        "--backfill-epss",
+        action="store_true",
+        help="Score every unscored CVE in the DB with EPSS, then exit.",
+    )
 
     # Server mode
-    p.add_argument("--server", action="store_true",
-                   help="Run as a 24/7 daemon polling sources on per-source intervals.")
-    p.add_argument("--server-once", action="store_true",
-                   help="Run a single server poll cycle then exit (cron/testing).")
-    p.add_argument("--config", type=str, default=None,
-                   help="Path to YAML/JSON config file (server mode).")
+    p.add_argument(
+        "--server",
+        action="store_true",
+        help="Run as a 24/7 daemon polling sources on per-source intervals.",
+    )
+    p.add_argument(
+        "--server-once",
+        action="store_true",
+        help="Run a single server poll cycle then exit (cron/testing).",
+    )
+    p.add_argument(
+        "--config", type=str, default=None, help="Path to YAML/JSON config file (server mode)."
+    )
 
     # Auto-generated --no-<src> / --skip-<enricher> flags
     for name, mod in sorted(sources.items()):
-        p.add_argument(f"--no-{name}", action="store_true",
-                       help=f"Skip the {getattr(mod, 'NAME', name)} source.")
+        p.add_argument(
+            f"--no-{name}",
+            action="store_true",
+            help=f"Skip the {getattr(mod, 'NAME', name)} source.",
+        )
     for name, mod in sorted(enrichers.items()):
-        p.add_argument(f"--skip-{name}", action="store_true",
-                       help=f"Skip the {getattr(mod, 'NAME', name)} enrichment.")
+        p.add_argument(
+            f"--skip-{name}",
+            action="store_true",
+            help=f"Skip the {getattr(mod, 'NAME', name)} enrichment.",
+        )
 
     return p
 
@@ -93,6 +129,7 @@ def _log(quiet: bool, msg: str) -> None:
 
 
 # ── One-shot command handlers ───────────────────────────────────────────────
+
 
 def _cmd_list_sources(sources: dict, enrichers: dict) -> None:
     print("Sources:")
@@ -107,17 +144,20 @@ def _cmd_list_sources(sources: dict, enrichers: dict) -> None:
 
 def _cmd_query(args) -> None:
     from .storage.query import query_cve
+
     print(query_cve(args.query, args.format))
 
 
 def _cmd_health_check() -> None:
     from .storage.health import run_health_check
+
     run_health_check().print()
 
 
 def _cmd_backfill_epss() -> None:
     from .enrichers.epss import backfill_all
     from .storage import db
+
     db.initialize()
     with db.connect() as conn:
         updated = backfill_all(conn)
@@ -126,6 +166,7 @@ def _cmd_backfill_epss() -> None:
 
 def _cmd_server(args) -> None:
     from .server import Server, load_config
+
     cfg = load_config(args.config)
     srv = Server(cfg)
     if args.server_once:
@@ -144,19 +185,25 @@ def _cmd_auth_status() -> None:
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
+
 def main(argv: list[str] | None = None) -> None:
     sources = discover_sources()
     enrichers = discover_enrichers()
     args = _build_parser(sources, enrichers).parse_args(argv)
 
     # One-shot commands fall through here.
-    if args.list_sources:   return _cmd_list_sources(sources, enrichers)
-    if args.query:          return _cmd_query(args)
-    if args.health_check:   return _cmd_health_check()
-    if args.backfill_epss:  return _cmd_backfill_epss()
+    if args.list_sources:
+        return _cmd_list_sources(sources, enrichers)
+    if args.query:
+        return _cmd_query(args)
+    if args.health_check:
+        return _cmd_health_check()
+    if args.backfill_epss:
+        return _cmd_backfill_epss()
     if args.server or args.server_once:
         return _cmd_server(args)
-    if args.auth_status:    return _cmd_auth_status()
+    if args.auth_status:
+        return _cmd_auth_status()
 
     # Default flow: full scan via the shared pipeline.
     source_filter = set(args.sources.split(",")) if args.sources else None

@@ -20,10 +20,17 @@ def client():
         yield c
 
 
-@pytest.mark.parametrize("path", [
-    "/", "/triage", "/cves", "/pocs",
-    "/search?q=test", "/api/stats",
-])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/",
+        "/triage",
+        "/cves",
+        "/pocs",
+        "/search?q=test",
+        "/api/stats",
+    ],
+)
 def test_route_returns_200(client, path):
     r = client.get(path)
     assert r.status_code == 200, f"{path} returned {r.status_code}"
@@ -44,10 +51,17 @@ def test_api_stats_contract_keys_present(client):
     data = client.get("/api/stats").get_json()
     # Lock the API contract so consumers don't break silently.
     must_have = {
-        "cve_count", "poc_count", "kev_count",
-        "avg_reputation", "avg_epss",
-        "social_heat", "social_mentions_total", "watchlist_count",
-        "actionable", "weaponized", "imminent",
+        "cve_count",
+        "poc_count",
+        "kev_count",
+        "avg_reputation",
+        "avg_epss",
+        "social_heat",
+        "social_mentions_total",
+        "watchlist_count",
+        "actionable",
+        "weaponized",
+        "imminent",
     }
     assert must_have.issubset(data.keys())
 
@@ -56,4 +70,4 @@ def test_pages_share_horizontal_anchor(client):
     """The scrollbar-gutter + .nav max-width fix must remain in the CSS."""
     css = client.get("/static/horus.css").get_data(as_text=True)
     assert "scrollbar-gutter: stable" in css
-    assert "max-width: 1320px" in css   # both .nav and .container use it
+    assert "max-width: 1320px" in css  # both .nav and .container use it

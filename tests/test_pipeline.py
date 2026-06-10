@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from horus.core.context import EnricherContext, SourceContext
 from horus.pipeline import (
-    _select,
     PipelineOptions,
+    _select,
     discover_enrichers,
     discover_sources,
 )
@@ -65,6 +65,7 @@ def test_pipeline_options_construct_clean():
 
 def test_cli_parser_includes_v08_flags():
     import horus.cli as cli
+
     parser = cli._build_parser(discover_sources(), discover_enrichers())
     help_text = parser.format_help()
     assert "--server" in help_text
@@ -78,13 +79,20 @@ def test_plugins_accept_only_one_positional_argument():
     A regression here means someone re-introduced the args=... glue.
     """
     import inspect
+
     for name, mod in discover_sources().items():
         sig = inspect.signature(mod.run)
-        params = [p for p in sig.parameters.values()
-                  if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+        params = [
+            p
+            for p in sig.parameters.values()
+            if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ]
         assert len(params) == 1, f"source '{name}' has unexpected run() signature: {sig}"
     for name, mod in discover_enrichers().items():
         sig = inspect.signature(mod.enrich)
-        params = [p for p in sig.parameters.values()
-                  if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+        params = [
+            p
+            for p in sig.parameters.values()
+            if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ]
         assert len(params) == 1, f"enricher '{name}' has unexpected enrich() signature: {sig}"

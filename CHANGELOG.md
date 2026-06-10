@@ -11,6 +11,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/plans/oss-readiness.md` — roadmap to publishable open-source
   status (LICENSE, CI, PyPI, badges, contributor docs). Not tied to a
   specific version — these are ongoing chores.
+- `docs/plans/v0.9.x.md` — follow-up roadmap after the Tier 4
+  code-quality landing (coverage lift, mypy expansion, supply-chain).
+- `pyproject.toml` (PEP 621) replaces `setup.py` and
+  `requirements.txt`. Dev tooling lives under `[project.optional-dependencies] dev`:
+  ruff, mypy, pytest-cov, pre-commit.
+- `.pre-commit-config.yaml` — ruff lint + format, plus whitespace /
+  EOL / YAML / TOML / merge-conflict checks. `pre-commit install` wires
+  it into `git commit`.
+- `horus.yaml` — top-level server config (poll intervals, source
+  toggles, web supervision) with every key the server's loader
+  recognizes pre-filled with defaults.
+- `/cves` page: **Window** filter chip group (Last 24h / Last week /
+  Last month / All time) that composes with severity, KEV, and sort.
+
+### Changed
+- **Server scheduling now includes GitLab.** `SOURCE_KEYS` and
+  `DEFAULT_POLL_INTERVALS` in `horus/server.py` previously omitted
+  `gitlab`, so the source was registered but never polled by the
+  server's `run_due` loop. Its `last_run` row only updated when the
+  CLI was invoked manually.
+- **`datetime.utcnow()` purged** across `horus/` (13 sites in
+  `db.py`, `_render.py`, `model.py`, `merge.py`, `health.py`,
+  `nvd.py`, `gitlab.py`, `github.py`, `server.py`). Replaced with
+  `datetime.now(timezone.utc)` and the deprecation warnings (~42 per
+  test run) are gone.
+- **`mypy --strict`** is green on `horus/core/*` and
+  `horus/pipeline.py`. Configured in `[tool.mypy]` so other modules
+  remain on relaxed settings until they're ratcheted up.
+- `PipelineResult.watchlist_counts` retyped
+  `dict[str, int]` → `list[tuple[str, str, int]]` to match what
+  `merge_findings()` actually returns (caught by mypy; downstream code
+  was already unpacking three-tuples).
+- `/cves` table now uses `table-layout: fixed` with an explicit
+  `<colgroup>` so column widths no longer shift between filter
+  combinations. Description column ellipses on overflow.
+- `/cves?kev=1` chip toggles off when clicked while active (was
+  re-applying `kev=1` and staying on).
+
+### Fixed
+- `tests/core/test_reputation.py::test_merge_split_social_into_watchlist_when_not_in_nvd`
+  asserted the watchlist as a dict, but `merge_findings()` returns a
+  list of `(cve_id, source, count)` tuples. Test updated.
+
+### Tooling
+- `ruff` (lint + format) — 58 files clean. Ruleset: E/F/W/I/B/UP/SIM/RUF.
+- `pytest-cov` with `--cov-fail-under=25` (current 27.6 %). The 70 %
+  target from the original v0.9 plan is tracked in `docs/plans/v0.9.x.md`.
 
 ### Changed
 - **Package restructure.** No behavior change; pure structural. See

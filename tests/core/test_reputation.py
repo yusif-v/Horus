@@ -13,7 +13,7 @@ from horus.core.merge import (
     cve_affects_ubiquitous,
     merge_findings,
 )
-from horus.core.model import CVE, PoC, AffectedProduct
+from horus.core.model import CVE, AffectedProduct, PoC
 
 
 def _cve(**kw) -> CVE:
@@ -55,11 +55,16 @@ def test_poc_source_count_capped_at_one_point_five():
 
 
 def test_score_caps_at_ten():
-    s = compute_reputation_score(_cve(
-        cvss_score=10.0, kev=1, epss_score=1.0,
-        social_mentions=20, poc_source_count=10,
-        affected=[AffectedProduct(vendor="nginx", product="nginx")],
-    ))
+    s = compute_reputation_score(
+        _cve(
+            cvss_score=10.0,
+            kev=1,
+            epss_score=1.0,
+            social_mentions=20,
+            poc_source_count=10,
+            affected=[AffectedProduct(vendor="nginx", product="nginx")],
+        )
+    )
     assert s == 10.0
 
 
@@ -81,6 +86,7 @@ def test_ubiquity_curated_set_includes_critical_products():
 
 # ── merge_findings integration ──────────────────────────────────────────────
 
+
 def test_merge_split_social_into_watchlist_when_not_in_nvd():
     cve = _cve(id="CVE-2026-0001", cvss_score=9.0)
     signals = [
@@ -88,9 +94,9 @@ def test_merge_split_social_into_watchlist_when_not_in_nvd():
         {"cve_id": "CVE-9999-9999"},
         {"cve_id": "CVE-9999-9999"},
     ]
-    cves, pocs, watch = merge_findings([cve], [], social_signals=signals)
+    cves, _pocs, watch = merge_findings([cve], [], social_signals=signals)
     assert cves[0].social_mentions == 1
-    assert watch == {"CVE-9999-9999": 2}
+    assert watch == [("CVE-9999-9999", "unknown", 2)]
 
 
 def test_merge_counts_distinct_poc_sources():
@@ -100,5 +106,5 @@ def test_merge_counts_distinct_poc_sources():
         PoC(url="https://exploit-db.com/1", source="exploit-db", cve_refs=["CVE-2026-0001"]),
         PoC(url="https://github.com/c/d", source="github", cve_refs=["CVE-2026-0001"]),
     ]
-    cves, pocs, _ = merge_findings([cve], pocs_in)
+    cves, _pocs, _ = merge_findings([cve], pocs_in)
     assert cves[0].poc_source_count == 2  # distinct: github + exploit-db

@@ -4,13 +4,13 @@ Fetches recently published CVEs from the NVD API.
 """
 
 from __future__ import annotations
+
+import contextlib
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from ..config import NVD_LOOKBACK_DAYS, NVD_MAX_LOOKBACK_DAYS
-from ..core.filters import extract_cves
 from ..net.http import fetch_json
-
 
 NAME = "NVD CVE Feed"
 DEFAULT_ENABLED = True
@@ -48,8 +48,10 @@ def _extract_affected(configurations: list) -> list[dict]:
                     lo_op = ">=" if start_incl else ">"
                     hi_op = "<=" if end_incl else "<"
                     parts_range = []
-                    if lo: parts_range.append(f"{lo_op} {lo}")
-                    if hi: parts_range.append(f"{hi_op} {hi}")
+                    if lo:
+                        parts_range.append(f"{lo_op} {lo}")
+                    if hi:
+                        parts_range.append(f"{hi_op} {hi}")
                     bucket["versions"].append(", ".join(parts_range))
                 elif version not in ("*", "-", ""):
                     bucket["versions"].append(version)
@@ -86,12 +88,12 @@ def _resolve_start(now: datetime, last_run_iso: str | None) -> datetime:
     return max(candidate, floor)
 
 
-KIND = "cve"      # produces authoritative CVE records
+KIND = "cve"  # produces authoritative CVE records
 
 
 def run(ctx) -> dict:
     """Fetch recent CVEs from NVD. Returns {"cves": [dict], "pocs": []}."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     start = _resolve_start(now, ctx.last_run).strftime("%Y-%m-%dT%H:%M:%S.000")
     end = now.strftime("%Y-%m-%dT%H:%M:%S.000")
 
@@ -144,21 +146,21 @@ def run(ctx) -> dict:
             published_iso = cve.get("published")
             published_at = None
             if published_iso:
-                try:
+                with contextlib.suppress(ValueError):
                     published_at = datetime.strptime(published_iso[:19], "%Y-%m-%dT%H:%M:%S")
-                except ValueError:
-                    pass
 
-            results.append({
-                "source": "NVD",
-                "cve": cve_id,
-                "description": desc[:300],
-                "cvss_score": score,
-                "severity": severity,
-                "cwe_ids": _extract_cwes(cve.get("weaknesses", [])),
-                "affected": _extract_affected(cve.get("configurations", [])),
-                "published_at": published_at,
-            })
+            results.append(
+                {
+                    "source": "NVD",
+                    "cve": cve_id,
+                    "description": desc[:300],
+                    "cvss_score": score,
+                    "severity": severity,
+                    "cwe_ids": _extract_cwes(cve.get("weaknesses", [])),
+                    "affected": _extract_affected(cve.get("configurations", [])),
+                    "published_at": published_at,
+                }
+            )
 
         # Check if we've fetched all results
         fetched = (page + 1) * results_per_page
@@ -170,5 +172,6 @@ def run(ctx) -> dict:
         results = results[: ctx.max_results]
 
     from ..core.merge import cve_from_nvd
+
     cves = [cve_from_nvd(r) for r in results]
     return {"cves": cves, "pocs": []}

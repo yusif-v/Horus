@@ -14,6 +14,7 @@ This is a faithful Python port of birdnode's core logic.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -27,7 +28,6 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-
 
 # ── Cookie extraction ───────────────────────────────────────────────────────
 
@@ -94,18 +94,25 @@ class XSearchError(Exception):
 def _get_encryption_key() -> bytes:
     """Get Chrome's safe storage key from macOS keychain."""
     attempts = [
-        ["security", "find-generic-password", "-w",
-         "-s", "Chrome Safe Storage", "-a", "Chrome"],
-        ["security", "find-generic-password", "-w",
-         "-s", "Chrome Safe Storage"],
-        ["security", "find-generic-password", "-w",
-         "-s", "Chromium Safe Storage", "-a", "Chromium"],
+        ["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage", "-a", "Chrome"],
+        ["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"],
+        [
+            "security",
+            "find-generic-password",
+            "-w",
+            "-s",
+            "Chromium Safe Storage",
+            "-a",
+            "Chromium",
+        ],
     ]
     for cmd in attempts:
         try:
             result = subprocess.run(
                 cmd,
-                capture_output=True, text=True, timeout=15,
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             if result.returncode == 0 and result.stdout.strip():
                 password = result.stdout.strip().encode()
@@ -127,8 +134,8 @@ def _decrypt_cookie(enc: bytes, key: bytes) -> str:
     """
     try:
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    except ImportError:
-        raise XAuthError("Install cryptography: pip install cryptography")
+    except ImportError as e:
+        raise XAuthError("Install cryptography: pip install cryptography") from e
 
     if enc[:3] not in (b"v10", b"v11"):
         return enc.decode("utf-8", errors="replace")
@@ -147,9 +154,13 @@ def _decrypt_cookie(enc: bytes, key: bytes) -> str:
     # Chrome 127+ may prepend a 32-byte SHA256 domain hash.
     # Detect: first 16 bytes are non-ASCII, bytes 32-40 are ASCII.
     if len(raw_bytes) > 32:
-        is_ascii = lambda b: 0x20 <= b <= 0x7E
-        if (not all(is_ascii(b) for b in raw_bytes[:16]) and
-                all(is_ascii(b) for b in raw_bytes[32:40])):
+
+        def is_ascii(b):
+            return 0x20 <= b <= 0x7E
+
+        if not all(is_ascii(b) for b in raw_bytes[:16]) and all(
+            is_ascii(b) for b in raw_bytes[32:40]
+        ):
             raw_bytes = raw_bytes[32:]
 
     return raw_bytes.decode("utf-8", errors="replace").rstrip("\x00")
@@ -165,7 +176,7 @@ def _extract_x_cookies() -> dict:
             continue
 
         # Copy to temp to avoid "database is locked" when Chrome is running
-        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)  # noqa: SIM115
         try:
             shutil.copy2(db_path, tmp.name)
             conn = sqlite3.connect(tmp.name)
@@ -229,6 +240,7 @@ def get_x_cookies() -> dict:
 
 # ── Query ID discovery ──────────────────────────────────────────────────────
 
+
 def _discover_query_ids(ct0: str, auth_token: str) -> dict:
     """Dynamically discover X's current GraphQL query IDs from JS bundles."""
     cache = {}
@@ -245,12 +257,14 @@ def _discover_query_ids(ct0: str, auth_token: str) -> dict:
             html = resp.read().decode("utf-8", errors="replace")
 
         # Find JS bundle URLs
-        bundle_urls = list(dict.fromkeys(
-            re.findall(
-                r"https://abs\.twimg\.com/responsive-web/client-web(?:-legacy)?/[\w._-]+\.js",
-                html
+        bundle_urls = list(
+            dict.fromkeys(
+                re.findall(
+                    r"https://abs\.twimg\.com/responsive-web/client-web(?:-legacy)?/[\w._-]+\.js",
+                    html,
+                )
             )
-        ))
+        )
 
         targets = {"SearchTimeline", "UserByScreenName", "Viewer", "CreateTweet", "TweetDetail"}
         js_headers = {
@@ -292,6 +306,7 @@ def _discover_query_ids(ct0: str, auth_token: str) -> dict:
 
 
 # ── Tweet parsing ───────────────────────────────────────────────────────────
+
 
 def _map_tweet(result: dict) -> dict | None:
     """Parse a tweet result from GraphQL response into a clean dict."""
@@ -370,23 +385,30 @@ def _parse_search_response(data: dict) -> tuple[list[dict], str | None]:
 
                 # Look for cursor
                 content = entry.get("content", {})
-                if (content.get("entryType") == "TimelineTimelineCursor" and
-                        content.get("cursorType") == "Bottom"):
+                if (
+                    content.get("entryType") == "TimelineTimelineCursor"
+                    and content.get("cursorType") == "Bottom"
+                ):
                     next_cursor = content.get("value")
                 elif entry.get("entryId", "").startswith("cursor-bottom-"):
-                    next_cursor = content.get("value") or content.get("itemContent", {}).get("value")
+                    next_cursor = content.get("value") or content.get("itemContent", {}).get(
+                        "value"
+                    )
 
         if instruction.get("type") == "TimelineReplaceEntry":
             entry = instruction.get("entry", {})
             content = entry.get("content", {})
-            if (content.get("entryType") == "TimelineTimelineCursor" and
-                    content.get("cursorType") == "Bottom"):
+            if (
+                content.get("entryType") == "TimelineTimelineCursor"
+                and content.get("cursorType") == "Bottom"
+            ):
                 next_cursor = content.get("value")
 
     return tweets, next_cursor
 
 
 # ── Main search class ──────────────────────────────────────────────────────
+
 
 class XSearch:
     """X/Twitter search using Chrome cookie authentication.
@@ -424,8 +446,9 @@ class XSearch:
             "origin": "https://x.com",
         }
 
-    def _perform_search(self, query: str, query_id: str,
-                        cursor: str | None, product: str) -> tuple[list[dict], str | None]:
+    def _perform_search(
+        self, query: str, query_id: str, cursor: str | None, product: str
+    ) -> tuple[list[dict], str | None]:
         """Execute a single SearchTimeline GraphQL request."""
         variables = {
             "rawQuery": query,
@@ -436,11 +459,13 @@ class XSearch:
         if cursor:
             variables["cursor"] = cursor
 
-        body = json.dumps({
-            "variables": variables,
-            "features": _SEARCH_FEATURES,
-            "queryId": query_id,
-        }).encode()
+        body = json.dumps(
+            {
+                "variables": variables,
+                "features": _SEARCH_FEATURES,
+                "queryId": query_id,
+            }
+        ).encode()
 
         url = f"https://x.com/i/api/graphql/{query_id}/SearchTimeline"
         req = urllib.request.Request(url, data=body, headers=self._build_headers(), method="POST")
@@ -450,19 +475,16 @@ class XSearch:
                 data = json.loads(resp.read())
         except urllib.error.HTTPError as e:
             body_text = ""
-            try:
+            with contextlib.suppress(Exception):
                 body_text = e.read()[:200].decode("utf-8", errors="replace")
-            except Exception:
-                pass
-            raise XSearchError(f"HTTP {e.code}: {body_text}")
+            raise XSearchError(f"HTTP {e.code}: {body_text}") from e
 
         if data.get("errors"):
             raise XSearchError(data["errors"][0].get("message", "Unknown GraphQL error"))
 
         return _parse_search_response(data)
 
-    def search(self, query: str, max_results: int = 20,
-               product: str = "Latest") -> list[dict]:
+    def search(self, query: str, max_results: int = 20, product: str = "Latest") -> list[dict]:
         """Search X for tweets matching a query.
 
         Args:
@@ -500,8 +522,10 @@ class XSearch:
 
             # If all known IDs failed, try dynamic discovery
             if result is None and not self._dynamic_discovered:
-                print("  [INFO] Known query IDs failed, discovering from JS bundles...",
-                      file=sys.stderr)
+                print(
+                    "  [INFO] Known query IDs failed, discovering from JS bundles...",
+                    file=sys.stderr,
+                )
                 discovered = _discover_query_ids(self._ct0, self._auth_token)
                 self._dynamic_discovered = True
                 if "SearchTimeline" in discovered:
@@ -542,7 +566,7 @@ class XSearch:
     def check(self) -> dict:
         """Verify credentials are valid."""
         try:
-            tweets = self.search("test", max_results=1)
+            self.search("test", max_results=1)
             return {
                 "status": "ok",
                 "auth_token": f"...{self._auth_token[-8:]}",

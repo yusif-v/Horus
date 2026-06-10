@@ -15,25 +15,18 @@ from __future__ import annotations
 
 import sqlite3
 import sys
-from dataclasses import dataclass, field
-from datetime import datetime
-from pathlib import Path
-from typing import Any
 
 from horus.config import STATE_DIR
-from horus.core.model import CVE, PoC, AffectedProduct
-
 
 DB_PATH = STATE_DIR / "horus.db"
 
 
 # ─── Data fetching ──────────────────────────────────────────────────────────
 
+
 def _fetch_cve(conn: sqlite3.Connection, cve_id: str) -> dict | None:
     """Fetch a CVE record with all enrichment data."""
-    row = conn.execute(
-        "SELECT * FROM cve WHERE id = ?", (cve_id.upper(),)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM cve WHERE id = ?", (cve_id.upper(),)).fetchone()
     if not row:
         return None
     return dict(row)
@@ -41,50 +34,53 @@ def _fetch_cve(conn: sqlite3.Connection, cve_id: str) -> dict | None:
 
 def _fetch_cve_attack_tags(conn: sqlite3.Connection, cve_id: str) -> list[str]:
     return [
-        r[0] for r in conn.execute(
-            "SELECT tag FROM cve_attack_tag WHERE cve_id = ?", (cve_id.upper(),)
-        )
+        r[0]
+        for r in conn.execute("SELECT tag FROM cve_attack_tag WHERE cve_id = ?", (cve_id.upper(),))
     ]
 
 
 def _fetch_cve_cwes(conn: sqlite3.Connection, cve_id: str) -> list[str]:
     return [
-        r[0] for r in conn.execute(
-            "SELECT cwe_id FROM cve_cwe WHERE cve_id = ?", (cve_id.upper(),)
-        )
+        r[0] for r in conn.execute("SELECT cwe_id FROM cve_cwe WHERE cve_id = ?", (cve_id.upper(),))
     ]
 
 
 def _fetch_cve_products(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
     return [
         {"vendor": r[0], "product": r[1], "versions": r[2], "category": r[3]}
-        for r in conn.execute("""
+        for r in conn.execute(
+            """
             SELECT p.vendor, p.product, cp.versions, p.category
             FROM cve_product cp
             JOIN product p ON p.id = cp.product_id
             WHERE cp.cve_id = ?
-        """, (cve_id.upper(),))
+        """,
+            (cve_id.upper(),),
+        )
     ]
 
 
 def _fetch_cve_sources(conn: sqlite3.Connection, cve_id: str) -> list[str]:
     return [
-        r[0] for r in conn.execute(
-            "SELECT source FROM cve_source WHERE cve_id = ?", (cve_id.upper(),)
-        )
+        r[0]
+        for r in conn.execute("SELECT source FROM cve_source WHERE cve_id = ?", (cve_id.upper(),))
     ]
 
 
 def _fetch_linked_pocs(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
     """Fetch PoCs directly linked to this CVE via poc_cve."""
     return [
-        dict(r) for r in conn.execute("""
+        dict(r)
+        for r in conn.execute(
+            """
             SELECT p.url, p.source, p.stars, p.age_days, p.description
             FROM poc_cve pc
             JOIN poc p ON p.url = pc.poc_url
             WHERE pc.cve_id = ?
             ORDER BY p.stars DESC NULLS LAST
-        """, (cve_id.upper(),))
+        """,
+            (cve_id.upper(),),
+        )
     ]
 
 
@@ -92,13 +88,17 @@ def _fetch_related_pocs(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
     """Fetch PoCs that mention this CVE in their description but aren't formally linked."""
     cve_short = cve_id.upper().replace("CVE-", "")
     return [
-        dict(r) for r in conn.execute("""
+        dict(r)
+        for r in conn.execute(
+            """
             SELECT url, source, stars, age_days, description
             FROM poc
             WHERE (description LIKE ? OR url LIKE ?)
               AND url NOT IN (SELECT poc_url FROM poc_cve WHERE cve_id = ?)
             ORDER BY stars DESC NULLS LAST
-        """, (f"%{cve_id.upper()}%", f"%{cve_short}%", cve_id.upper()))
+        """,
+            (f"%{cve_id.upper()}%", f"%{cve_short}%", cve_id.upper()),
+        )
     ]
 
 
@@ -115,25 +115,31 @@ def _fetch_related_cves(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
     # Same attack tags
     if tags:
         placeholders = ",".join("?" * len(tags))
-        for r in conn.execute(f"""
+        for r in conn.execute(
+            f"""
             SELECT DISTINCT c.id, c.cvss_score, c.cvss_severity, c.description
             FROM cve c
             JOIN cve_attack_tag cat ON cat.cve_id = c.id
             WHERE cat.tag IN ({placeholders}) AND c.id != ?
             ORDER BY c.cvss_score DESC
             LIMIT 10
-        """, (*tags, cve_id_upper)):
+        """,
+            (*tags, cve_id_upper),
+        ):
             rid = r[0]
             if rid not in related:
                 related[rid] = {
-                    "id": rid, "cvss_score": r[1], "cvss_severity": r[2],
+                    "id": rid,
+                    "cvss_score": r[1],
+                    "cvss_severity": r[2],
                     "description": r[3][:100] if r[3] else "",
                     "relation": "same_attack_tag",
                 }
 
     # Same products
     for prod in products:
-        for r in conn.execute("""
+        for r in conn.execute(
+            """
             SELECT DISTINCT c.id, c.cvss_score, c.cvss_severity, c.description
             FROM cve c
             JOIN cve_product cp ON cp.cve_id = c.id
@@ -141,11 +147,15 @@ def _fetch_related_cves(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
             WHERE p.vendor = ? AND p.product = ? AND c.id != ?
             ORDER BY c.cvss_score DESC
             LIMIT 5
-        """, (prod["vendor"], prod["product"], cve_id_upper)):
+        """,
+            (prod["vendor"], prod["product"], cve_id_upper),
+        ):
             rid = r[0]
             if rid not in related:
                 related[rid] = {
-                    "id": rid, "cvss_score": r[1], "cvss_severity": r[2],
+                    "id": rid,
+                    "cvss_score": r[1],
+                    "cvss_severity": r[2],
                     "description": r[3][:100] if r[3] else "",
                     "relation": "same_product",
                 }
@@ -158,21 +168,28 @@ def _search_cves_by_keyword(conn: sqlite3.Connection, keyword: str) -> list[dict
     pattern = f"%{keyword}%"
     return [
         {
-            "id": r[0], "cvss_score": r[1], "cvss_severity": r[2],
+            "id": r[0],
+            "cvss_score": r[1],
+            "cvss_severity": r[2],
             "description": r[3][:150] if r[3] else "",
-            "epss_score": r[4], "kev": r[5],
+            "epss_score": r[4],
+            "kev": r[5],
         }
-        for r in conn.execute("""
+        for r in conn.execute(
+            """
             SELECT id, cvss_score, cvss_severity, description, epss_score, kev
             FROM cve
             WHERE id LIKE ? OR description LIKE ?
             ORDER BY cvss_score DESC NULLS LAST
             LIMIT 20
-        """, (pattern, pattern))
+        """,
+            (pattern, pattern),
+        )
     ]
 
 
 # ─── Report rendering ───────────────────────────────────────────────────────
+
 
 def _render_text(data: dict) -> str:
     """Render a CVE enrichment report as plain text."""
@@ -188,7 +205,11 @@ def _render_text(data: dict) -> str:
     score = cve.get("cvss_score")
     severity = cve.get("cvss_severity", "")
     lines.append(f"  CVSS:     {score} {severity}" if score else "  CVSS:     N/A")
-    lines.append(f"  EPSS:     {cve['epss_score']:.4f} ({cve['epss_score']*100:.2f}%)" if cve.get("epss_score") is not None else "  EPSS:     N/A")
+    lines.append(
+        f"  EPSS:     {cve['epss_score']:.4f} ({cve['epss_score'] * 100:.2f}%)"
+        if cve.get("epss_score") is not None
+        else "  EPSS:     N/A"
+    )
     lines.append(f"  KEV:      {'YES — CISA Known Exploited' if cve.get('kev') else 'No'}")
     expl = cve.get("reputation_score")
     lines.append(f"  Reputation:  {expl:.1f}/10" if expl is not None else "  Reputation:  N/A")
@@ -200,7 +221,7 @@ def _render_text(data: dict) -> str:
     # Description
     desc = cve.get("description", "")
     if desc:
-        lines.append(f"  Description:")
+        lines.append("  Description:")
         # Word-wrap description
         words = desc.split()
         current = "    "
@@ -281,12 +302,14 @@ def _render_markdown(data: dict) -> str:
     severity = cve.get("cvss_severity", "")
     badges = []
     if score:
-        sev_color = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}.get(severity, "⚪")
+        sev_color = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}.get(
+            severity, "⚪"
+        )
         badges.append(f"{sev_color} **CVSS {score} {severity}**")
     if cve.get("kev"):
         badges.append("🔒 **CISA KEV**")
     if cve.get("epss_score") is not None:
-        badges.append(f"📊 EPSS `{cve['epss_score']:.4f}` ({cve['epss_score']*100:.2f}%)")
+        badges.append(f"📊 EPSS `{cve['epss_score']:.4f}` ({cve['epss_score'] * 100:.2f}%)")
     expl = cve.get("reputation_score")
     if expl is not None:
         badges.append(f"🏆 Reputation `{expl:.1f}/10`")
@@ -306,7 +329,7 @@ def _render_markdown(data: dict) -> str:
     # Description
     desc = cve.get("description", "")
     if desc:
-        lines.append(f"## Description")
+        lines.append("## Description")
         lines.append("")
         lines.append(desc)
         lines.append("")
@@ -360,7 +383,11 @@ def _render_markdown(data: dict) -> str:
         lines.append("| CVE | CVSS | Relation | Description |")
         lines.append("|-----|------|----------|-------------|")
         for rc in data["related_cves"][:10]:
-            score = f"{rc['cvss_score']} {rc.get('cvss_severity', '')}" if rc.get("cvss_score") else "N/A"
+            score = (
+                f"{rc['cvss_score']} {rc.get('cvss_severity', '')}"
+                if rc.get("cvss_score")
+                else "N/A"
+            )
             rel = rc.get("relation", "").replace("_", " ")
             desc = (rc.get("description") or "")[:80]
             lines.append(f"| [{rc['id']}](#) | {score} | {rel} | {desc} |")
@@ -371,12 +398,14 @@ def _render_markdown(data: dict) -> str:
 
 # ─── Main query function ────────────────────────────────────────────────────
 
+
 def query_cve(cve_id: str, fmt: str = "text") -> str:
     """Look up a CVE and return a formatted enrichment report."""
     cve_id = cve_id.upper()
     if not cve_id.startswith("CVE-"):
         # Try to auto-prepend if it looks like a CVE number
         import re
+
         if re.match(r"^\d{4}-\d{4,}$", cve_id):
             cve_id = f"CVE-{cve_id}"
 
@@ -396,7 +425,9 @@ def query_cve(cve_id: str, fmt: str = "text") -> str:
                 for r in results[:10]:
                     kev = " [KEV]" if r.get("kev") else ""
                     epss = f" EPSS={r['epss_score']:.4f}" if r.get("epss_score") is not None else ""
-                    lines.append(f"  {r['id']} [CVSS {r.get('cvss_score', '?')} {r.get('cvss_severity', '')}]{kev}{epss}")
+                    lines.append(
+                        f"  {r['id']} [CVSS {r.get('cvss_score', '?')} {r.get('cvss_severity', '')}]{kev}{epss}"
+                    )
                     if r.get("description"):
                         lines.append(f"    {r['description'][:100]}")
                 return "\n".join(lines)
@@ -437,7 +468,9 @@ def query_keyword(keyword: str, fmt: str = "text") -> str:
         for r in results:
             kev = " [KEV]" if r.get("kev") else ""
             epss = f" EPSS={r['epss_score']:.4f}" if r.get("epss_score") is not None else ""
-            lines.append(f"  {r['id']} [CVSS {r.get('cvss_score', '?')} {r.get('cvss_severity', '')}]{kev}{epss}")
+            lines.append(
+                f"  {r['id']} [CVSS {r.get('cvss_score', '?')} {r.get('cvss_severity', '')}]{kev}{epss}"
+            )
             if r.get("description"):
                 lines.append(f"    {r['description'][:120]}")
             lines.append("")
@@ -449,6 +482,7 @@ def query_keyword(keyword: str, fmt: str = "text") -> str:
 
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) < 2:
         print("Usage: python3 -m horus.storage.query <CVE-ID> [--md]")
         sys.exit(1)

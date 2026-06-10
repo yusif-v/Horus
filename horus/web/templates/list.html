@@ -4,12 +4,20 @@
 <h1 class="page-title">{{ title }} <em>· {{ total }}</em></h1>
 {% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
 
-{% if filters or sort_filters %}
+{% if filters or sort_filters or window_filters %}
 <div class="filter-bar">
   {% if filters %}
   <div class="filter-group">
     <span class="label">Filter</span>
     {% for f in filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if window_filters %}
+  <div class="filter-group">
+    <span class="label">Window</span>
+    {% for f in window_filters %}
     <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
     {% endfor %}
   </div>
@@ -28,7 +36,8 @@
 {% if rows %}
 <div class="panel">
   <div class="panel-body flush">
-    <table>
+    <table{% if col_widths %} class="fixed-cols"{% endif %}>
+      {% if col_widths %}<colgroup>{% for w in col_widths %}<col style="width: {{ w }};">{% endfor %}</colgroup>{% endif %}
       <thead><tr>{% for col in columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for row in rows %}

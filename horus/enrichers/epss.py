@@ -10,10 +10,8 @@ to ensure comprehensive coverage.
 from __future__ import annotations
 
 import gzip
-import io
 import sys
 import urllib.request
-
 
 NAME = "EPSS Scores"
 DEFAULT_ENABLED = True
@@ -25,9 +23,12 @@ EPSS_CSV_URL = "https://epss.cyentia.com/epss_scores-current.csv.gz"
 def _download_epss_scores() -> dict[str, float]:
     """Download and parse the EPSS CSV. Returns {cve_id: epss_score}."""
     try:
-        req = urllib.request.Request(EPSS_CSV_URL, headers={
-            "User-Agent": "Horus-PoC-Scanner/0.8",
-        })
+        req = urllib.request.Request(
+            EPSS_CSV_URL,
+            headers={
+                "User-Agent": "Horus-PoC-Scanner/0.8",
+            },
+        )
         with urllib.request.urlopen(req, timeout=60) as resp:
             raw = resp.read()
     except Exception as e:
@@ -83,6 +84,7 @@ def enrich(ctx) -> None:
 
     # Backfill: score ALL previously-unscored CVEs already in the DB.
     from ..storage import db as _db
+
     try:
         with _db.connect() as conn:
             _backfill_db(conn, scores)

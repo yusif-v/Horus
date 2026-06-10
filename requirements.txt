@@ -1,4 +1,0 @@
-# Horus dependencies
-# Core (stdlib only — no external deps for CLI scanner)
-# Web interface:
-flask>=3.0

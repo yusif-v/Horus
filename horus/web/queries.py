@@ -17,6 +17,7 @@ PER_PAGE_DEFAULT = 20
 
 # ── connection ──────────────────────────────────────────────────────────────
 
+
 def db_connect():
     """Open the SQLite DB via the storage layer's context manager.
 
@@ -37,6 +38,7 @@ def _rows_to_dicts(rows) -> list[dict]:
 
 # ── rail (top status strip) ─────────────────────────────────────────────────
 
+
 def rail_stats() -> dict:
     try:
         with db_connect() as conn:
@@ -50,33 +52,49 @@ def rail_stats() -> dict:
 
 # ── dashboard ───────────────────────────────────────────────────────────────
 
+
 def get_stats() -> dict:
     """All counts/breakdowns for the dashboard + /api/stats."""
     with db_connect() as conn:
         cve_count = conn.execute("SELECT COUNT(*) FROM cve").fetchone()[0]
         poc_count = conn.execute("SELECT COUNT(*) FROM poc").fetchone()[0]
         kev_count = conn.execute("SELECT COUNT(*) FROM cve WHERE kev = 1").fetchone()[0]
-        with_epss = conn.execute("SELECT COUNT(*) FROM cve WHERE epss_score IS NOT NULL").fetchone()[0]
+        with_epss = conn.execute(
+            "SELECT COUNT(*) FROM cve WHERE epss_score IS NOT NULL"
+        ).fetchone()[0]
         linked_pocs = conn.execute("SELECT COUNT(DISTINCT poc_url) FROM poc_cve").fetchone()[0]
         cves_with_pocs = conn.execute("SELECT COUNT(DISTINCT cve_id) FROM poc_cve").fetchone()[0]
 
-        avg_epss = conn.execute("SELECT AVG(epss_score) FROM cve WHERE epss_score IS NOT NULL").fetchone()[0]
-        avg_reputation = conn.execute("SELECT AVG(reputation_score) FROM cve WHERE reputation_score IS NOT NULL").fetchone()[0]
+        avg_epss = conn.execute(
+            "SELECT AVG(epss_score) FROM cve WHERE epss_score IS NOT NULL"
+        ).fetchone()[0]
+        avg_reputation = conn.execute(
+            "SELECT AVG(reputation_score) FROM cve WHERE reputation_score IS NOT NULL"
+        ).fetchone()[0]
 
-        social_heat = conn.execute("SELECT COUNT(*) FROM cve WHERE social_mentions > 0").fetchone()[0]
-        social_mentions_total = conn.execute("SELECT COALESCE(SUM(social_mentions), 0) FROM cve").fetchone()[0]
+        social_heat = conn.execute("SELECT COUNT(*) FROM cve WHERE social_mentions > 0").fetchone()[
+            0
+        ]
+        social_mentions_total = conn.execute(
+            "SELECT COALESCE(SUM(social_mentions), 0) FROM cve"
+        ).fetchone()[0]
 
         try:
-            watchlist_count = conn.execute("SELECT COUNT(*) FROM cve_watchlist WHERE resolved = 0").fetchone()[0]
+            watchlist_count = conn.execute(
+                "SELECT COUNT(*) FROM cve_watchlist WHERE resolved = 0"
+            ).fetchone()[0]
         except Exception:
             watchlist_count = 0
 
-        severity_breakdown = _rows_to_dicts(conn.execute(
-            "SELECT cvss_severity, COUNT(*) as cnt FROM cve WHERE cvss_severity IS NOT NULL"
-            " GROUP BY cvss_severity ORDER BY cnt DESC"
-        ).fetchall())
+        severity_breakdown = _rows_to_dicts(
+            conn.execute(
+                "SELECT cvss_severity, COUNT(*) as cnt FROM cve WHERE cvss_severity IS NOT NULL"
+                " GROUP BY cvss_severity ORDER BY cnt DESC"
+            ).fetchall()
+        )
 
-        epss_buckets = _rows_to_dicts(conn.execute("""
+        epss_buckets = _rows_to_dicts(
+            conn.execute("""
             SELECT CASE
                 WHEN epss_score >= 0.5 THEN 'Very High (≥0.5)'
                 WHEN epss_score >= 0.1 THEN 'High (0.1-0.5)'
@@ -85,48 +103,65 @@ def get_stats() -> dict:
             END as bucket, COUNT(*) as cnt
             FROM cve WHERE epss_score IS NOT NULL
             GROUP BY bucket ORDER BY cnt DESC
-        """).fetchall())
+        """).fetchall()
+        )
 
-        sources = _rows_to_dicts(conn.execute(
-            "SELECT source, COUNT(*) as cnt FROM poc GROUP BY source ORDER BY cnt DESC"
-        ).fetchall())
+        sources = _rows_to_dicts(
+            conn.execute(
+                "SELECT source, COUNT(*) as cnt FROM poc GROUP BY source ORDER BY cnt DESC"
+            ).fetchall()
+        )
 
-        categories = _rows_to_dicts(conn.execute(
-            "SELECT p.category, COUNT(DISTINCT cp.cve_id) as cnt FROM cve_product cp"
-            " JOIN product p ON p.id = cp.product_id"
-            " GROUP BY p.category ORDER BY cnt DESC"
-        ).fetchall())
+        categories = _rows_to_dicts(
+            conn.execute(
+                "SELECT p.category, COUNT(DISTINCT cp.cve_id) as cnt FROM cve_product cp"
+                " JOIN product p ON p.id = cp.product_id"
+                " GROUP BY p.category ORDER BY cnt DESC"
+            ).fetchall()
+        )
 
-        top_tags = _rows_to_dicts(conn.execute(
-            "SELECT tag, COUNT(*) as cnt FROM cve_attack_tag GROUP BY tag ORDER BY cnt DESC LIMIT 15"
-        ).fetchall())
+        top_tags = _rows_to_dicts(
+            conn.execute(
+                "SELECT tag, COUNT(*) as cnt FROM cve_attack_tag GROUP BY tag ORDER BY cnt DESC LIMIT 15"
+            ).fetchall()
+        )
 
-        recent_cves = _rows_to_dicts(conn.execute(
-            "SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
-            " FROM cve ORDER BY published_at DESC NULLS LAST LIMIT 10"
-        ).fetchall())
+        recent_cves = _rows_to_dicts(
+            conn.execute(
+                "SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
+                " FROM cve ORDER BY published_at DESC NULLS LAST LIMIT 10"
+            ).fetchall()
+        )
 
-        top_pocs = _rows_to_dicts(conn.execute(
-            "SELECT url, source, stars, description FROM poc WHERE stars IS NOT NULL"
-            " ORDER BY stars DESC LIMIT 10"
-        ).fetchall())
+        top_pocs = _rows_to_dicts(
+            conn.execute(
+                "SELECT url, source, stars, description FROM poc WHERE stars IS NOT NULL"
+                " ORDER BY stars DESC LIMIT 10"
+            ).fetchall()
+        )
 
-        highest_epss = _rows_to_dicts(conn.execute("""
+        highest_epss = _rows_to_dicts(
+            conn.execute("""
             SELECT id, cvss_score, cvss_severity, epss_score, kev FROM cve
             WHERE epss_score IS NOT NULL ORDER BY epss_score DESC LIMIT 10
-        """).fetchall())
+        """).fetchall()
+        )
 
-        kev_cves = _rows_to_dicts(conn.execute("""
+        kev_cves = _rows_to_dicts(
+            conn.execute("""
             SELECT id, cvss_score, cvss_severity, epss_score, description FROM cve
             WHERE kev = 1 ORDER BY cvss_score DESC NULLS LAST LIMIT 10
-        """).fetchall())
+        """).fetchall()
+        )
 
-        monthly_cves = _rows_to_dicts(conn.execute("""
+        monthly_cves = _rows_to_dicts(
+            conn.execute("""
             SELECT strftime('%Y-%m', published_at) as month, COUNT(*) as cnt
             FROM cve WHERE published_at IS NOT NULL
               AND published_at >= date('now', '-6 months')
             GROUP BY month ORDER BY month
-        """).fetchall())
+        """).fetchall()
+        )
 
         weaponized = conn.execute("""
             SELECT COUNT(DISTINCT c.id) FROM cve c
@@ -142,8 +177,12 @@ def get_stats() -> dict:
         latest_update = conn.execute("SELECT MAX(first_seen) FROM cve").fetchone()[0]
 
     return {
-        "cve_count": cve_count, "poc_count": poc_count, "kev_count": kev_count,
-        "with_epss": with_epss, "linked_pocs": linked_pocs, "cves_with_pocs": cves_with_pocs,
+        "cve_count": cve_count,
+        "poc_count": poc_count,
+        "kev_count": kev_count,
+        "with_epss": with_epss,
+        "linked_pocs": linked_pocs,
+        "cves_with_pocs": cves_with_pocs,
         "avg_epss": avg_epss,
         "avg_reputation": avg_reputation,
         "social_heat": social_heat,
@@ -151,16 +190,23 @@ def get_stats() -> dict:
         "watchlist_count": watchlist_count,
         "severity_breakdown": severity_breakdown,
         "epss_buckets": epss_buckets,
-        "sources": sources, "categories": categories, "top_tags": top_tags,
-        "recent_cves": recent_cves, "top_pocs": top_pocs,
-        "highest_epss": highest_epss, "kev_cves": kev_cves,
+        "sources": sources,
+        "categories": categories,
+        "top_tags": top_tags,
+        "recent_cves": recent_cves,
+        "top_pocs": top_pocs,
+        "highest_epss": highest_epss,
+        "kev_cves": kev_cves,
         "monthly_cves": monthly_cves,
-        "weaponized": weaponized, "imminent": imminent, "actionable": actionable,
+        "weaponized": weaponized,
+        "imminent": imminent,
+        "actionable": actionable,
         "latest_update": latest_update,
     }
 
 
 # ── search ──────────────────────────────────────────────────────────────────
+
 
 def search_cves(query: str, page: int = 1, per_page: int = 20) -> tuple[list[dict], int]:
     query = query.strip()
@@ -196,6 +242,7 @@ def search_cves(query: str, page: int = 1, per_page: int = 20) -> tuple[list[dic
 
 # ── CVE detail ──────────────────────────────────────────────────────────────
 
+
 def get_cve_detail(cve_id: str) -> dict | None:
     cve_id = cve_id.upper()
     if not cve_id.startswith("CVE-") and re.match(r"^\d{4}-\d{4,}$", cve_id):
@@ -206,53 +253,84 @@ def get_cve_detail(cve_id: str) -> dict | None:
         if not cve:
             return None
 
-        tags = [r[0] for r in conn.execute("SELECT tag FROM cve_attack_tag WHERE cve_id = ?", (cve_id,))]
-        cwes = [r[0] for r in conn.execute("SELECT cwe_id FROM cve_cwe WHERE cve_id = ?", (cve_id,))]
-        products = _rows_to_dicts(conn.execute("""
+        tags = [
+            r[0] for r in conn.execute("SELECT tag FROM cve_attack_tag WHERE cve_id = ?", (cve_id,))
+        ]
+        cwes = [
+            r[0] for r in conn.execute("SELECT cwe_id FROM cve_cwe WHERE cve_id = ?", (cve_id,))
+        ]
+        products = _rows_to_dicts(
+            conn.execute(
+                """
             SELECT p.vendor, p.product, cp.versions, p.category
             FROM cve_product cp JOIN product p ON p.id = cp.product_id
             WHERE cp.cve_id = ?
-        """, (cve_id,)))
-        sources = [r[0] for r in conn.execute("SELECT source FROM cve_source WHERE cve_id = ?", (cve_id,))]
-        linked_pocs = _rows_to_dicts(conn.execute("""
+        """,
+                (cve_id,),
+            )
+        )
+        sources = [
+            r[0] for r in conn.execute("SELECT source FROM cve_source WHERE cve_id = ?", (cve_id,))
+        ]
+        linked_pocs = _rows_to_dicts(
+            conn.execute(
+                """
             SELECT p.url, p.source, p.stars, p.age_days, p.description
             FROM poc_cve pc JOIN poc p ON p.url = pc.poc_url
             WHERE pc.cve_id = ? ORDER BY p.stars DESC NULLS LAST
-        """, (cve_id,)))
+        """,
+                (cve_id,),
+            )
+        )
 
         related: dict[str, dict] = {}
         if tags:
             placeholders = ",".join("?" * len(tags))
-            for r in conn.execute(f"""
+            for r in conn.execute(
+                f"""
                 SELECT DISTINCT c.id, c.cvss_score, c.cvss_severity, c.description
                 FROM cve c JOIN cve_attack_tag cat ON cat.cve_id = c.id
                 WHERE cat.tag IN ({placeholders}) AND c.id != ?
                 ORDER BY c.cvss_score DESC LIMIT 10
-            """, (*tags, cve_id)):
+            """,
+                (*tags, cve_id),
+            ):
                 rid = r[0]
                 if rid not in related:
                     related[rid] = {
-                        "id": rid, "cvss_score": r[1], "cvss_severity": r[2],
-                        "description": (r[3] or "")[:100], "relation": "same_attack_tag",
+                        "id": rid,
+                        "cvss_score": r[1],
+                        "cvss_severity": r[2],
+                        "description": (r[3] or "")[:100],
+                        "relation": "same_attack_tag",
                     }
         for prod in products:
-            for r in conn.execute("""
+            for r in conn.execute(
+                """
                 SELECT DISTINCT c.id, c.cvss_score, c.cvss_severity, c.description
                 FROM cve c JOIN cve_product cp ON cp.cve_id = c.id
                 JOIN product p ON p.id = cp.product_id
                 WHERE p.vendor = ? AND p.product = ? AND c.id != ?
                 ORDER BY c.cvss_score DESC LIMIT 5
-            """, (prod["vendor"], prod["product"], cve_id)):
+            """,
+                (prod["vendor"], prod["product"], cve_id),
+            ):
                 rid = r[0]
                 if rid not in related:
                     related[rid] = {
-                        "id": rid, "cvss_score": r[1], "cvss_severity": r[2],
-                        "description": (r[3] or "")[:100], "relation": "same_product",
+                        "id": rid,
+                        "cvss_score": r[1],
+                        "cvss_severity": r[2],
+                        "description": (r[3] or "")[:100],
+                        "relation": "same_product",
                     }
 
     return {
-        "cve": cve, "tags": tags, "cwes": cwes,
-        "products": products, "sources": sources,
+        "cve": cve,
+        "tags": tags,
+        "cwes": cwes,
+        "products": products,
+        "sources": sources,
         "linked_pocs": linked_pocs,
         "related_cves": list(related.values()),
     }
@@ -260,7 +338,10 @@ def get_cve_detail(cve_id: str) -> dict | None:
 
 # ── PoC list ────────────────────────────────────────────────────────────────
 
-def fetch_pocs(page: int = 1, per_page: int = 20, source_filter: str | None = None) -> tuple[list[dict], int]:
+
+def fetch_pocs(
+    page: int = 1, per_page: int = 20, source_filter: str | None = None
+) -> tuple[list[dict], int]:
     with db_connect() as conn:
         where, params = "", []
         if source_filter:
@@ -270,7 +351,7 @@ def fetch_pocs(page: int = 1, per_page: int = 20, source_filter: str | None = No
         rows = conn.execute(
             f"SELECT url, source, stars, age_days, description, first_seen FROM poc {where}"
             f" ORDER BY stars DESC NULLS LAST LIMIT ? OFFSET ?",
-            params + [per_page, offset],
+            [*params, per_page, offset],
         ).fetchall()
         return _rows_to_dicts(rows), total
 

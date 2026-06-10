@@ -13,14 +13,14 @@ Confidence scoring matches GitHub:
 """
 
 from __future__ import annotations
+
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import quote as url_quote
 
 from ..config import MAX_REPO_AGE_DAYS, MIN_REPO_STARS
 from ..core.filters import extract_cves, is_fresh_poc
 from ..net.http import fetch_json
-
 
 NAME = "GitLab PoC Repos"
 DEFAULT_ENABLED = True
@@ -29,8 +29,14 @@ KIND = "poc"
 # Single-keyword queries — GitLab search handles these well.
 # Multi-word phrases (e.g. "CVE-2026 exploit poc") return 0 results.
 SEARCH_TERMS = [
-    "CVE-2026", "CVE-2025", "exploit", "poc", "0day", "rce",
-    "vulnerability", "CVE",
+    "CVE-2026",
+    "CVE-2025",
+    "exploit",
+    "poc",
+    "0day",
+    "rce",
+    "vulnerability",
+    "CVE",
 ]
 
 
@@ -75,11 +81,11 @@ def run(ctx) -> dict:
 
             try:
                 created = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%S.%fZ")
-                age_days = (datetime.utcnow() - created).days
+                age_days = (datetime.now(timezone.utc).replace(tzinfo=None) - created).days
             except (ValueError, TypeError):
                 try:
                     created = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%SZ")
-                    age_days = (datetime.utcnow() - created).days
+                    age_days = (datetime.now(timezone.utc).replace(tzinfo=None) - created).days
                 except (ValueError, TypeError):
                     age_days = None
 
@@ -93,22 +99,25 @@ def run(ctx) -> dict:
                 continue
 
             ctx.known_poc_urls.add(web_url)
-            results.append({
-                "source": "gitlab",
-                "repo": repo_slug,
-                "url": web_url,
-                "description": description[:300],
-                "cves": extract_cves(combined),
-                "stars": stars,
-                "created": created_at[:10] if created_at else "",
-                "age_days": age_days,
-                "confidence": _confidence_for_stars(stars),
-            })
+            results.append(
+                {
+                    "source": "gitlab",
+                    "repo": repo_slug,
+                    "url": web_url,
+                    "description": description[:300],
+                    "cves": extract_cves(combined),
+                    "stars": stars,
+                    "created": created_at[:10] if created_at else "",
+                    "age_days": age_days,
+                    "confidence": _confidence_for_stars(stars),
+                }
+            )
 
     results.sort(key=lambda x: x.get("stars", 0), reverse=True)
     if ctx.max_results is not None:
         results = results[: ctx.max_results]
 
     from ..core.merge import poc_from_gitlab
+
     pocs = [poc_from_gitlab(r) for r in results]
     return {"cves": [], "pocs": pocs}
