@@ -6,6 +6,7 @@ state/horus.db-shm
 state/seen_items.json
 state/last_run.json
 state/*.bak
+state/horus.db.bak.*
 state/*.migrated
 
 # Generated reports
@@ -13,6 +14,8 @@ reports/
 
 # Python
 __pycache__/
+*/__pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
@@ -21,6 +24,9 @@ dist/
 .venv/
 venv/
 env/
+
+# Nested venv (accidental — should not exist inside horus/ package)
+horus/.venv/
 
 # Tooling caches
 .pytest_cache/
@@ -43,3 +49,7 @@ htmlcov/
 .remember/
 CLAUDE.local.md
 graphify-out/
+
+# Local config overrides (keep .example files in repo)
+horus.yaml
+.pre-commit-config.yaml

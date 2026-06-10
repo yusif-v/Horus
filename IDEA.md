@@ -1,5 +1,7 @@
 # Horus — Feature Ideas & Roadmap
 
+> **Extended ideas:** See `IDEA_EXTENDED.md` for 50+ additional features, use cases by persona, ML opportunities, compliance frameworks, and product directions.
+
 ## Current State Summary
 
 Horus v0.8.0 is a daily PoC research scanner with plugin architecture, 5 sources (NVD, GitHub, X/Twitter, Exploit-DB, GitLab), 2 enrichers (KEV, EPSS), SQLite persistence, reputation scoring, watchlist, 24/7 server mode, web dashboard, and CVE query reports. It collects, enriches, deduplicates, and reports on vulnerability data.
