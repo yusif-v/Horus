@@ -104,6 +104,24 @@ CREATE INDEX IF NOT EXISTS idx_cve_social_mentions      ON cve(social_mentions);
 CREATE INDEX IF NOT EXISTS idx_cve_poc_source_count     ON cve(poc_source_count);
 CREATE INDEX IF NOT EXISTS idx_cve_confidence           ON cve(confidence);
 
+-- ─── Social posts (X tweets mentioning a CVE) ────────────────────────────
+
+CREATE TABLE IF NOT EXISTS cve_social_post (
+    cve_id          TEXT NOT NULL REFERENCES cve(id) ON DELETE CASCADE,
+    url             TEXT NOT NULL,                 -- canonical post URL
+    source          TEXT NOT NULL,                 -- x_twitter | (future: news, mastodon, ...)
+    screen_name     TEXT,
+    likes           INTEGER DEFAULT 0,
+    retweets        INTEGER DEFAULT 0,
+    replies         INTEGER DEFAULT 0,
+    views           INTEGER DEFAULT 0,
+    posted_at       TEXT,                          -- ISO-8601 if known
+    first_seen      TEXT NOT NULL,
+    PRIMARY KEY (cve_id, url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cve_social_post_cve_id ON cve_social_post(cve_id);
+
 -- ─── Watchlist (signal-only CVEs not yet in NVD) ──────────────────────────
 
 CREATE TABLE IF NOT EXISTS cve_watchlist (

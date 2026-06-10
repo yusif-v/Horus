@@ -262,6 +262,14 @@ def run_pipeline(
             db.persist_watchlist(conn, cve_id, source=source, social_mentions=mentions)
         for cve in cves:
             db.resolve_watchlist(conn, cve.id)
+        if all_social_signals:
+            # Any CVE in the DB is a valid FK target — not just this cycle's batch.
+            # Tweets about CVEs persisted in earlier runs should still land here
+            # (they'd be treated as "signal-only" by the merge layer otherwise).
+            db_cve_ids = {row[0] for row in conn.execute("SELECT id FROM cve")}
+            posted = db.persist_social_posts(conn, all_social_signals, known_cve_ids=db_cve_ids)
+            if posted:
+                log(f"  persisted {posted} social posts")
         for name in source_results:
             db.mark_run(conn, name)
 

@@ -282,6 +282,19 @@ def get_cve_detail(cve_id: str) -> dict | None:
                 (cve_id,),
             )
         )
+        social_posts = _rows_to_dicts(
+            conn.execute(
+                """
+            SELECT url, source, screen_name, likes, retweets, replies, views, first_seen
+            FROM cve_social_post
+            WHERE cve_id = ?
+            ORDER BY (COALESCE(likes,0) + COALESCE(retweets,0) * 3) DESC,
+                     first_seen DESC
+            LIMIT 20
+        """,
+                (cve_id,),
+            )
+        )
 
         related: dict[str, dict] = {}
         if tags:
@@ -332,6 +345,7 @@ def get_cve_detail(cve_id: str) -> dict | None:
         "products": products,
         "sources": sources,
         "linked_pocs": linked_pocs,
+        "social_posts": social_posts,
         "related_cves": list(related.values()),
     }
 

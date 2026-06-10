@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from ..config import STATE_DIR
 from ..core.model import CVE, PoC
@@ -379,6 +380,52 @@ def persist_watchlist(
         """,
         (cve_id.upper(), now, social_mentions, source),
     )
+
+
+def persist_social_posts(
+    conn: sqlite3.Connection,
+    signals: list[dict[str, Any]],
+    known_cve_ids: set[str],
+) -> int:
+    """Persist tweet metadata for signals whose cve_id matches a stored CVE.
+
+    Watchlist-only signals are skipped — the CVE row doesn't exist yet, so
+    the FK would fail. Returns the number of rows upserted.
+    """
+    if not signals:
+        return 0
+    now = _now()
+    count = 0
+    for sig in signals:
+        cve_id = (sig.get("cve_id") or "").upper()
+        url = sig.get("tweet_url") or ""
+        if not cve_id or not url or cve_id not in known_cve_ids:
+            continue
+        conn.execute(
+            """INSERT INTO cve_social_post
+               (cve_id, url, source, screen_name, likes, retweets, replies, views, first_seen)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(cve_id, url) DO UPDATE SET
+                 likes     = excluded.likes,
+                 retweets  = excluded.retweets,
+                 replies   = excluded.replies,
+                 views     = excluded.views,
+                 screen_name = COALESCE(excluded.screen_name, cve_social_post.screen_name)
+            """,
+            (
+                cve_id,
+                url,
+                sig.get("source", "x_twitter"),
+                sig.get("screen_name") or None,
+                int(sig.get("likes") or 0),
+                int(sig.get("retweets") or 0),
+                int(sig.get("replies") or 0),
+                int(sig.get("views") or 0),
+                now,
+            ),
+        )
+        count += 1
+    return count
 
 
 def resolve_watchlist(conn: sqlite3.Connection, cve_id: str) -> None:
