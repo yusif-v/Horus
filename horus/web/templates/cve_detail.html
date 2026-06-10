@@ -86,14 +86,9 @@
             <td class="product-name">{{ product.product }}</td>
             <td class="version-cell">
               {% if product.versions %}
-                {% set version_str = product.versions|join(', ') %}
-                <span class="version-badge" title="{{ version_str }}">
-                  {% if version_str|length > 60 %}
-                    {{ version_str[:60] }}…
-                  {% else %}
-                    {{ version_str }}
-                  {% endif %}
-                </span>
+                {% for ver in product.versions %}
+                <span class="version-badge" title="{{ ver }}">{{ ver }}</span>
+                {% endfor %}
               {% else %}
                 <span style="color:var(--text-dim);">All versions</span>
               {% endif %}

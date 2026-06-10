@@ -254,10 +254,14 @@ def group_products_by_vendor(products: list[dict]) -> list[dict]:
         vendor = p.get("vendor", "unknown")
         if vendor not in vendors:
             vendors[vendor] = {"vendor": vendor, "products": []}
+        versions_raw = p.get("versions", "")
+        versions_list = (
+            [v.strip() for v in versions_raw.split(";") if v.strip()] if versions_raw else []
+        )
         vendors[vendor]["products"].append(
             {
                 "product": p.get("product", "unknown"),
-                "versions": p.get("versions", []),
+                "versions": versions_list,
                 "category": p.get("category", "unknown"),
             }
         )
