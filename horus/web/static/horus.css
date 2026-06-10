@@ -548,6 +548,67 @@ tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);    
   max-width: 80ch; line-height: 1.6;
 }
 
+/* ── PoC list CVE badges ─────────────────────────────── */
+.cve-links-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  align-items: center;
+}
+.badge-cve-mini {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .05em;
+  padding: .15rem .4rem;
+  border-radius: 2px;
+  border: 1px solid rgba(126,221,211,.25);
+  background: rgba(126,221,211,.08);
+  color: var(--info);
+  white-space: nowrap;
+}
+.badge-cve-mini:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(255,182,39,.08);
+}
+.badge-more {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .05em;
+  padding: .15rem .4rem;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* ── Filter chips ─────────────────────────────────────── */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: .3rem .6rem;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-mid);
+}
+.filter-chip .remove {
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 .15rem;
+  cursor: pointer;
+}
+.filter-chip .remove:hover {
+  color: var(--critical);
+}
+
 /* ── Layouts ─────────────────────────────────────────── */
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
 .three-col { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1.5rem; }

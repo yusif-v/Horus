@@ -45,6 +45,19 @@
         {% for cell in cells %}
         <td>
           {% if cell.type == 'cve_link' %}<a href="/cve/{{ row[cell.key] }}" class="cve-id-cell">{{ row[cell.key] }}</a>
+          {% elif cell.type == 'cve_links' %}
+            {% if row[cell.key] %}
+              <div class="cve-links-cell">
+              {% for cve in row[cell.key][:3] %}
+                <a href="/cve/{{ cve }}" class="badge badge-cve-mini">{{ cve }}</a>
+              {% endfor %}
+              {% if row[cell.key]|length > 3 %}
+                <span class="badge badge-more">+{{ row[cell.key]|length - 3 }}</span>
+              {% endif %}
+              </div>
+            {% else %}
+              <span style="color:var(--text-dim);">—</span>
+            {% endif %}
           {% elif cell.type == 'poc_link' %}<a href="{{ row[cell.key] }}" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:12px;">{{ row[cell.key][:60] }}…</a>
           {% elif cell.type == 'badge' %}{% if row[cell.key] %}<span class="badge badge-{{ row[cell.key]|lower }}">{{ row[cell.key] }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
           {% elif cell.type == 'score' %}<span class="num strong" style="color:{% if row[cell.key] is not none and row[cell.key] >= 9 %}var(--critical){% elif row[cell.key] is not none and row[cell.key] >= 7 %}var(--high){% elif row[cell.key] is not none and row[cell.key] >= 4 %}var(--medium){% else %}var(--low){% endif %};">{{ row[cell.key] or '—' }}</span>

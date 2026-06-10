@@ -363,11 +363,21 @@ def fetch_pocs(
         total = conn.execute(f"SELECT COUNT(*) FROM poc {where}", params).fetchone()[0]
         offset = (page - 1) * per_page
         rows = conn.execute(
-            f"SELECT url, source, stars, age_days, description, first_seen FROM poc {where}"
-            f" ORDER BY stars DESC NULLS LAST LIMIT ? OFFSET ?",
+            f"SELECT p.url, p.source, p.stars, p.age_days, p.description, p.first_seen,"
+            f" GROUP_CONCAT(pc.cve_id) AS cve_ids"
+            f" FROM poc p"
+            f" LEFT JOIN poc_cve pc ON pc.poc_url = p.url"
+            f" {where}"
+            f" GROUP BY p.url"
+            f" ORDER BY p.stars DESC NULLS LAST LIMIT ? OFFSET ?",
             [*params, per_page, offset],
         ).fetchall()
-        return _rows_to_dicts(rows), total
+        results = []
+        for r in rows:
+            d = dict(r)
+            d["cve_ids"] = d["cve_ids"].split(",") if d["cve_ids"] else []
+            results.append(d)
+        return results, total
 
 
 def safe_int(value: str, default: int = 1, min_val: int = 1, max_val: int = 10000) -> int:

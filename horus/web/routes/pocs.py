@@ -29,8 +29,9 @@ def list_pocs():
     for s in sources:
         filters.append({"label": s, "url": f"/pocs?source={s}", "active": source == s})
 
-    columns = ["URL", "Source", "Stars", "Age (d)", "Description"]
+    columns = ["CVE", "URL", "Source", "Stars", "Age (d)", "Description"]
     cells = [
+        {"type": "cve_links", "key": "cve_ids"},
         {"type": "poc_link", "key": "url"},
         {"type": "badge", "key": "source"},
         {"type": "stars", "key": "stars"},
