@@ -548,6 +548,79 @@ tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);    
   max-width: 80ch; line-height: 1.6;
 }
 
+/* ── Vendor grouping ──────────────────────────────────── */
+.vendor-group {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px dashed var(--border);
+}
+.vendor-group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+.vendor-name {
+  font-family: var(--display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: .75rem;
+  display: flex;
+  align-items: baseline;
+  gap: .75rem;
+}
+.vendor-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .15em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 400;
+}
+.vendor-products-table {
+  margin-left: 1rem;
+  width: calc(100% - 1rem);
+}
+.vendor-products-table thead th {
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+  padding: .5rem .75rem;
+  font-size: 9.5px;
+}
+.vendor-products-table tbody td {
+  padding: .5rem .75rem;
+  border-bottom: 1px solid rgba(31, 42, 48, .5);
+}
+.vendor-products-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.vendor-products-table .product-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 500;
+}
+.vendor-products-table .version-cell {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-mid);
+}
+.version-badge {
+  display: inline-block;
+  padding: .15rem .5rem;
+  background: rgba(255,182,39,.06);
+  border: 1px solid rgba(255,182,39,.15);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--accent);
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
 /* ── PoC list CVE badges ─────────────────────────────── */
 .cve-links-cell {
   display: flex;

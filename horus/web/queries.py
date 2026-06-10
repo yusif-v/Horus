@@ -243,6 +243,28 @@ def search_cves(query: str, page: int = 1, per_page: int = 20) -> tuple[list[dic
 # ── CVE detail ──────────────────────────────────────────────────────────────
 
 
+def group_products_by_vendor(products: list[dict]) -> list[dict]:
+    """Group flat product list into vendor → products hierarchy.
+
+    Input:  [{"vendor": "nginx", "product": "nginx", "versions": [...], "category": "web-server"}, ...]
+    Output: [{"vendor": "nginx", "products": [{"product": "nginx", "versions": [...], "category": "web-server"}, ...]}, ...]
+    """
+    vendors: dict[str, dict] = {}
+    for p in products:
+        vendor = p.get("vendor", "unknown")
+        if vendor not in vendors:
+            vendors[vendor] = {"vendor": vendor, "products": []}
+        vendors[vendor]["products"].append(
+            {
+                "product": p.get("product", "unknown"),
+                "versions": p.get("versions", []),
+                "category": p.get("category", "unknown"),
+            }
+        )
+    # Sort vendors alphabetically, unknown last
+    return sorted(vendors.values(), key=lambda v: (v["vendor"] == "unknown", v["vendor"]))
+
+
 def get_cve_detail(cve_id: str) -> dict | None:
     cve_id = cve_id.upper()
     if not cve_id.startswith("CVE-") and re.match(r"^\d{4}-\d{4,}$", cve_id):
@@ -343,6 +365,8 @@ def get_cve_detail(cve_id: str) -> dict | None:
         "tags": tags,
         "cwes": cwes,
         "products": products,
+        "products_grouped": group_products_by_vendor(products),
+        "product_count": len(set((p["vendor"], p["product"]) for p in products)),
         "sources": sources,
         "linked_pocs": linked_pocs,
         "social_posts": social_posts,
