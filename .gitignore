@@ -53,3 +53,4 @@ graphify-out/
 # Local config overrides (keep .example files in repo)
 horus.yaml
 .pre-commit-config.yaml
+ARCHITECTURE.md
