@@ -50,6 +50,11 @@ htmlcov/
 CLAUDE.local.md
 graphify-out/
 
+# Local-only docs (not for GitHub)
+IDEA.md
+IDEA_EXTENDED.md
+ISSUES.md
+
 # Local config overrides (keep .example files in repo)
 horus.yaml
 .pre-commit-config.yaml
