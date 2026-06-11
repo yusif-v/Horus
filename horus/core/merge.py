@@ -355,7 +355,7 @@ def poc_from_exploitdb(raw: dict[str, Any]) -> PoC:
 
 
 def poc_from_gitlab(raw: dict[str, Any]) -> PoC:
-    text = f"{raw.get('repo', '')} {raw.get('description', '')}"
+    text = f"{raw.get('repo', '')} {raw.get('description', '')} {raw.get('url', '')}"
     return PoC(
         url=raw.get("url", ""),
         source="gitlab",
