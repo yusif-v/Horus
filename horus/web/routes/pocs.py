@@ -6,11 +6,13 @@ from flask import Blueprint, request
 
 from .._render import error_page, page
 from ..queries import PER_PAGE_DEFAULT, db_connect, fetch_pocs, safe_int
+from .auth import login_required
 
 bp = Blueprint("pocs", __name__)
 
 
 @bp.route("/pocs")
+@login_required
 def list_pocs():
     pg = safe_int(request.args.get("page", "1"))
     source = request.args.get("source")

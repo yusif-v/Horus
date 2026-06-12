@@ -6,6 +6,7 @@ Local dev:  `python -m horus.web --port 8080`.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from .routes import ALL_BLUEPRINTS
 
 def create_app() -> Flask:
     """Build a Flask app. Templates + static dir live alongside this package."""
+    import secrets
+
     here = Path(__file__).parent
     app = Flask(
         __name__,
@@ -24,6 +27,7 @@ def create_app() -> Flask:
         static_folder=str(here / "static"),
         static_url_path="/static",
     )
+    app.secret_key = os.environ.get("HORUS_SECRET_KEY", secrets.token_hex(32))
     for bp in ALL_BLUEPRINTS:
         app.register_blueprint(bp)
     return app

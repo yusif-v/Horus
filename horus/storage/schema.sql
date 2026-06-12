@@ -132,3 +132,32 @@ CREATE TABLE IF NOT EXISTS cve_watchlist (
     confidence      TEXT DEFAULT 'low',
     resolved        INTEGER DEFAULT 0  -- 1 when NVD confirms it
 );
+
+-- ─── User management ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS role (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL UNIQUE,          -- admin | analyst | viewer
+    description     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS user (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    username        TEXT NOT NULL UNIQUE,
+    email           TEXT NOT NULL UNIQUE,
+    password_hash   TEXT NOT NULL,
+    is_active       INTEGER DEFAULT 1,
+    created_at      TEXT NOT NULL,
+    last_login      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS user_role (
+    user_id         INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    role_id         INTEGER NOT NULL REFERENCES role(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_username ON user(username);
+CREATE INDEX IF NOT EXISTS idx_user_email ON user(email);
+CREATE INDEX IF NOT EXISTS idx_user_role_user_id ON user_role(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_role_role_id ON user_role(role_id);

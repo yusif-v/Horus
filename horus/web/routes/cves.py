@@ -6,6 +6,7 @@ from flask import Blueprint, request
 
 from .._render import error_page, page
 from ..queries import PER_PAGE_DEFAULT, _rows_to_dicts, db_connect, safe_int
+from .auth import login_required
 
 bp = Blueprint("cves", __name__)
 
@@ -24,6 +25,7 @@ WINDOW_DAYS = {"day": 1, "week": 7, "month": 30}
 
 
 @bp.route("/cves")
+@login_required
 def list_cves():
     pg = safe_int(request.args.get("page", "1"))
     severity = request.args.get("severity")

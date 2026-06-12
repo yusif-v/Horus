@@ -15,9 +15,30 @@ def _init_db():
 
 @pytest.fixture()
 def client():
-    flask_app.config.update(TESTING=True)
+    flask_app.config.update(TESTING=True, SECRET_KEY="test-secret")
     with flask_app.test_client() as c:
         yield c
+
+
+@pytest.fixture()
+def auth_client(client):
+    """A client with a logged-in user."""
+    client.post(
+        "/register",
+        data={
+            "username": "testuser",
+            "email": "test@example.com",
+            "password": "password123",
+            "password_confirm": "password123",
+        },
+        follow_redirects=True,
+    )
+    client.post(
+        "/login",
+        data={"username": "testuser", "password": "password123"},
+        follow_redirects=True,
+    )
+    return client
 
 
 @pytest.mark.parametrize(
@@ -31,24 +52,24 @@ def client():
         "/api/stats",
     ],
 )
-def test_route_returns_200(client, path):
-    r = client.get(path)
+def test_route_returns_200(auth_client, path):
+    r = auth_client.get(path)
     assert r.status_code == 200, f"{path} returned {r.status_code}"
 
 
-def test_unknown_cve_returns_404(client):
-    r = client.get("/cve/CVE-9999-99999")
+def test_unknown_cve_returns_404(auth_client):
+    r = auth_client.get("/cve/CVE-9999-99999")
     assert r.status_code == 404
 
 
-def test_unknown_cve_api_returns_404_json(client):
-    r = client.get("/api/cve/CVE-9999-99999")
+def test_unknown_cve_api_returns_404_json(auth_client):
+    r = auth_client.get("/api/cve/CVE-9999-99999")
     assert r.status_code == 404
     assert r.get_json() == {"error": "not found"}
 
 
-def test_api_stats_contract_keys_present(client):
-    data = client.get("/api/stats").get_json()
+def test_api_stats_contract_keys_present(auth_client):
+    data = auth_client.get("/api/stats").get_json()
     # Lock the API contract so consumers don't break silently.
     must_have = {
         "cve_count",
@@ -66,8 +87,8 @@ def test_api_stats_contract_keys_present(client):
     assert must_have.issubset(data.keys())
 
 
-def test_pages_share_horizontal_anchor(client):
+def test_pages_share_horizontal_anchor(auth_client):
     """The scrollbar-gutter + .nav max-width fix must remain in the CSS."""
-    css = client.get("/static/horus.css").get_data(as_text=True)
+    css = auth_client.get("/static/horus.css").get_data(as_text=True)
     assert "scrollbar-gutter: stable" in css
     assert "max-width: 1320px" in css  # both .nav and .container use it

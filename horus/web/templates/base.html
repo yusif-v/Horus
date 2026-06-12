@@ -34,6 +34,12 @@
   <form class="search" action="/search" method="get">
     <input type="text" name="q" placeholder="CVE-ID OR KEYWORD" value="{{ search_query|default('') }}" autocomplete="off">
   </form>
+  {% if g.user %}
+  <div class="user-menu">
+    <span class="user-name">{{ g.user.username }}</span>
+    <a href="{{ url_for('auth.logout') }}" class="btn btn-sm">Logout</a>
+  </div>
+  {% endif %}
 </nav>
 </div>
 <div class="container">

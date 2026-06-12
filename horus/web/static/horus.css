@@ -705,3 +705,148 @@ tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);    
   .posture .cell:last-child { border-bottom: none; }
   .bar-row { grid-template-columns: 100px 1fr 50px; gap: .6rem; }
 }
+
+/* ── Auth: login / register ───────────────────────────── */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+.login-wrap {
+  width: 100%;
+  max-width: 420px;
+  padding: 2rem;
+}
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2.5rem 2rem 2rem;
+  box-shadow: var(--shadow);
+}
+.login-brand {
+  margin-bottom: 2rem;
+}
+.login-brand .logo {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--text);
+}
+.login-brand .logo .dot { color: var(--accent); font-style: normal; }
+.login-brand .logo .sub {
+  font-family: var(--mono); font-style: normal;
+  font-size: 9px; letter-spacing: .25em;
+  color: var(--text-dim); text-transform: uppercase;
+}
+.login-card h1 {
+  font-family: var(--display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  letter-spacing: -.01em;
+}
+.login-card .field { margin-bottom: 1rem; }
+.login-card .field label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px; letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: .4rem;
+}
+.login-card .field input[type="text"],
+.login-card .field input[type="email"],
+.login-card .field input[type="password"] {
+  width: 100%;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  padding: .65rem .85rem;
+  font-size: 13px;
+  border-radius: 2px;
+}
+.login-card .field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.login-card .btn {
+  width: 100%;
+  margin-top: .5rem;
+}
+.login-card .error-banner {
+  background: rgba(255,59,59,.1);
+  border: 1px solid rgba(255,59,59,.3);
+  color: var(--critical);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: .65rem .85rem;
+  border-radius: 2px;
+  margin-bottom: 1rem;
+}
+.login-footer {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}
+.login-footer a {
+  color: var(--accent);
+  font-weight: 500;
+}
+.login-footer a:hover { text-decoration: underline; }
+
+/* ── User menu in nav ─────────────────────────────────── */
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-left: 1rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--border);
+}
+.user-name {
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: .08em;
+  color: var(--text-mid);
+  text-transform: uppercase;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase;
+  padding: .45rem 1rem;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn:hover {
+  color: var(--text);
+  border-color: var(--border-hi);
+  background: var(--surface);
+}
+.btn-primary {
+  background: var(--accent);
+  color: #0a0d0c;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.btn-primary:hover {
+  background: #ffc54d;
+  border-color: #ffc54d;
+  color: #0a0d0c;
+}
+.btn-sm {
+  padding: .3rem .65rem;
+  font-size: 10px;
+}

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — Horus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='horus.css') }}">
+</head>
+<body class="login-page">
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand">
+      <a href="/" class="logo">Horus<span class="dot">.</span><span class="sub">CVE INTEL</span></a>
+    </div>
+    <h1>Sign in</h1>
+    {% if error %}
+    <div class="error-banner">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="{{ url_for('auth.login') }}">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" value="{{ username|default('') }}" required autocomplete="username" autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary">Sign in</button>
+    </form>
+    <div class="login-footer">
+      <span>No account? <a href="{{ url_for('auth.register') }}">Register</a></span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
