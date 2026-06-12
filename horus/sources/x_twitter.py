@@ -13,10 +13,10 @@ Falls back to dynamically discovered query IDs if known ones expire.
 
 from __future__ import annotations
 
-import re
 import sys
 
 from ..core.filters import extract_cves
+from ..core.url_extractor import UrlType, extract_urls
 
 # Reuse the standalone xsearch module for auth + API
 from ..net.xsearch import XAuthError, XSearch, XSearchError
@@ -27,20 +27,30 @@ KIND = "poc"
 PROVIDES = ["x_discovered_urls"]  # github source picks these up
 SOCIAL_SOURCE_NAME = "x_twitter"  # tagged on watchlist entries
 
-# Targeted search queries — GitHub-focused, no broad noise
+# Targeted search queries — broad PoC discovery
 DEFAULT_QUERIES = [
     "CVE-2026 github.com",
     "CVE-2025 github.com",
+    "CVE-2026 gitlab.com",
+    "CVE-2025 gitlab.com",
     "CVE PoC github",
     "CVE exploit github.com",
+    "CVE exploit gitlab.com",
     "0day github.com PoC",
+    "0day gitlab.com PoC",
+    "CVE-2026 pastebin",
+    "CVE-2026 gist.github",
+    "CVE exploit pastebin",
+    "CVE PoC gist",
+    "CVE-2026 PoC",
+    "CVE-2025 PoC",
+    "CVE exploit code",
+    "security exploit repo",
+    "CVE-2026 disclosure",
+    "CVE-2025 disclosure",
+    "hackerone CVE-2026",
+    "hackerone CVE-2025",
 ]
-
-# Regex to extract GitHub repo URLs from tweet text
-_GITHUB_URL_RE = re.compile(
-    r"https?://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+",
-    re.IGNORECASE,
-)
 
 
 def run(ctx) -> dict:
@@ -99,25 +109,23 @@ def run(ctx) -> dict:
                     }
                 )
 
-            # GitHub URL discovery: extract GitHub repo URLs from tweet
-            gh_urls = _GITHUB_URL_RE.findall(text)
-            for gh_url in gh_urls:
-                # Normalize: strip trailing paths beyond repo slug
-                # e.g. https://github.com/user/repo/blob/... -> https://github.com/user/repo
-                parts = gh_url.rstrip("/").split("/")
-                if len(parts) >= 5:
-                    gh_url = "/".join(parts[:5])
-                if gh_url in ctx.known_poc_urls or gh_url in github_poc_urls:
+            # URL discovery: extract all categorized URLs from tweet text
+            extracted_urls = extract_urls(text)
+            for extracted in extracted_urls:
+                url = extracted.canonical_url
+                if url in ctx.known_poc_urls or url in github_poc_urls:
                     continue
-                github_poc_urls[gh_url] = {
-                    "url": gh_url,
-                    "source": "github",
+                # Tag with CVE refs and tweet metadata
+                github_poc_urls[url] = {
+                    "url": url,
+                    "source": _source_for_url_type(extracted.url_type),
                     "discovered_via": "x",
                     "cves": cves,
                     "stars": None,
                     "age_days": None,
                     "description": text[:300],
                     "tweet_url": tweet_url,
+                    "url_type": extracted.url_type.value,
                 }
 
     if not social_signals and not github_poc_urls:
@@ -138,3 +146,19 @@ def run(ctx) -> dict:
         "social_signals": social_signals,
         "x_discovered_urls": [p["url"] for p in poc_dicts],
     }
+
+
+def _source_for_url_type(url_type: UrlType) -> str:
+    """Map URL type to PoC source name."""
+    mapping = {
+        UrlType.GITHUB_REPO: "github",
+        UrlType.GITHUB_GIST: "github",
+        UrlType.GITHUB_RAW: "github",
+        UrlType.GITLAB_REPO: "gitlab",
+        UrlType.GITLAB_SNIPPET: "gitlab",
+        UrlType.PASTEBIN: "pastebin",
+        UrlType.HACKERONE: "hackerone",
+        UrlType.BUGCROWD: "bugcrowd",
+        UrlType.GENERIC: "web",
+    }
+    return mapping.get(url_type, "web")

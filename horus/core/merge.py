@@ -366,6 +366,30 @@ def poc_from_gitlab(raw: dict[str, Any]) -> PoC:
     )
 
 
+def poc_from_pastebin(raw: dict[str, Any]) -> PoC:
+    return PoC(
+        url=raw.get("url", ""),
+        source="pastebin",
+        stars=None,
+        age_days=None,
+        description=raw.get("description", "")[:300],
+        cve_refs=raw.get("cves", []),
+    )
+
+
+def poc_from_web(raw: dict[str, Any]) -> PoC:
+    """Generic PoC from any web URL (HackerOne, Bugcrowd, etc.)."""
+    source = raw.get("source", "web")
+    return PoC(
+        url=raw.get("url", ""),
+        source=source,
+        stars=None,
+        age_days=None,
+        description=raw.get("description", "")[:300],
+        cve_refs=raw.get("cves", []),
+    )
+
+
 # Map source names to builder functions
 POC_BUILDERS = {
     "github": poc_from_github,
@@ -373,13 +397,27 @@ POC_BUILDERS = {
     "nitter": poc_from_nitter,
     "exploit-db": poc_from_exploitdb,
     "gitlab": poc_from_gitlab,
+    "pastebin": poc_from_pastebin,
+    "hackerone": poc_from_web,
+    "bugcrowd": poc_from_web,
+    "web": poc_from_web,
 }
 
 
 def deduplicate_pocs(pocs: list[PoC]) -> list[PoC]:
     """Merge duplicate PoCs by URL, keeping the richest metadata."""
     seen: dict[str, PoC] = {}
-    source_priority = {"exploit-db": 3, "github": 2, "gitlab": 2, "nitter": 1, "twitter": 0}
+    source_priority = {
+        "exploit-db": 3,
+        "github": 2,
+        "gitlab": 2,
+        "hackerone": 2,
+        "bugcrowd": 2,
+        "pastebin": 1,
+        "nitter": 1,
+        "twitter": 0,
+        "web": 0,
+    }
 
     for poc in pocs:
         if poc.url in seen:
