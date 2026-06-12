@@ -1,0 +1,83 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1a1a2e', 'primaryTextColor': '#e0e0e0', 'primaryBorderColor': '#4a9eff', 'lineColor': '#aaa', 'secondaryColor': '#2e1a2e', 'tertiaryColor': '#1a2e1a', 'background': '#0d1117', 'mainBkg': '#161b22', 'nodeBorder': '#30363d', 'clusterBkg': '#1c2128', 'titleColor': '#e0e0e0', 'edgeLabelBackground': '#1c2128'}}}%%
+graph LR
+    classDef html fill:#1a1a2e,stroke:#4a9eff,color:#e0e0e0,rx:8,ry:8
+    classDef api fill:#2e1a2e,stroke:#bf4aff,color:#e0e0e0,rx:8,ry:8
+    classDef planned fill:#1a2e1a,stroke:#4aff4a,color:#e0e0e0,stroke-dasharray: 5 5,rx:8,ry:8
+    classDef internal fill:#2e2e1a,stroke:#bfbf4a,color:#e0e0e0,rx:8,ry:8
+    classDef client fill:#1a1a1a,stroke:#666,color:#ccc,rx:8,ry:8
+
+    Browser["<b>Browser</b><br/>Nav Rail"]:::client
+
+    subgraph HTML["HTML Pages — server-rendered Jinja2"]
+        direction TB
+        D["<b>GET /</b><br/>Dashboard<br/><small>get_stats() → 20+ metrics</small>"]:::html
+        S["<b>GET /search?q={q}</b><br/>Search Results<br/><small>redirects to / if empty</small>"]:::html
+        CD["<b>GET /cve/{id}</b><br/>CVE Detail<br/><small>+tags +cwes +pocs +social</small>"]:::html
+        CV["<b>GET /cves</b><br/>CVE Index<br/><small>filters: severity, kev, sort, window</small>"]:::html
+        PL["<b>GET /pocs</b><br/>PoC List<br/><small>filter: source</small>"]:::html
+        TQ["<b>GET /triage</b><br/>Triage Queue<br/><small>lens: all|kev|imminent|weaponized</small>"]:::html
+    end
+
+    subgraph JSON["JSON API"]
+        direction TB
+        AS["<b>GET /api/stats</b><br/>System statistics"]:::api
+        AC["<b>GET /api/cve/{id}</b><br/>CVE detail JSON"]:::api
+    end
+
+    subgraph FUTURE["Planned — v0.9.x / v1.0"]
+        direction TB
+        NF["<b>GET /news</b><br/>News Feed<br/><small>RSS + X/Twitter + vendor</small>"]:::planned
+        NA["<b>GET /api/news</b><br/>News JSON API"]:::planned
+        WL["<b>GET /watchlist</b><br/>Watchlist page"]:::planned
+        WA["<b>GET|POST|DELETE</b><br/>/api/watchlist"]:::planned
+        WS["<b>WS /ws/live</b><br/>Real-time push"]:::planned
+    end
+
+    subgraph QL["Query Layer — queries.py"]
+        direction TB
+        Q1["get_stats()"]:::internal
+        Q2["search_cves()"]:::internal
+        Q3["get_cve_detail()"]:::internal
+        Q4["fetch_pocs()"]:::internal
+        Q5["get_news() *"]:::internal
+    end
+
+    DB[("<b>horus.db — SQLite</b><br/>cve · poc · poc_cve · cve_attack_tag<br/>cve_cwe · cve_product · product<br/>cve_social_post · cve_watchlist *<br/>news_item *")]:::internal
+
+    %% Browser → Routes
+    Browser --> D
+    Browser --> S
+    Browser --> CV
+    Browser --> PL
+    Browser --> TQ
+
+    %% HTML → Queries
+    D --> Q1
+    S --> Q2
+    CD --> Q3
+    CV --> Q3
+    PL --> Q4
+    TQ --> Q3
+
+    %% API → Queries
+    AS --> Q1
+    AC --> Q3
+
+    %% Planned → Queries
+    NF --> Q5
+    NA --> Q5
+
+    %% Queries → DB
+    Q1 --> DB
+    Q2 --> DB
+    Q3 --> DB
+    Q4 --> DB
+    Q5 --> DB
+
+    %% Cross-route navigation
+    D -->|"recent CVEs"| CD
+    S -->|"result click"| CD
+    CV -->|"row link"| CD
+    PL -->|"CVE badges"| CD
+    TQ -->|"row link"| CD
+    NF -->|"CVE refs"| CD
