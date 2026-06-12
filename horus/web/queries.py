@@ -382,7 +382,7 @@ def get_cve_detail(cve_id: str) -> dict | None:
 
 
 def fetch_pocs(
-    page: int = 1, per_page: int = 20, source_filter: str | None = None, sort: str = "newest"
+    page: int = 1, per_page: int = 20, source_filter: str | None = None, sort: str = "age"
 ) -> tuple[list[dict], int]:
     with db_connect() as conn:
         where, params = "", []
@@ -396,9 +396,10 @@ def fetch_pocs(
         )) AS INTEGER)"""
         # Sort mapping
         sort_map = {
-            "newest": "p.first_seen DESC, p.rowid DESC",
+            "age": f"{age_expr} ASC, p.first_seen DESC",  # Youngest repos first (newest by creation)
             "stars": "p.stars DESC NULLS LAST, p.first_seen DESC",
-            "age": f"{age_expr} ASC, p.first_seen DESC",
+            "oldest": f"{age_expr} DESC, p.first_seen DESC",  # Oldest repos first
+            "newest": f"{age_expr} ASC, p.first_seen DESC",  # Same as age — youngest first
         }
         order_by = sort_map.get(sort, sort_map["newest"])
         rows = conn.execute(

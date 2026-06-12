@@ -10,7 +10,7 @@ from .auth import login_required
 
 bp = Blueprint("pocs", __name__)
 
-VALID_SORTS = {"newest", "stars", "age"}
+VALID_SORTS = {"newest", "stars", "oldest"}
 
 
 @bp.route("/pocs")
@@ -49,7 +49,11 @@ def list_pocs():
             "url": f"/pocs?sort=stars&source={source or ''}",
             "active": sort == "stars",
         },
-        {"label": "Age", "url": f"/pocs?sort=age&source={source or ''}", "active": sort == "age"},
+        {
+            "label": "Oldest",
+            "url": f"/pocs?sort=oldest&source={source or ''}",
+            "active": sort == "oldest",
+        },
     ]
 
     columns = ["CVE", "URL", "Source", "Stars", "Age (d)", "Description"]
