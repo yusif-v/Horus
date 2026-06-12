@@ -176,7 +176,7 @@ def run(ctx) -> dict:
                 }
             )
 
-    results.sort(key=lambda x: x.get("stars", 0), reverse=True)
+    # No re-sorting here — web query handles ordering (newest first by default)
     if ctx.max_results is not None:
         results = results[: ctx.max_results]
 
