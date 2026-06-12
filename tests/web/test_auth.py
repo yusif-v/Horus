@@ -157,3 +157,81 @@ class TestAccessControl:
         _login(client)
         r = client.get("/register", follow_redirects=True)
         assert r.status_code == 200
+
+
+class TestLoginRedirect:
+    def test_login_redirects_to_next_url(self, client):
+        _register(client)
+        r = client.post(
+            "/login?next=/triage",
+            data={"username": "testuser", "password": "password123"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 302
+        assert r.headers["Location"].endswith("/triage")
+
+    def test_login_rejects_external_next_url(self, client):
+        _register(client)
+        r = client.post(
+            "/login?next=https://evil.com/phish",
+            data={"username": "testuser", "password": "password123"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 302
+        assert "evil.com" not in r.headers["Location"]
+
+    def test_login_rejects_protocol_relative_next_url(self, client):
+        _register(client)
+        r = client.post(
+            "/login?next=//evil.com/phish",
+            data={"username": "testuser", "password": "password123"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 302
+        assert "evil.com" not in r.headers["Location"]
+
+
+class TestFirstUserAdmin:
+    def test_first_registered_user_gets_admin_role(self, client):
+        _register(client, username="firstuser", email="first@example.com")
+        _login(client, username="firstuser")
+        r = client.get("/")
+        assert r.status_code == 200
+
+    def test_second_registered_user_gets_viewer_role(self, client):
+        _register(client, username="firstuser", email="first@example.com")
+        _register(client, username="seconduser", email="second@example.com")
+        _login(client, username="seconduser")
+        r = client.get("/")
+        assert r.status_code == 200
+
+
+class TestRegisterValidation:
+    def test_register_duplicate_email(self, client):
+        _register(client, username="user1", email="same@example.com")
+        r = _register(client, username="user2", email="same@example.com")
+        assert r.status_code == 409
+
+    def test_register_invalid_email(self, client):
+        r = client.post(
+            "/register",
+            data={
+                "username": "newuser",
+                "email": "not-an-email",
+                "password": "password123",
+                "password_confirm": "password123",
+            },
+        )
+        assert r.status_code == 400
+
+    def test_register_empty_fields(self, client):
+        r = client.post(
+            "/register",
+            data={
+                "username": "",
+                "email": "",
+                "password": "",
+                "password_confirm": "",
+            },
+        )
+        assert r.status_code == 400

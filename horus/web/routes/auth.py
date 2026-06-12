@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import functools
+import re
 from datetime import datetime, timezone
+from urllib.parse import urljoin, urlparse
 
 from flask import (
     Blueprint,
@@ -27,6 +29,16 @@ DEFAULT_ROLES = [
     ("analyst", "Can view and analyze CVEs, create alerts and reports"),
     ("viewer", "Read-only access to CVE data"),
 ]
+
+# Dummy hash for constant-time check when username not found (prevents timing attacks)
+_DUMMY_HASH = "pbkdf2:sha256:600000$dummy$hash"
+
+
+def _is_safe_url(target: str) -> bool:
+    """Validate that a redirect URL is safe (same host, not external)."""
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ("http", "https") and ref_url.netloc == test_url.netloc
 
 
 def _now() -> str:
@@ -141,21 +153,28 @@ def login():
         with _storage.connect() as conn:
             user = _get_user(conn, username)
 
-        if user and check_password_hash(user["password_hash"], password):
+        # Constant-time check: always run check_password_hash to prevent
+        # timing attacks that could enumerate valid usernames.
+        if user:
+            valid = check_password_hash(user["password_hash"], password)
+        else:
+            check_password_hash(_DUMMY_HASH, password)
+            valid = False
+
+        if valid:
             session.clear()
             session["user_id"] = user["id"]
-            conn = _storage.connect().__enter__()
             try:
-                conn.execute(
-                    "UPDATE user SET last_login = ? WHERE id = ?",
-                    (_now(), user["id"]),
-                )
-                conn.commit()
+                with _storage.connect() as conn:
+                    conn.execute(
+                        "UPDATE user SET last_login = ? WHERE id = ?",
+                        (_now(), user["id"]),
+                    )
             except Exception:
-                pass
-            finally:
-                conn.close()
-            next_url = request.args.get("next", url_for("dashboard.index"))
+                pass  # Non-critical — don't block login if this fails
+            next_url = request.args.get("next", "")
+            if not next_url or not _is_safe_url(next_url):
+                next_url = url_for("dashboard.index")
             return redirect(next_url)
 
         return page(
@@ -188,7 +207,7 @@ def register():
         errors = []
         if not username or len(username) < 3:
             errors.append("Username must be at least 3 characters.")
-        if not email or "@" not in email:
+        if not email or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
             errors.append("A valid email is required.")
         if not password or len(password) < 8:
             errors.append("Password must be at least 8 characters.")

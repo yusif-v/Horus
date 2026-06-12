@@ -27,7 +27,22 @@ def create_app() -> Flask:
         static_folder=str(here / "static"),
         static_url_path="/static",
     )
-    app.secret_key = os.environ.get("HORUS_SECRET_KEY", secrets.token_hex(32))
+    secret_key = os.environ.get("HORUS_SECRET_KEY")
+    if not secret_key:
+        import warnings
+
+        warnings.warn(
+            "HORUS_SECRET_KEY not set — using ephemeral key. "
+            "Sessions will not survive restarts. "
+            "Set HORUS_SECRET_KEY in production.",
+            stacklevel=2,
+        )
+        secret_key = secrets.token_hex(32)
+    app.secret_key = secret_key
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+    )
     for bp in ALL_BLUEPRINTS:
         app.register_blueprint(bp)
     return app
