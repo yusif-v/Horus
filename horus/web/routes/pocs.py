@@ -48,7 +48,7 @@ def list_pocs():
         active="pocs",
         eyebrow="Proof-of-concept artifacts",
         subtitle="Public exploit artifacts harvested from GitHub, Exploit-DB and other sources. "
-        "Ranked by GitHub stars when available.",
+        "Sorted by most recently seen.",
         rows=rows,
         total=total,
         page=pg,

@@ -22,13 +22,14 @@ CREATE TABLE IF NOT EXISTS cve (
 
 CREATE TABLE IF NOT EXISTS poc (
     url             TEXT PRIMARY KEY,
-    source          TEXT NOT NULL,              -- github | gitlab | exploit-db | packetstorm | nitter | twitter | manual
+    source          TEXT NOT NULL,              -- github | gitlab | exploit-db | pastebin | web | manual
     stars           INTEGER,
-    age_days        INTEGER,
+    age_days        INTEGER,                    -- Deprecated: computed dynamically from repo_created_at
     description     TEXT,
     fetched_date    TEXT,                       -- when PoC was fetched from external source
     first_seen      TEXT NOT NULL,
-    last_seen       TEXT NOT NULL
+    last_seen       TEXT NOT NULL,
+    repo_created_at TEXT                        -- ISO 8601: when the repo/resource was created at source
 );
 
 CREATE TABLE IF NOT EXISTS product (

@@ -334,18 +334,34 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
 
 def persist_poc(conn: sqlite3.Connection, poc: PoC) -> None:
     now = _now()
+    # Compute age_days dynamically from repo_created_at
+    age_days = _compute_age_days(poc.repo_created_at)
     conn.execute(
         """INSERT INTO poc
-              (url, source, stars, age_days, description, first_seen, last_seen)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+              (url, source, stars, age_days, description, first_seen, last_seen, repo_created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(url) DO UPDATE SET
-             stars       = excluded.stars,
-             age_days    = excluded.age_days,
-             description = excluded.description,
-             last_seen   = excluded.last_seen
+             stars           = excluded.stars,
+             age_days        = excluded.age_days,
+             description     = excluded.description,
+             last_seen       = excluded.last_seen,
+             repo_created_at = COALESCE(excluded.repo_created_at, poc.repo_created_at)
         """,
-        (poc.url, poc.source, poc.stars, poc.age_days, poc.description, now, now),
+        (poc.url, poc.source, poc.stars, age_days, poc.description, now, now, poc.repo_created_at),
     )
+
+
+def _compute_age_days(repo_created_at: str | None) -> int | None:
+    """Compute age in days from an ISO 8601 timestamp."""
+    if not repo_created_at:
+        return None
+    try:
+        from datetime import datetime, timezone
+
+        created = datetime.fromisoformat(repo_created_at.replace("Z", "+00:00"))
+        return (datetime.now(timezone.utc) - created).days
+    except (ValueError, TypeError):
+        return None
 
 
 def link_poc_to_cve(conn: sqlite3.Connection, poc_url: str, cve_id: str) -> bool:

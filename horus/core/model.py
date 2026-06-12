@@ -26,11 +26,12 @@ class AffectedProduct:
 @dataclass
 class PoC:
     url: str
-    source: str  # "github" | "gitlab" | "exploit-db" | "twitter"
+    source: str  # "github" | "gitlab" | "exploit-db" | "twitter" | "pastebin" | "web"
     stars: int | None = None
-    age_days: int | None = None
+    age_days: int | None = None  # Computed dynamically from repo_created_at at query time
     description: str | None = None
     cve_refs: list[str] = field(default_factory=list)
+    repo_created_at: str | None = None  # ISO 8601 timestamp from source (e.g. GitHub created_at)
 
 
 @dataclass

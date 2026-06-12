@@ -391,13 +391,17 @@ def fetch_pocs(
         total = conn.execute(f"SELECT COUNT(*) FROM poc {where}", params).fetchone()[0]
         offset = (page - 1) * per_page
         rows = conn.execute(
-            f"SELECT p.url, p.source, p.stars, p.age_days, p.description, p.first_seen,"
-            f" GROUP_CONCAT(pc.cve_id) AS cve_ids"
-            f" FROM poc p"
-            f" LEFT JOIN poc_cve pc ON pc.poc_url = p.url"
-            f" {where}"
-            f" GROUP BY p.url"
-            f" ORDER BY p.stars DESC NULLS LAST LIMIT ? OFFSET ?",
+            f"""SELECT p.url, p.source, p.stars, p.description, p.first_seen,
+                       p.repo_created_at,
+                       CAST((julianday('now') - julianday(
+                           COALESCE(p.repo_created_at, p.first_seen)
+                       )) AS INTEGER) AS age_days,
+                       GROUP_CONCAT(pc.cve_id) AS cve_ids
+                FROM poc p
+                LEFT JOIN poc_cve pc ON pc.poc_url = p.url
+                {where}
+                GROUP BY p.url
+                ORDER BY p.first_seen DESC NULLS LAST LIMIT ? OFFSET ?""",
             [*params, per_page, offset],
         ).fetchall()
         results = []

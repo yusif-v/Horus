@@ -314,9 +314,10 @@ def poc_from_github(raw: dict[str, Any]) -> PoC:
         url=raw.get("url", ""),
         source="github",
         stars=raw.get("stars"),
-        age_days=raw.get("age_days"),
+        age_days=None,  # Computed dynamically from repo_created_at
         description=raw.get("description"),
         cve_refs=raw.get("cves") or extract_cves(text),
+        repo_created_at=raw.get("repo_created_at"),
     )
 
 

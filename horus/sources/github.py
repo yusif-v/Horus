@@ -115,7 +115,7 @@ def run(ctx) -> dict:
                     "cves": cves,
                     "stars": stars,
                     "created": created_at[:10] if created_at else "",
-                    "age_days": age_days,
+                    "repo_created_at": created_at,
                     "discovered_via": "x",
                     "confidence": _confidence_for_stars(stars),
                 }
@@ -171,7 +171,7 @@ def run(ctx) -> dict:
                     "cves": extract_cves(combined),
                     "stars": stars,
                     "created": created_at[:10] if created_at else "",
-                    "age_days": age_days,
+                    "repo_created_at": created_at,
                     "confidence": _confidence_for_stars(stars),
                 }
             )

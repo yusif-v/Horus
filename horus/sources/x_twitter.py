@@ -126,6 +126,7 @@ def run(ctx) -> dict:
                     "description": text[:300],
                     "tweet_url": tweet_url,
                     "url_type": extracted.url_type.value,
+                    "repo_created_at": None,
                 }
 
     if not social_signals and not github_poc_urls:
