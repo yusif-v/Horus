@@ -3,9 +3,18 @@
 GITHUB_QUERIES = [
     "CVE-2026 exploit poc",
     "CVE-2025 exploit poc",
+    "CVE-2024 exploit poc",
     "0day exploit github",
     "RCE PoC CVE",
     "vulnerability exploit proof-of-concept",
+    "CVE poc github",
+    "exploit CVE-2026",
+    "exploit CVE-2025",
+    "github.com CVE exploit",
+    "CVE-2026 PoC",
+    "CVE-2025 PoC",
+    "CVE exploit code",
+    "security exploit repo",
 ]
 
 FRESH_POC_KEYWORDS = [

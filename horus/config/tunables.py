@@ -2,8 +2,8 @@
 
 from .. import __version__
 
-MAX_REPO_AGE_DAYS = 30
-MIN_REPO_STARS = 10
+MAX_REPO_AGE_DAYS = 90
+MIN_REPO_STARS = 1
 
 NVD_LOOKBACK_DAYS = 2
 NVD_MAX_LOOKBACK_DAYS = 14  # cap when using last-run timestamp
