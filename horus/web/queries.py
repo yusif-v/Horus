@@ -396,10 +396,8 @@ def fetch_pocs(
         )) AS INTEGER)"""
         # Sort mapping
         sort_map = {
-            "age": f"{age_expr} ASC, p.first_seen DESC",  # Youngest repos first (newest by creation)
+            "newest": f"{age_expr} ASC, p.first_seen DESC",
             "stars": "p.stars DESC NULLS LAST, p.first_seen DESC",
-            "oldest": f"{age_expr} DESC, p.first_seen DESC",  # Oldest repos first
-            "newest": f"{age_expr} ASC, p.first_seen DESC",  # Same as age — youngest first
         }
         order_by = sort_map.get(sort, sort_map["newest"])
         rows = conn.execute(
