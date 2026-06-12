@@ -10,15 +10,22 @@ from .auth import login_required
 
 bp = Blueprint("pocs", __name__)
 
+VALID_SORTS = {"newest", "stars", "age"}
+
 
 @bp.route("/pocs")
 @login_required
 def list_pocs():
     pg = safe_int(request.args.get("page", "1"))
     source = request.args.get("source")
+    sort = request.args.get("sort", "newest")
+    if sort not in VALID_SORTS:
+        sort = "newest"
 
     try:
-        rows, total = fetch_pocs(page=pg, per_page=PER_PAGE_DEFAULT, source_filter=source)
+        rows, total = fetch_pocs(
+            page=pg, per_page=PER_PAGE_DEFAULT, source_filter=source, sort=sort
+        )
         with db_connect() as conn:
             sources = [
                 r[0]
@@ -27,9 +34,23 @@ def list_pocs():
     except Exception as e:
         return error_page(f"Database Error: {e}", active="pocs"), 500
 
-    filters = [{"label": "All", "url": "/pocs", "active": not source}]
+    filters = [{"label": "All", "url": f"/pocs?sort={sort}", "active": not source}]
     for s in sources:
-        filters.append({"label": s, "url": f"/pocs?source={s}", "active": source == s})
+        filters.append({"label": s, "url": f"/pocs?source={s}&sort={sort}", "active": source == s})
+
+    sort_filters = [
+        {
+            "label": "Newest",
+            "url": f"/pocs?sort=newest&source={source or ''}",
+            "active": sort == "newest",
+        },
+        {
+            "label": "Stars",
+            "url": f"/pocs?sort=stars&source={source or ''}",
+            "active": sort == "stars",
+        },
+        {"label": "Age", "url": f"/pocs?sort=age&source={source or ''}", "active": sort == "age"},
+    ]
 
     columns = ["CVE", "URL", "Source", "Stars", "Age (d)", "Description"]
     cells = [
@@ -54,8 +75,11 @@ def list_pocs():
         page=pg,
         per_page=PER_PAGE_DEFAULT,
         filters=filters,
+        sort_filters=sort_filters,
         columns=columns,
         cells=cells,
-        prev_url=f"/pocs?page={pg - 1}{src_q}" if pg > 1 else None,
-        next_url=f"/pocs?page={pg + 1}{src_q}" if pg * PER_PAGE_DEFAULT < total else None,
+        prev_url=f"/pocs?page={pg - 1}{src_q}&sort={sort}" if pg > 1 else None,
+        next_url=f"/pocs?page={pg + 1}{src_q}&sort={sort}"
+        if pg * PER_PAGE_DEFAULT < total
+        else None,
     )

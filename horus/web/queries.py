@@ -382,7 +382,7 @@ def get_cve_detail(cve_id: str) -> dict | None:
 
 
 def fetch_pocs(
-    page: int = 1, per_page: int = 20, source_filter: str | None = None
+    page: int = 1, per_page: int = 20, source_filter: str | None = None, sort: str = "newest"
 ) -> tuple[list[dict], int]:
     with db_connect() as conn:
         where, params = "", []
@@ -390,18 +390,27 @@ def fetch_pocs(
             where, params = "WHERE source = ?", [source_filter]
         total = conn.execute(f"SELECT COUNT(*) FROM poc {where}", params).fetchone()[0]
         offset = (page - 1) * per_page
+        # Dynamic age computation from repo_created_at, with fallback to first_seen
+        age_expr = """CAST((julianday('now') - julianday(
+            COALESCE(p.repo_created_at, p.first_seen)
+        )) AS INTEGER)"""
+        # Sort mapping
+        sort_map = {
+            "newest": "p.first_seen DESC, p.rowid DESC",
+            "stars": "p.stars DESC NULLS LAST, p.first_seen DESC",
+            "age": f"{age_expr} ASC, p.first_seen DESC",
+        }
+        order_by = sort_map.get(sort, sort_map["newest"])
         rows = conn.execute(
             f"""SELECT p.url, p.source, p.stars, p.description, p.first_seen,
                        p.repo_created_at,
-                       CAST((julianday('now') - julianday(
-                           COALESCE(p.repo_created_at, p.first_seen)
-                       )) AS INTEGER) AS age_days,
+                       {age_expr} AS age_days,
                        GROUP_CONCAT(pc.cve_id) AS cve_ids
                 FROM poc p
                 LEFT JOIN poc_cve pc ON pc.poc_url = p.url
                 {where}
                 GROUP BY p.url
-                ORDER BY p.first_seen DESC NULLS LAST LIMIT ? OFFSET ?""",
+                ORDER BY {order_by} LIMIT ? OFFSET ?""",
             [*params, per_page, offset],
         ).fetchall()
         results = []
