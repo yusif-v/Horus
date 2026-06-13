@@ -162,3 +162,27 @@ CREATE INDEX IF NOT EXISTS idx_user_username ON user(username);
 CREATE INDEX IF NOT EXISTS idx_user_email ON user(email);
 CREATE INDEX IF NOT EXISTS idx_user_role_user_id ON user_role(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_role_role_id ON user_role(role_id);
+
+-- ─── Security resources (broad intelligence beyond CVE-linked PoCs) ──────
+
+CREATE TABLE IF NOT EXISTS security_resource (
+    url             TEXT PRIMARY KEY,
+    resource_type   TEXT NOT NULL,  -- poc / exploit / tool / technique / advisory / bypass / disclosure
+    title           TEXT,
+    description     TEXT,
+    source          TEXT NOT NULL,  -- x_twitter / github / gitlab / pastebin / web
+    source_url      TEXT,           -- original tweet/post URL
+    source_author   TEXT,           -- tweet author screen name
+    engagement_score INTEGER DEFAULT 0,  -- likes + retweets*3 + replies
+    tags            TEXT,           -- JSON array of tags
+    cve_refs        TEXT,           -- JSON array of CVE IDs (if any)
+    stars           INTEGER,        -- GitHub stars if applicable
+    repo_created_at TEXT,           -- ISO 8601
+    first_seen      TEXT NOT NULL,
+    last_seen       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_security_resource_type ON security_resource(resource_type);
+CREATE INDEX IF NOT EXISTS idx_security_resource_source ON security_resource(source);
+CREATE INDEX IF NOT EXISTS idx_security_resource_engagement ON security_resource(engagement_score);
+CREATE INDEX IF NOT EXISTS idx_security_resource_first_seen ON security_resource(first_seen);

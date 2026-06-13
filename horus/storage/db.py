@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import STATE_DIR
-from ..core.model import CVE, PoC
+from ..core.model import CVE, PoC, Resource
 from ..core.vocab import ATTACK_TAGS, CWE_TO_TAG
 
 DB_PATH = STATE_DIR / "horus.db"
@@ -450,3 +450,98 @@ def resolve_watchlist(conn: sqlite3.Connection, cve_id: str) -> None:
         "UPDATE cve_watchlist SET resolved = 1 WHERE id = ?",
         (cve_id.upper(),),
     )
+
+
+def list_known_resource_urls(conn: sqlite3.Connection) -> set[str]:
+    return {row[0] for row in conn.execute("SELECT url FROM security_resource")}
+
+
+def persist_resource(conn: sqlite3.Connection, resource: Resource) -> None:
+    now = _now()
+    tags_json = json.dumps(resource.tags) if resource.tags else None
+    cve_refs_json = json.dumps(resource.cve_refs) if resource.cve_refs else None
+    conn.execute(
+        """INSERT INTO security_resource
+              (url, resource_type, title, description, source, source_url,
+               source_author, engagement_score, tags, cve_refs, stars,
+               repo_created_at, first_seen, last_seen)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(url) DO UPDATE SET
+             resource_type   = excluded.resource_type,
+             title           = COALESCE(excluded.title, security_resource.title),
+             description     = COALESCE(excluded.description, security_resource.description),
+             source_url      = COALESCE(excluded.source_url, security_resource.source_url),
+            source_author   = COALESCE(excluded.source_author, security_resource.source_author),
+             engagement_score = MAX(excluded.engagement_score, security_resource.engagement_score),
+             tags            = COALESCE(excluded.tags, security_resource.tags),
+             cve_refs        = COALESCE(excluded.cve_refs, security_resource.cve_refs),
+             stars           = COALESCE(excluded.stars, security_resource.stars),
+             repo_created_at = COALESCE(excluded.repo_created_at, security_resource.repo_created_at),
+             last_seen       = excluded.last_seen
+        """,
+        (
+            resource.url,
+            resource.resource_type,
+            resource.title,
+            resource.description,
+            resource.source,
+            resource.source_url,
+            resource.source_author,
+            resource.engagement_score,
+            tags_json,
+            cve_refs_json,
+            resource.stars,
+            resource.repo_created_at,
+            now,
+            now,
+        ),
+    )
+
+
+def fetch_resources(
+    page: int = 1,
+    per_page: int = 20,
+    resource_type_filter: str | None = None,
+    source_filter: str | None = None,
+    tag_filter: str | None = None,
+    sort: str = "newest",
+) -> tuple[list[dict], int]:
+    conditions: list[str] = []
+    params: list = []
+    if resource_type_filter:
+        conditions.append("resource_type = ?")
+        params.append(resource_type_filter)
+    if source_filter:
+        conditions.append("source = ?")
+        params.append(source_filter)
+    if tag_filter:
+        conditions.append("tags LIKE ?")
+        params.append(f'%"{tag_filter}"%')
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    with connect() as conn:
+        total = conn.execute(f"SELECT COUNT(*) FROM security_resource {where}", params).fetchone()[
+            0
+        ]
+        offset = (page - 1) * per_page
+        sort_map = {
+            "newest": "first_seen DESC",
+            "engagement": "engagement_score DESC, first_seen DESC",
+            "stars": "stars DESC NULLS LAST, first_seen DESC",
+        }
+        order_by = sort_map.get(sort, sort_map["newest"])
+        rows = conn.execute(
+            f"""SELECT url, resource_type, title, description, source, source_url,
+                       source_author, engagement_score, tags, cve_refs, stars,
+                       repo_created_at, first_seen, last_seen
+                FROM security_resource
+                {where}
+                ORDER BY {order_by} LIMIT ? OFFSET ?""",
+            [*params, per_page, offset],
+        ).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = json.loads(d["tags"]) if d.get("tags") else []
+            d["cve_ids"] = json.loads(d["cve_refs"]) if d.get("cve_refs") else []
+            results.append(d)
+        return results, total

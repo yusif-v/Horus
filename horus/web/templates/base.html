@@ -30,6 +30,7 @@
     <a href="/triage" class="{% if active == 'triage' %}active{% endif %}">Triage</a>
     <a href="/cves" class="{% if active == 'cves' %}active{% endif %}">CVEs</a>
     <a href="/pocs" class="{% if active == 'pocs' %}active{% endif %}">PoCs</a>
+    <a href="/resources" class="{% if active == 'resources' %}active{% endif %}">Resources</a>
   </div>
   <form class="search" action="/search" method="get">
     <input type="text" name="q" placeholder="CVE-ID OR KEYWORD" value="{{ search_query|default('') }}" autocomplete="off">

@@ -48,6 +48,7 @@ def auth_client(client):
         "/triage",
         "/cves",
         "/pocs",
+        "/resources",
         "/search?q=test",
         "/api/stats",
     ],

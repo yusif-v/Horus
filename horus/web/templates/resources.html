@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">{{ eyebrow|default('Security intelligence · live feed') }}</div>
+<h1 class="page-title">{{ title }} <em>· {{ total }}</em></h1>
+{% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
+
+{% if type_filters or source_filters or sort_filters %}
+<div class="filter-bar">
+  {% if type_filters %}
+  <div class="filter-group">
+    <span class="label">Type</span>
+    {% for f in type_filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if source_filters %}
+  <div class="filter-group">
+    <span class="label">Source</span>
+    {% for f in source_filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if sort_filters %}
+  <div class="filter-group">
+    <span class="label">Sort</span>
+    {% for f in sort_filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if rows %}
+<div class="panel">
+  <div class="panel-body flush">
+    <table>
+      <thead><tr>{% for col in columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        {% for cell in cells %}
+        <td>
+          {% if cell.type == 'badge' %}{% if row[cell.key] %}<span class="badge badge-{{ row[cell.key]|lower }}">{{ row[cell.key] }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+          {% elif cell.type == 'resource_title' %}
+            <div style="max-width:400px;">
+              {% if row.title %}
+                <div style="font-weight:500;margin-bottom:2px;">{{ row.title[:80] }}</div>
+              {% endif %}
+              <a href="{{ row.url }}" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:12px;color:var(--text-dim);">{{ row.url[:60] }}{% if row.url|length > 60 %}…{% endif %}</a>
+              {% if row.source_url and row.source_url != row.url %}
+                <a href="{{ row.source_url }}" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:10px;color:var(--text-dim);display:block;margin-top:2px;">via tweet</a>
+              {% endif %}
+            </div>
+          {% elif cell.type == 'engagement' %}
+            <span class="num" style="color:var(--accent);">{{ row[cell.key] }}</span>
+          {% elif cell.type == 'tags' %}
+            {% if row[cell.key] %}
+              <div style="display:flex;flex-wrap:wrap;gap:4px;max-width:250px;">
+              {% for tag in row[cell.key][:5] %}
+                <span class="badge badge-tag" style="font-size:10px;padding:1px 6px;">{{ tag }}</span>
+              {% endfor %}
+              {% if row[cell.key]|length > 5 %}
+                <span class="badge badge-more" style="font-size:10px;padding:1px 6px;">+{{ row[cell.key]|length - 5 }}</span>
+              {% endif %}
+              </div>
+            {% else %}
+              <span style="color:var(--text-dim);">—</span>
+            {% endif %}
+          {% elif cell.type == 'date' %}<span class="num">{{ row[cell.key][:10] if row[cell.key] else '—' }}</span>
+          {% elif cell.type == 'stars' %}<span class="num" style="color:var(--accent);">★ {{ row[cell.key] }}</span>
+          {% elif cell.type == 'truncate' %}<span class="desc-cell">{{ row[cell.key][:140] if row[cell.key] else '—' }}</span>
+          {% else %}{% if row[cell.key] is not none %}<span class="num">{{ row[cell.key] }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}{% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if total > per_page %}
+<div class="pagination">
+  {% if page > 1 %}<a href="{{ prev_url }}">← Prev</a>{% endif %}
+  <span class="current">{{ page }} / {{ (total / per_page)|round(0, 'ceil')|int }}</span>
+  {% if page * per_page < total %}<a href="{{ next_url }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="panel"><div class="panel-body" style="padding:3rem 2rem;text-align:center;">
+  <div style="font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--text-dim);text-transform:uppercase;">No matching resources — run the resource intelligence pipeline first</div>
+</div></div>
+{% endif %}
+{% endblock %}
