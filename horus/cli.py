@@ -90,6 +90,14 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
         action="store_true",
         help="Score every unscored CVE in the DB with EPSS, then exit.",
     )
+    p.add_argument(
+        "--backfill",
+        choices=("products", "poc_cve", "all"),
+        default=None,
+        metavar="TARGET",
+        help="One-shot data backfill: 'products' re-normalizes vendor/product names; "
+        "'poc_cve' re-scans PoCs for CVE refs; 'all' runs both.",
+    )
 
     # Server mode
     p.add_argument(
@@ -164,6 +172,12 @@ def _cmd_backfill_epss() -> None:
     print(f"EPSS backfill: {updated} CVEs updated")
 
 
+def _cmd_backfill(target: str) -> None:
+    from .storage.backfills import run_backfill
+
+    print(run_backfill(target).summary())
+
+
 def _cmd_server(args) -> None:
     from .server import Server, load_config
 
@@ -200,6 +214,8 @@ def main(argv: list[str] | None = None) -> None:
         return _cmd_health_check()
     if args.backfill_epss:
         return _cmd_backfill_epss()
+    if args.backfill:
+        return _cmd_backfill(args.backfill)
     if args.server or args.server_once:
         return _cmd_server(args)
     if args.auth_status:
