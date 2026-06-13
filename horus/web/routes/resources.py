@@ -105,7 +105,7 @@ def list_resources():
         },
     ]
 
-    columns = ["Type", "Title / URL", "Source", "Author", "Engagement", "Tags", "Age"]
+    columns = ["Type", "Title / URL", "Source", "Author", "Engagement", "Tags", "Published"]
     cells = [
         {"type": "badge", "key": "resource_type"},
         {"type": "resource_title", "key": "url"},
@@ -113,7 +113,7 @@ def list_resources():
         {"type": "plain", "key": "source_author"},
         {"type": "engagement", "key": "engagement_score"},
         {"type": "tags", "key": "tags"},
-        {"type": "date", "key": "first_seen"},
+        {"type": "date", "key": "tweet_created_at"},
     ]
 
     query_parts = _current_qs(resource_type=resource_type, source=source, tag=tag, sort=sort)

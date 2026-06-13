@@ -5,6 +5,8 @@ exploit tools, bypass techniques, vulnerability disclosures, PoCs, etc.
 
 Unlike x_twitter (which only finds CVE-linked GitHub repos), this source
 casts a wide net for any security resource mentioned on social media.
+Resolves shortened URLs (t.co) to their final destination for proper
+classification.
 """
 
 from __future__ import annotations
@@ -15,8 +17,6 @@ from urllib.parse import urlparse
 
 from ..core.filters import extract_cves
 from ..core.url_extractor import UrlType, extract_urls
-
-# Reuse the standalone xsearch module for auth + API
 from ..net.xsearch import XAuthError, XSearch, XSearchError
 
 NAME = "Security Resource Intelligence (X/Twitter)"
@@ -25,33 +25,27 @@ KIND = "resource"
 
 # Broad security discovery queries
 DEFAULT_QUERIES = [
-    # Exploit & PoC
     "exploit tool github",
     "proof of concept github",
     "0day exploit released",
     "CVE exploit code",
     "poc github released",
-    # Bypass & technique
     "bypass technique security",
     "attack technique disclosed",
     "exploit technique github",
     "security bypass tool",
-    # Disclosure & advisory
     "vulnerability disclosed",
     "security advisory",
     "0day disclosed",
     "exploit released",
-    # Red team / tools
     "red team tool github",
     "pentest tool released",
     "hacking tool github",
     "exploit framework",
-    # CVE mentions with resources
     "CVE-2026 github",
     "CVE-2025 github",
     "CVE poc released",
     "CVE exploit github",
-    # Pastebin / gist
     "exploit pastebin",
     "poc gist.github",
 ]
@@ -160,28 +154,20 @@ _TAG_KEYWORDS = [
 def _classify_resource_type(text: str, url_type: UrlType) -> str:
     """Determine resource type from tweet text and URL type."""
     text_lower = text.lower()
-
-    # Check URL type first
     if url_type in (UrlType.GITHUB_GIST, UrlType.PASTEBIN):
-        # Gists and pastebins are often PoCs or exploit code
         if any(kw in text_lower for kw in _TYPE_KEYWORDS["poc"]):
             return "poc"
         if any(kw in text_lower for kw in _TYPE_KEYWORDS["exploit"]):
             return "exploit"
-        return "poc"  # Default for gists/pastebins
-
-    # Check text keywords
+        return "poc"
     for rtype, keywords in _TYPE_KEYWORDS.items():
         if any(kw in text_lower for kw in keywords):
             return rtype
-
-    # Default based on URL type
     if url_type == UrlType.GITHUB_REPO:
         return "tool"
     if url_type in (UrlType.HACKERONE, UrlType.BUGCROWD):
         return "disclosure"
-
-    return "tool"  # Generic fallback
+    return "tool"
 
 
 def _extract_tags(text: str) -> list[str]:
@@ -191,7 +177,22 @@ def _extract_tags(text: str) -> list[str]:
     for tag in _TAG_KEYWORDS:
         if tag in text_lower:
             tags.append(tag)
-    return tags[:10]  # Max 10 tags
+    return tags[:10]
+
+
+def _parse_tweet_date(date_str: str | None) -> str | None:
+    """Parse X/Twitter date format to ISO 8601.
+    Twitter format: 'Thu Jun 11 07:04:39 +0000 2026'
+    """
+    if not date_str:
+        return None
+    try:
+        from datetime import datetime
+
+        dt = datetime.strptime(date_str, "%a %b %d %H:%M:%S %z %Y")
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, TypeError):
+        return None
 
 
 def _source_for_url_type(url_type: UrlType) -> str:
@@ -222,13 +223,7 @@ def resolve_url(url: str, timeout: int = 5) -> str | None:
 
 
 def run(ctx) -> dict:
-    """Search X for security-relevant posts and extract resources.
-
-    Returns:
-        {
-            "resources": [dict],  # Discovered security resources
-        }
-    """
+    """Search X for security-relevant posts and extract resources."""
     try:
         xs = XSearch()
     except XAuthError as e:
@@ -252,79 +247,62 @@ def run(ctx) -> dict:
             if not text or not tweet_url:
                 continue
 
-            # Extract all URLs from the tweet
+            cves = extract_cves(text)
+            if not cves:
+                continue
+
             extracted_urls = extract_urls(text)
 
-            # Also extract CVE references from the text
-            cves = extract_cves(text)
+            # Batch-resolve t.co URLs
+            tco_urls = [e.url for e in extracted_urls if _is_short_url(e.url)]
+            resolved_map: dict[str, str | None] = {}
+            if tco_urls:
+                resolved_map = _resolve_batch(tco_urls)
 
             for extracted in extracted_urls:
                 url = extracted.canonical_url
 
-                # Skip known URL shorteners that we can't resolve inline
-                # (t.co requires browser cookies; store as-is for later resolution)
-                parsed = urlparse(url)
-                host = parsed.hostname or ""
-                if host in (
-                    "bit.ly",
-                    "tinyurl.com",
-                    "goo.gl",
-                    "ow.ly",
-                    "is.gd",
-                    "buff.ly",
-                    "dlvr.it",
-                ):
-                    continue
-                if not host or "." not in host:
-                    continue
+                # Resolve short URLs and classify by final destination
+                if _is_short_url(url):
+                    resolved = resolved_map.get(url)
+                    if resolved:
+                        dest_source, dest_type = _classify_destination(resolved)
+                        url = resolved
+                        source = dest_source
+                    else:
+                        continue  # Could not resolve, skip
+                else:
+                    source = _source_for_url_type(extracted.url_type)
+                    dest_type = _classify_resource_type(text, extracted.url_type)
 
-                # Skip if already seen
-                if url in seen_urls:
+                if url in ctx.known_poc_urls or url in seen_urls:
                     continue
-                if url in ctx.known_poc_urls:
-                    continue
-
-                # Check if URL is already in security_resource table
-                # (handled by known_resource_urls in ctx if available)
                 if hasattr(ctx, "known_resource_urls") and url in ctx.known_resource_urls:
                     continue
 
                 seen_urls.add(url)
 
-                # Classify the resource
-                resource_type = _classify_resource_type(text, extracted.url_type)
-                tags = _extract_tags(text)
-                source = _source_for_url_type(extracted.url_type)
-                final_url = url
-
-                # Re-classify if URL was resolved to a real destination
-                if final_url != extracted.url:
-                    re_urls = extract_urls(final_url)
-                    if re_urls:
-                        extracted.url_type = re_urls[0].url_type
-                        resource_type = _classify_resource_type(text, extracted.url_type)
-                        source = _source_for_url_type(extracted.url_type)
-
-                # Calculate engagement score
                 likes = tweet.get("likes", 0) or 0
                 retweets = tweet.get("retweets", 0) or 0
                 replies = tweet.get("replies", 0) or 0
                 engagement = likes + retweets * 3 + replies
+                tweet_date = _parse_tweet_date(tweet.get("createdAt"))
 
                 resources.append(
                     {
                         "url": url,
-                        "resource_type": resource_type,
+                        "resource_type": dest_type,
                         "title": text[:100] if text else None,
                         "description": text[:500] if text else None,
                         "source": source,
                         "source_url": tweet_url,
                         "source_author": tweet.get("screenName"),
                         "engagement_score": engagement,
-                        "tags": tags,
+                        "tags": _extract_tags(text),
                         "cve_refs": cves,
                         "stars": None,
                         "repo_created_at": None,
+                        "tweet_created_at": tweet_date,
                     }
                 )
 
@@ -332,3 +310,66 @@ def run(ctx) -> dict:
         print("  [INFO] Security Resource Intelligence: no new resources found", file=sys.stderr)
 
     return {"resources": resources}
+
+
+def _is_short_url(url: str) -> bool:
+    """Check if a URL is a known shortener."""
+    host = (urlparse(url).hostname or "").lower()
+    return host in (
+        "t.co",
+        "bit.ly",
+        "tinyurl.com",
+        "goo.gl",
+        "ow.ly",
+        "is.gd",
+        "buff.ly",
+        "dlvr.it",
+    )
+
+
+def _resolve_batch(
+    urls: list[str], max_workers: int = 5, timeout: int = 3
+) -> dict[str, str | None]:
+    """Resolve multiple URLs concurrently."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    results: dict[str, str | None] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(resolve_url, url, timeout): url for url in urls}
+        for future in as_completed(futures):
+            original = futures[future]
+            try:
+                results[original] = future.result()
+            except Exception:
+                results[original] = None
+    return results
+
+
+def _classify_destination(url: str) -> tuple[str, str]:
+    """Classify a resolved URL by its destination domain. Returns (source, resource_type)."""
+    host = (urlparse(url).hostname or "").lower()
+
+    if "github.com" in host:
+        return ("github", "poc")
+    if "gitlab.com" in host:
+        return ("gitlab", "poc")
+    if "pastebin.com" in host:
+        return ("pastebin", "poc")
+    if "exploit-db.com" in host:
+        return ("exploit-db", "poc")
+    if "vulmon.com" in host or "cvedetails.com" in host or "nvd.nist.gov" in host:
+        return ("web", "advisory")
+    if any(
+        d in host
+        for d in (
+            "thehackernews.com",
+            "bleepingcomputer.com",
+            "darkreading.com",
+            "threatpost.com",
+            "securityweek.com",
+            "krebsonsecurity.com",
+        )
+    ):
+        return ("web", "advisory")
+
+    return ("web", "advisory")

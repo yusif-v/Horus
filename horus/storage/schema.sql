@@ -178,6 +178,7 @@ CREATE TABLE IF NOT EXISTS security_resource (
     cve_refs        TEXT,           -- JSON array of CVE IDs (if any)
     stars           INTEGER,        -- GitHub stars if applicable
     repo_created_at TEXT,           -- ISO 8601
+    tweet_created_at TEXT,          -- ISO 8601: when the original tweet/post was published
     first_seen      TEXT NOT NULL,
     last_seen       TEXT NOT NULL
 );
@@ -186,3 +187,4 @@ CREATE INDEX IF NOT EXISTS idx_security_resource_type ON security_resource(resou
 CREATE INDEX IF NOT EXISTS idx_security_resource_source ON security_resource(source);
 CREATE INDEX IF NOT EXISTS idx_security_resource_engagement ON security_resource(engagement_score);
 CREATE INDEX IF NOT EXISTS idx_security_resource_first_seen ON security_resource(first_seen);
+CREATE INDEX IF NOT EXISTS idx_security_resource_tweet_created ON security_resource(tweet_created_at);

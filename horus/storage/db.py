@@ -532,7 +532,7 @@ def fetch_resources(
         rows = conn.execute(
             f"""SELECT url, resource_type, title, description, source, source_url,
                        source_author, engagement_score, tags, cve_refs, stars,
-                       repo_created_at, first_seen, last_seen
+                       repo_created_at, tweet_created_at, first_seen, last_seen
                 FROM security_resource
                 {where}
                 ORDER BY {order_by} LIMIT ? OFFSET ?""",
