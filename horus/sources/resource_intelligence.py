@@ -261,11 +261,11 @@ def run(ctx) -> dict:
             for extracted in extracted_urls:
                 url = extracted.canonical_url
 
-                # Skip URL shorteners entirely (t.co etc) — we resolve them separately
+                # Skip known URL shorteners that we can't resolve inline
+                # (t.co requires browser cookies; store as-is for later resolution)
                 parsed = urlparse(url)
                 host = parsed.hostname or ""
                 if host in (
-                    "t.co",
                     "bit.ly",
                     "tinyurl.com",
                     "goo.gl",
