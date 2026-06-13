@@ -29,15 +29,22 @@ def create_app() -> Flask:
     )
     secret_key = os.environ.get("HORUS_SECRET_KEY")
     if not secret_key:
-        import warnings
+        # Persist a generated key so sessions survive restarts
+        key_file = Path.home() / ".horus" / "secret_key"
+        if key_file.exists():
+            secret_key = key_file.read_text().strip()
+        else:
+            import warnings
 
-        warnings.warn(
-            "HORUS_SECRET_KEY not set — using ephemeral key. "
-            "Sessions will not survive restarts. "
-            "Set HORUS_SECRET_KEY in production.",
-            stacklevel=2,
-        )
-        secret_key = secrets.token_hex(32)
+            warnings.warn(
+                "HORUS_SECRET_KEY not set — generating a persistent key at "
+                f"{key_file}. Set HORUS_SECRET_KEY in production.",
+                stacklevel=2,
+            )
+            secret_key = secrets.token_hex(32)
+            key_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            key_file.write_text(secret_key)
+            key_file.chmod(0o600)
     app.secret_key = secret_key
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,

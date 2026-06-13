@@ -69,5 +69,6 @@ class Resource:
     cve_refs: list[str] = field(default_factory=list)
     stars: int | None = None  # GitHub stars if applicable
     repo_created_at: str | None = None  # ISO 8601
+    tweet_created_at: str | None = None  # ISO 8601 — when the original tweet/post was published
     first_seen: str | None = None
     last_seen: str | None = None

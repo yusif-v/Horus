@@ -307,6 +307,7 @@ def run_pipeline(
                 engagement_score=r_data["engagement_score"],
                 tags=r_data["tags"],
                 cve_refs=r_data["cve_refs"],
+                tweet_created_at=r_data.get("tweet_created_at"),
             )
             db.persist_resource(conn, r)
         if all_social_signals:

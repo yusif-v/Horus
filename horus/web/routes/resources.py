@@ -113,7 +113,7 @@ def list_resources():
         {"type": "plain", "key": "source_author"},
         {"type": "engagement", "key": "engagement_score"},
         {"type": "tags", "key": "tags"},
-        {"type": "date", "key": "tweet_created_at"},
+        {"type": "date", "key": "published_date"},
     ]
 
     query_parts = _current_qs(resource_type=resource_type, source=source, tag=tag, sort=sort)

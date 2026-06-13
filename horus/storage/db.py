@@ -464,8 +464,8 @@ def persist_resource(conn: sqlite3.Connection, resource: Resource) -> None:
         """INSERT INTO security_resource
               (url, resource_type, title, description, source, source_url,
                source_author, engagement_score, tags, cve_refs, stars,
-               repo_created_at, first_seen, last_seen)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               repo_created_at, tweet_created_at, first_seen, last_seen)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(url) DO UPDATE SET
              resource_type   = excluded.resource_type,
              title           = COALESCE(excluded.title, security_resource.title),
@@ -477,6 +477,7 @@ def persist_resource(conn: sqlite3.Connection, resource: Resource) -> None:
              cve_refs        = COALESCE(excluded.cve_refs, security_resource.cve_refs),
              stars           = COALESCE(excluded.stars, security_resource.stars),
              repo_created_at = COALESCE(excluded.repo_created_at, security_resource.repo_created_at),
+             tweet_created_at = COALESCE(excluded.tweet_created_at, security_resource.tweet_created_at),
              last_seen       = excluded.last_seen
         """,
         (
@@ -492,6 +493,7 @@ def persist_resource(conn: sqlite3.Connection, resource: Resource) -> None:
             cve_refs_json,
             resource.stars,
             resource.repo_created_at,
+            resource.tweet_created_at,
             now,
             now,
         ),
@@ -532,7 +534,7 @@ def fetch_resources(
         rows = conn.execute(
             f"""SELECT url, resource_type, title, description, source, source_url,
                        source_author, engagement_score, tags, cve_refs, stars,
-                       repo_created_at, tweet_created_at, first_seen, last_seen
+                       repo_created_at, COALESCE(tweet_created_at, first_seen) AS published_date, first_seen, last_seen
                 FROM security_resource
                 {where}
                 ORDER BY {order_by} LIMIT ? OFFSET ?""",
