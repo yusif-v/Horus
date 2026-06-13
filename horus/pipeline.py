@@ -174,6 +174,7 @@ def run_pipeline(
     all_cves: list[CVE] = []
     all_pocs: list[PoC] = []
     all_social_signals: list[dict[str, Any]] = []
+    all_resources: list[dict[str, Any]] = []
     source_results: dict[str, dict[str, Any]] = {}
     step = 0
     total_steps = len(selected_sources) + len(selected_enrichers) + 2  # +merge +persist
@@ -200,6 +201,7 @@ def run_pipeline(
             all_cves.extend(cves)
             all_pocs.extend(pocs)
             all_social_signals.extend(result.get("social_signals", []))
+            all_resources.extend(result.get("resources", []))
             source_results[name] = {"cves": len(cves), "pocs": len(pocs)}
             log(f"  found {len(cves)} CVEs, {len(pocs)} PoCs")
             return result
@@ -262,6 +264,23 @@ def run_pipeline(
             db.persist_watchlist(conn, cve_id, source=source, social_mentions=mentions)
         for cve in cves:
             db.resolve_watchlist(conn, cve.id)
+        # Persist security resources
+        from horus.core.model import Resource
+
+        for r_data in all_resources:
+            r = Resource(
+                url=r_data["url"],
+                resource_type=r_data["resource_type"],
+                source=r_data["source"],
+                title=r_data["title"],
+                description=r_data["description"],
+                source_url=r_data["source_url"],
+                source_author=r_data["source_author"],
+                engagement_score=r_data["engagement_score"],
+                tags=r_data["tags"],
+                cve_refs=r_data["cve_refs"],
+            )
+            db.persist_resource(conn, r)
         if all_social_signals:
             # Any CVE in the DB is a valid FK target — not just this cycle's batch.
             # Tweets about CVEs persisted in earlier runs should still land here

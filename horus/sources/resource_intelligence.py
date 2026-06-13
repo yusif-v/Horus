@@ -10,6 +10,8 @@ casts a wide net for any security resource mentioned on social media.
 from __future__ import annotations
 
 import sys
+import urllib.request
+from urllib.parse import urlparse
 
 from ..core.filters import extract_cves
 from ..core.url_extractor import UrlType, extract_urls
@@ -208,6 +210,17 @@ def _source_for_url_type(url_type: UrlType) -> str:
     return mapping.get(url_type, "web")
 
 
+def resolve_url(url: str, timeout: int = 5) -> str | None:
+    """Resolve a shortened URL to its final destination."""
+    try:
+        req = urllib.request.Request(url, method="HEAD")
+        req.add_header("User-Agent", "Mozilla/5.0 (compatible; Horus)")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.url
+    except Exception:
+        return None
+
+
 def run(ctx) -> dict:
     """Search X for security-relevant posts and extract resources.
 
@@ -248,7 +261,24 @@ def run(ctx) -> dict:
             for extracted in extracted_urls:
                 url = extracted.canonical_url
 
-                # Skip if already seen or already in our DBs
+                # Skip URL shorteners entirely (t.co etc) — we resolve them separately
+                parsed = urlparse(url)
+                host = parsed.hostname or ""
+                if host in (
+                    "t.co",
+                    "bit.ly",
+                    "tinyurl.com",
+                    "goo.gl",
+                    "ow.ly",
+                    "is.gd",
+                    "buff.ly",
+                    "dlvr.it",
+                ):
+                    continue
+                if not host or "." not in host:
+                    continue
+
+                # Skip if already seen
                 if url in seen_urls:
                     continue
                 if url in ctx.known_poc_urls:
@@ -265,6 +295,15 @@ def run(ctx) -> dict:
                 resource_type = _classify_resource_type(text, extracted.url_type)
                 tags = _extract_tags(text)
                 source = _source_for_url_type(extracted.url_type)
+                final_url = url
+
+                # Re-classify if URL was resolved to a real destination
+                if final_url != extracted.url:
+                    re_urls = extract_urls(final_url)
+                    if re_urls:
+                        extracted.url_type = re_urls[0].url_type
+                        resource_type = _classify_resource_type(text, extracted.url_type)
+                        source = _source_for_url_type(extracted.url_type)
 
                 # Calculate engagement score
                 likes = tweet.get("likes", 0) or 0

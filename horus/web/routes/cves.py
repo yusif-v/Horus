@@ -116,7 +116,7 @@ def list_cves():
             "active": window == "all",
         },
     ]
-    columns = ["CVE", "CVSS", "Severity", "EPSS", "KEV", "Description", "Published"]
+    columns = ["CVE", "CVSS", "Severity", "EPSS", "KEV", "Description", "Ingested"]
     col_widths = ["140px", "70px", "140px", "120px", "90px", "auto", "110px"]
     cells = [
         {"type": "cve_link", "key": "id"},
