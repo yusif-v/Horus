@@ -1,25 +1,19 @@
-"""X/Twitter source — social signal + GitHub URL discovery.
+"""X/Twitter source — social signal + URL discovery.
 
-Uses Chrome cookies (auth_token + ct0) to authenticate with X's internal
-GraphQL API. Searches for CVE mentions in tweets.
-
-X/Twitter NEVER creates PoC records. Instead:
-  - Each tweet mentioning a CVE increments social_mentions on that CVE
-  - Each tweet linking to a GitHub PoC repo creates a PoC record with
-    source="github" and discovered_via="x"
-
-Falls back to dynamically discovered query IDs if known ones expire.
+Searches X for security-relevant posts and extracts any useful URLs.
+Resolves shortened URLs (t.co) to their final destination for proper
+classification of the resource type.
 """
 
 from __future__ import annotations
 
 import sys
+from urllib.parse import urlparse
 
-from ..core.filters import extract_cves
-from ..core.url_extractor import UrlType, extract_urls
-
-# Reuse the standalone xsearch module for auth + API
-from ..net.xsearch import XAuthError, XSearch, XSearchError
+from horus.core.filters import extract_cves
+from horus.core.url_extractor import UrlType, extract_urls
+from horus.net.xsearch import XAuthError, XSearch, XSearchError
+from horus.sources.url_resolve import classify_destination_domain, resolve_urls_batch
 
 NAME = "X/Twitter (Chrome Auth)"
 DEFAULT_ENABLED = True
@@ -54,16 +48,9 @@ DEFAULT_QUERIES = [
 
 
 def run(ctx) -> dict:
-    """Search X for CVE mentions.
+    """Search X for CVE mentions and extract URLs.
 
-    Returns:
-        {
-            "cves": [],            # X never creates CVEs
-            "pocs": github_pocs,   # Only GitHub URLs, source="github"
-            "social_signals": [    # Social mention signals
-                {"cve_id": "CVE-2026-XXXX", "tweet_url": "...", "likes": N, "retweets": N},
-            ]
-        }
+    Resolves t.co URLs to their final destination for proper classification.
     """
     try:
         xs = XSearch()
@@ -111,14 +98,34 @@ def run(ctx) -> dict:
 
             # URL discovery: extract all categorized URLs from tweet text
             extracted_urls = extract_urls(text)
+
+            # Batch-resolve t.co URLs to their final destination
+            tco_urls = [e.url for e in extracted_urls if _is_short_url(e.url)]
+            resolved_map: dict[str, str | None] = {}
+            if tco_urls:
+                resolved_map = resolve_urls_batch(tco_urls, max_workers=5, timeout=3)
+
             for extracted in extracted_urls:
                 url = extracted.canonical_url
+
+                # Resolve shortened URLs and classify by final destination
+                if _is_short_url(url):
+                    resolved = resolved_map.get(url)
+                    if resolved:
+                        dest_source, _ = classify_destination_domain(resolved)
+                        url = resolved
+                        source = dest_source
+                    else:
+                        continue  # Could not resolve, skip
+                else:
+                    source = _source_for_url_type(extracted.url_type)
+
                 if url in ctx.known_poc_urls or url in github_poc_urls:
                     continue
-                # Tag with CVE refs and tweet metadata
+
                 github_poc_urls[url] = {
                     "url": url,
-                    "source": _source_for_url_type(extracted.url_type),
+                    "source": source,
                     "discovered_via": "x",
                     "cves": cves,
                     "stars": None,
@@ -132,7 +139,7 @@ def run(ctx) -> dict:
     if not social_signals and not github_poc_urls:
         print("  [WARN] X/Twitter: no CVE mentions found", file=sys.stderr)
 
-    # Build PoC dicts from discovered GitHub URLs
+    # Build PoC dicts from discovered URLs
     poc_dicts = list(github_poc_urls.values())
 
     if ctx.max_results is not None:
@@ -147,6 +154,21 @@ def run(ctx) -> dict:
         "social_signals": social_signals,
         "x_discovered_urls": [p["url"] for p in poc_dicts],
     }
+
+
+def _is_short_url(url: str) -> bool:
+    """Check if a URL is a known shortener."""
+    host = (urlparse(url).hostname or "").lower()
+    return host in (
+        "t.co",
+        "bit.ly",
+        "tinyurl.com",
+        "goo.gl",
+        "ow.ly",
+        "is.gd",
+        "buff.ly",
+        "dlvr.it",
+    )
 
 
 def _source_for_url_type(url_type: UrlType) -> str:
