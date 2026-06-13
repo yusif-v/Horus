@@ -312,7 +312,7 @@ def poc_from_github(raw: dict[str, Any]) -> PoC:
     text = f"{raw.get('repo', '')} {raw.get('description', '')} {raw.get('url', '')}"
     return PoC(
         url=raw.get("url", ""),
-        source="github",
+        source=raw.get("source", "github"),
         stars=raw.get("stars"),
         age_days=None,  # Computed dynamically from repo_created_at
         description=raw.get("description"),
