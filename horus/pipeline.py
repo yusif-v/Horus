@@ -177,7 +177,7 @@ def run_pipeline(
     all_resources: list[dict[str, Any]] = []
     source_results: dict[str, dict[str, Any]] = {}
     step = 0
-    total_steps = len(selected_sources) + len(selected_enrichers) + 2  # +merge +persist
+    total_steps = len(selected_sources) + len(selected_enrichers) + 3  # +cve_fetch +merge +persist
     x_discovered_urls: list[str] = []
 
     def _run_source(name: str, mod: Any) -> dict[str, Any]:
@@ -225,6 +225,34 @@ def run_pipeline(
         result = _run_source(name, selected_sources[name])
         if name == "x_twitter":
             x_discovered_urls = result.get("x_discovered_urls", [])
+
+    # 1c — Fetch CVEs referenced by PoCs from NVD
+    # Many PoCs have CVE IDs in their names/descriptions but the CVE might not
+    # be in our DB yet. Fetch them from NVD to create proper links.
+    step += 1
+    log(f"[{step}/{total_steps}] fetching CVEs referenced by PoCs from NVD...")
+    from horus.core.merge import cve_from_nvd
+    from horus.sources.nvd_fetch import fetch_cve_by_id, parse_nvd_cve
+
+    # Collect all CVE IDs referenced by PoCs that aren't in our DB yet
+    cve_ids_to_fetch: set[str] = set()
+    for poc in all_pocs:
+        for ref in poc.cve_refs:
+            if ref.upper() not in known_cve_ids:
+                cve_ids_to_fetch.add(ref.upper())
+
+    log(f"  {len(cve_ids_to_fetch)} unique CVE IDs referenced by PoCs need fetching")
+    fetched_count = 0
+    for cve_id in sorted(cve_ids_to_fetch):
+        raw = fetch_cve_by_id(cve_id)
+        if raw:
+            parsed = parse_nvd_cve(raw)
+            if parsed:
+                cve = cve_from_nvd(parsed)
+                all_cves.append(cve)
+                known_cve_ids.add(cve.id.upper())
+                fetched_count += 1
+    log(f"  fetched {fetched_count} CVEs from NVD")
 
     # 2 — merge
     step += 1
