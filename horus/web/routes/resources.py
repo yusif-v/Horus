@@ -8,7 +8,7 @@ from horus.storage import db
 
 from .._render import error_page, page
 from ..queries import PER_PAGE_DEFAULT, safe_int
-from .auth import login_required
+from .auth import READ_ALL, role_required
 
 bp = Blueprint("resources", __name__)
 
@@ -17,7 +17,7 @@ VALID_TYPES = {"poc", "exploit", "tool", "technique", "advisory", "bypass", "dis
 
 
 @bp.route("/resources")
-@login_required
+@role_required(*READ_ALL)
 def list_resources():
     pg = safe_int(request.args.get("page", "1"))
     resource_type = request.args.get("resource_type")

@@ -6,13 +6,13 @@ from flask import Blueprint, redirect, request, url_for
 
 from .._render import error_page, page
 from ..queries import PER_PAGE_DEFAULT, get_cve_detail, safe_int, search_cves
-from .auth import login_required
+from .auth import READ_ALL, role_required
 
 bp = Blueprint("search", __name__)
 
 
 @bp.route("/search")
-@login_required
+@role_required(*READ_ALL)
 def search():
     query = request.args.get("q", "").strip()
     pg = safe_int(request.args.get("page", "1"))
@@ -35,7 +35,7 @@ def search():
 
 
 @bp.route("/cve/<cve_id>")
-@login_required
+@role_required(*READ_ALL)
 def cve_detail(cve_id):
     try:
         data = get_cve_detail(cve_id)

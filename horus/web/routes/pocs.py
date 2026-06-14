@@ -6,7 +6,7 @@ from flask import Blueprint, request
 
 from .._render import error_page, page
 from ..queries import PER_PAGE_DEFAULT, db_connect, fetch_pocs, safe_int
-from .auth import login_required
+from .auth import READ_ALL, role_required
 
 bp = Blueprint("pocs", __name__)
 
@@ -14,7 +14,7 @@ VALID_SORTS = {"newest", "stars"}
 
 
 @bp.route("/pocs")
-@login_required
+@role_required(*READ_ALL)
 def list_pocs():
     pg = safe_int(request.args.get("page", "1"))
     source = request.args.get("source")

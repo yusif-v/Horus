@@ -37,6 +37,14 @@ _DUMMY_HASH = "pbkdf2:sha256:600000$dummy$hash"
 Team = Literal["red", "blue", "both", "none"]
 TEAMS: tuple[str, ...] = get_args(Team)
 
+# Zero-trust role aliases used in route decorators.
+# READ_ALL — any authenticated user with a defined role may read.
+# WRITE_ALL — analyst+admin: can mutate triage/annotation/watchlist state.
+# ADMIN_ONLY — admin-only mutations (users, system config).
+READ_ALL: tuple[str, ...] = ("viewer", "analyst", "admin")
+WRITE_ALL: tuple[str, ...] = ("analyst", "admin")
+ADMIN_ONLY: tuple[str, ...] = ("admin",)
+
 
 def _is_safe_url(target: str) -> bool:
     """Validate that a redirect URL is safe (same host, not external)."""

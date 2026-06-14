@@ -6,13 +6,13 @@ from flask import Blueprint
 
 from .._render import error_page, page
 from ..queries import get_stats
-from .auth import login_required
+from .auth import READ_ALL, role_required
 
 bp = Blueprint("dashboard", __name__)
 
 
 @bp.route("/")
-@login_required
+@role_required(*READ_ALL)
 def index():
     try:
         stats = get_stats()

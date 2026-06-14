@@ -6,7 +6,7 @@ from flask import Blueprint, request
 
 from .._render import error_page, page
 from ..queries import PER_PAGE_DEFAULT, _rows_to_dicts, db_connect, safe_int
-from .auth import login_required
+from .auth import READ_ALL, role_required
 
 bp = Blueprint("triage", __name__)
 
@@ -19,7 +19,7 @@ WHERE_BY_LENS = {
 
 
 @bp.route("/triage")
-@login_required
+@role_required(*READ_ALL)
 def triage():
     pg = safe_int(request.args.get("page", "1"))
     lens = request.args.get("lens", "all")

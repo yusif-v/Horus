@@ -20,6 +20,7 @@
     <div class="error-banner">{{ error }}</div>
     {% endif %}
     <form method="post" action="{{ url_for('auth.login') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="field">
         <label for="username">Username</label>
         <input type="text" id="username" name="username" value="{{ username|default('') }}" required autocomplete="username" autofocus>

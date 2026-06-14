@@ -54,6 +54,7 @@
               <a href="{{ url_for('admin.users_edit', user_id=u.id) }}" class="btn btn-sm">Edit</a>
               {% if g.user.id != u.id %}
               <form method="post" action="{{ url_for('admin.users_delete', user_id=u.id) }}" onsubmit="return confirm('Delete {{ u.username }}? This cannot be undone.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-sm" style="color:#ef4444;">Delete</button>
               </form>
               {% endif %}

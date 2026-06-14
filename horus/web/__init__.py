@@ -12,6 +12,7 @@ from pathlib import Path
 
 from flask import Flask
 
+from . import csrf as _csrf
 from .queries import DB_PATH
 from .routes import ALL_BLUEPRINTS
 
@@ -52,6 +53,7 @@ def create_app() -> Flask:
     )
     for bp in ALL_BLUEPRINTS:
         app.register_blueprint(bp)
+    _csrf.init_app(app)
     return app
 
 
