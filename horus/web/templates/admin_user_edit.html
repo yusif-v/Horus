@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">Administration · {{ 'create new account' if mode == 'new' else 'edit account' }}</div>
+<h1 class="page-title">
+  {% if mode == 'new' %}New user{% else %}Edit <em>· {{ user.username }}</em>{% endif %}
+</h1>
+
+{% if error %}
+<div class="error-banner" style="margin:1rem 0;">{{ error }}</div>
+{% endif %}
+
+<div class="panel">
+  <div class="panel-body">
+    <form method="post" style="display:flex;flex-direction:column;gap:1rem;max-width:560px;">
+
+      {% if mode == 'new' %}
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" value="{{ user.username }}" required minlength="3" autocomplete="off">
+      </div>
+      {% else %}
+      <div class="field">
+        <label>Username</label>
+        <div style="font-family:var(--mono);color:var(--text-dim);">{{ user.username }}</div>
+      </div>
+      {% endif %}
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{{ user.email }}" required>
+      </div>
+
+      <div class="field">
+        <label for="password">Password
+          {% if mode == 'edit' %}<span style="color:var(--text-dim);font-weight:normal;">(leave blank to keep current)</span>{% endif %}
+        </label>
+        <input type="password" id="password" name="password" {% if mode == 'new' %}required minlength="8"{% else %}minlength="8"{% endif %} autocomplete="new-password">
+      </div>
+
+      <div class="field">
+        <label for="team">Team</label>
+        <select id="team" name="team">
+          {% for t in teams %}
+          <option value="{{ t }}" {% if user.team == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Roles</label>
+        <div class="checkbox-group">
+          {% for r in roles %}
+          <label>
+            <input type="checkbox" name="roles" value="{{ r.name }}" {% if r.name in user.roles %}checked{% endif %}>
+            {{ r.name }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if mode == 'edit' %}
+      <div class="field">
+        <label class="checkbox-group">
+          <input type="checkbox" name="is_active" {% if user.is_active %}checked{% endif %}>
+          Active
+        </label>
+      </div>
+      {% endif %}
+
+      <div style="display:flex;gap:.75rem;">
+        <button type="submit" class="btn btn-primary">{{ 'Create' if mode == 'new' else 'Save' }}</button>
+        <a href="{{ url_for('admin.users_list') }}" class="btn">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import re
 from datetime import datetime, timezone
+from typing import Literal, get_args
 from urllib.parse import urljoin, urlparse
 
 from flask import (
@@ -33,6 +34,9 @@ DEFAULT_ROLES = [
 # Dummy hash for constant-time check when username not found (prevents timing attacks)
 _DUMMY_HASH = "pbkdf2:sha256:600000$dummy$hash"
 
+Team = Literal["red", "blue", "both", "none"]
+TEAMS: tuple[str, ...] = get_args(Team)
+
 
 def _is_safe_url(target: str) -> bool:
     """Validate that a redirect URL is safe (same host, not external)."""
@@ -55,7 +59,7 @@ def _seed_default_roles(conn) -> None:
 
 def _get_user(conn, username: str) -> dict | None:
     row = conn.execute(
-        "SELECT id, username, email, password_hash, is_active FROM user WHERE username = ?",
+        "SELECT id, username, email, password_hash, is_active, team FROM user WHERE username = ?",
         (username,),
     ).fetchone()
     return dict(row) if row else None
@@ -93,10 +97,11 @@ def load_user() -> None:
     if user_id is None:
         g.user = None
         g.user_roles = []
+        g.user_team = "none"
         return
     with _storage.connect() as conn:
         row = conn.execute(
-            "SELECT id, username, email, is_active FROM user WHERE id = ?",
+            "SELECT id, username, email, is_active, team FROM user WHERE id = ?",
             (user_id,),
         ).fetchone()
         if row is None or not row[3]:
@@ -104,9 +109,11 @@ def load_user() -> None:
             session.clear()
             g.user = None
             g.user_roles = []
+            g.user_team = "none"
             return
         g.user = dict(row)
         g.user_roles = _get_user_roles(conn, user_id)
+        g.user_team = g.user.get("team") or "none"
 
 
 def login_required(view):
@@ -132,6 +139,30 @@ def role_required(*roles):
             if not any(r in g.user_roles for r in roles):
                 abort(403)
             return view(**kwargs)
+
+        return wrapped_view
+
+    return decorator
+
+
+def team_required(*teams: str):
+    """Decorator: abort 403 unless user's team matches one of `teams`.
+
+    `team='both'` satisfies any of red/blue. Admins always pass.
+    """
+
+    def decorator(view):
+        @functools.wraps(view)
+        def wrapped_view(**kwargs):
+            if g.user is None:
+                return redirect(url_for("auth.login", next=request.url))
+            if "admin" in g.user_roles:
+                return view(**kwargs)
+            user_team = g.get("user_team") or "none"
+            allowed = set(teams)
+            if user_team in allowed or (user_team == "both" and allowed & {"red", "blue"}):
+                return view(**kwargs)
+            abort(403)
 
         return wrapped_view
 

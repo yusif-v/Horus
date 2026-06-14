@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">Administration · user management</div>
+<h1 class="page-title">Users <em>· {{ users|length }}</em></h1>
+<p class="page-subtitle">Manage accounts, roles, and red/blue team assignment.</p>
+
+{% if flash %}
+<div class="admin-flash">{{ flash }}</div>
+{% endif %}
+
+<div class="filter-bar">
+  <a href="{{ url_for('admin.users_new') }}" class="btn btn-primary btn-sm">+ New user</a>
+</div>
+
+<div class="panel">
+  <div class="panel-body flush">
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Team</th>
+          <th>Roles</th>
+          <th>Status</th>
+          <th>Last login</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for u in users %}
+        <tr class="{% if not u.is_active %}inactive-row{% endif %}">
+          <td><strong>{{ u.username }}</strong></td>
+          <td><span style="font-family:var(--mono);font-size:12px;">{{ u.email }}</span></td>
+          <td>
+            {% if u.team and u.team != 'none' %}
+              <span class="team-chip team-{{ u.team }}">{{ u.team|upper }}</span>
+            {% else %}
+              <span style="color:var(--text-dim);">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% for r in u.roles %}<span class="chip">{{ r }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endfor %}
+          </td>
+          <td>
+            {% if u.is_active %}
+              <span class="badge badge-low">ACTIVE</span>
+            {% else %}
+              <span class="badge" style="background:var(--surface-2);color:var(--text-dim);">INACTIVE</span>
+            {% endif %}
+          </td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">{{ u.last_login[:16] if u.last_login else '—' }}</span></td>
+          <td>
+            <div class="admin-actions">
+              <a href="{{ url_for('admin.users_edit', user_id=u.id) }}" class="btn btn-sm">Edit</a>
+              {% if g.user.id != u.id %}
+              <form method="post" action="{{ url_for('admin.users_delete', user_id=u.id) }}" onsubmit="return confirm('Delete {{ u.username }}? This cannot be undone.');">
+                <button type="submit" class="btn btn-sm" style="color:#ef4444;">Delete</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -850,3 +850,42 @@ tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);    
   padding: .3rem .65rem;
   font-size: 10px;
 }
+
+/* ── Team chips ──────────────────────────────────────── */
+.team-chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  padding: .15rem .5rem;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  text-transform: uppercase;
+}
+.team-red   { color: #ef4444; }
+.team-blue  { color: #3b82f6; }
+.team-both  { color: #a855f7; }
+.team-none  { color: var(--text-dim); }
+
+/* ── Admin tables ─────────────────────────────────────── */
+.admin-actions { display: flex; gap: .5rem; }
+.admin-flash {
+  background: rgba(255, 196, 77, .08);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: .6rem 1rem;
+  margin-bottom: 1rem;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.checkbox-group { display: flex; flex-wrap: wrap; gap: .75rem; }
+.checkbox-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-mid);
+}
+.inactive-row td { opacity: .45; }

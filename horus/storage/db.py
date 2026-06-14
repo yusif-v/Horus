@@ -160,6 +160,15 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
         if col not in existing:
             conn.execute(f"ALTER TABLE cve ADD COLUMN {col} {decl}")
 
+    # user table — added in v0.10 for red/blue team separation.
+    user_exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='user'"
+    ).fetchone()
+    if user_exists:
+        existing_user = {row[1] for row in conn.execute("PRAGMA table_info(user)")}
+        if "team" not in existing_user:
+            conn.execute("ALTER TABLE user ADD COLUMN team TEXT NOT NULL DEFAULT 'none'")
+
 
 def initialize() -> tuple[int, int]:
     """Idempotent setup: schema + vocab + index migration + one-shot migration. Returns

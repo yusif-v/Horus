@@ -1,5 +1,6 @@
 """Flask blueprints, one per logical section of the UI."""
 
+from .admin import bp as admin_bp
 from .api import bp as api_bp
 from .auth import bp as auth_bp
 from .cves import bp as cves_bp
@@ -18,4 +19,5 @@ ALL_BLUEPRINTS = [
     pocs_bp,
     resources_bp,
     api_bp,
+    admin_bp,
 ]

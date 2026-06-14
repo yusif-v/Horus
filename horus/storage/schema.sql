@@ -148,6 +148,8 @@ CREATE TABLE IF NOT EXISTS user (
     email           TEXT NOT NULL UNIQUE,
     password_hash   TEXT NOT NULL,
     is_active       INTEGER DEFAULT 1,
+    team            TEXT NOT NULL DEFAULT 'none'
+                    CHECK (team IN ('red', 'blue', 'both', 'none')),
     created_at      TEXT NOT NULL,
     last_login      TEXT
 );
