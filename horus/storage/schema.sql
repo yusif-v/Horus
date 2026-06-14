@@ -134,6 +134,24 @@ CREATE TABLE IF NOT EXISTS cve_watchlist (
     resolved        INTEGER DEFAULT 0  -- 1 when NVD confirms it
 );
 
+-- ─── Triage state (per-CVE workflow) ─────────────────────────────────────
+-- One row per CVE; rows are created lazily the first time an analyst
+-- touches a CVE. Default-absent rows are treated as status='new'.
+
+CREATE TABLE IF NOT EXISTS cve_triage (
+    cve_id          TEXT PRIMARY KEY REFERENCES cve(id) ON DELETE CASCADE,
+    status          TEXT NOT NULL DEFAULT 'new'
+                    CHECK (status IN ('new', 'acknowledged', 'working',
+                                      'dismissed', 'done')),
+    assigned_to     INTEGER REFERENCES user(id) ON DELETE SET NULL,
+    note            TEXT,
+    updated_at      TEXT NOT NULL,
+    updated_by      INTEGER REFERENCES user(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cve_triage_status ON cve_triage(status);
+CREATE INDEX IF NOT EXISTS idx_cve_triage_assignee ON cve_triage(assigned_to);
+
 -- ─── Per-team watchlist (red/blue) ────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS team_watchlist (

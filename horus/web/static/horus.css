@@ -889,3 +889,22 @@ tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);    
   color: var(--text-mid);
 }
 .inactive-row td { opacity: .45; }
+
+/* ── Triage status chips ────────────────────────────── */
+.status-chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  padding: .15rem .5rem;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  text-transform: uppercase;
+}
+.status-new          { color: var(--text-dim); }
+.status-acknowledged { color: var(--info); }
+.status-working      { color: var(--accent); }
+.status-dismissed    { color: var(--text-dim); opacity: .55; }
+.status-done         { color: var(--low); }
+tr.status-dismissed td { opacity: .55; }

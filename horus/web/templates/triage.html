@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">{{ eyebrow }}</div>
+<h1 class="page-title">{{ title }} <em>· {{ total }}</em></h1>
+{% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
+
+<div class="filter-bar">
+  <div class="filter-group">
+    <span class="label">Lens</span>
+    {% for f in filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  <div class="filter-group">
+    <span class="label">Dismissed</span>
+    {% for f in dismissed_filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if rows %}
+<div class="panel">
+  <div class="panel-body flush">
+    <table>
+      <thead>
+        <tr>
+          <th>CVE</th><th>CVSS</th><th>EPSS</th><th>KEV</th><th>PoCs</th>
+          <th>Status</th><th>Assignee</th><th>Description</th>
+          {% if can_write %}<th>Update</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in rows %}
+      <tr class="{% if row.cvss_severity %}sev-{{ row.cvss_severity }}{% endif %} status-{{ row.status }}">
+        <td><a href="/cve/{{ row.id }}" class="cve-id-cell">{{ row.id }}</a></td>
+        <td>
+          {% if row.cvss_score is not none %}
+            <span class="badge badge-{{ (row.cvss_severity or 'low')|lower }}">{{ '%.1f'|format(row.cvss_score) }}</span>
+          {% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+        </td>
+        <td>
+          {% if row.epss_score is not none %}
+            <span class="num">{{ "%.1f%%"|format(row.epss_score * 100) }}</span>
+          {% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+        </td>
+        <td>{% if row.kev %}<span class="badge badge-critical">KEV</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+        <td><span class="num">{{ row.poc_count }}</span></td>
+        <td><span class="status-chip status-{{ row.status }}">{{ row.status }}</span></td>
+        <td>
+          {% if row.assigned_to_name %}
+            <span style="font-family:var(--mono);font-size:11px;">{{ row.assigned_to_name }}</span>
+          {% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+        </td>
+        <td><span class="desc-cell">{{ row.description[:120] if row.description else '—' }}</span></td>
+        {% if can_write %}
+        <td>
+          <details>
+            <summary style="cursor:pointer;color:var(--text-mid);font-family:var(--mono);font-size:11px;">edit</summary>
+            <form method="post" action="{{ url_for('triage.update', cve_id=row.id) }}"
+                  style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem;min-width:200px;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select name="status">
+                {% for s in statuses %}
+                <option value="{{ s }}" {% if row.status == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+              </select>
+              <input type="text" name="note" placeholder="note" value="{{ row.triage_note or '' }}"
+                     style="font-family:var(--mono);font-size:11px;">
+              <label style="font-family:var(--mono);font-size:10px;color:var(--text-mid);">
+                <input type="checkbox" name="assign_self"> assign to me
+              </label>
+              <button type="submit" class="btn btn-sm">save</button>
+            </form>
+          </details>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if total > per_page %}
+<div class="pagination">
+  {% if page > 1 %}<a href="{{ prev_url }}">← Prev</a>{% endif %}
+  <span class="current">{{ page }} / {{ (total / per_page)|round(0, 'ceil')|int }}</span>
+  {% if page * per_page < total %}<a href="{{ next_url }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="panel"><div class="panel-body" style="padding:3rem 2rem;text-align:center;">
+  <div style="font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--text-dim);text-transform:uppercase;">No matching records</div>
+</div></div>
+{% endif %}
+{% endblock %}
