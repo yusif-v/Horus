@@ -9,8 +9,22 @@ from flask import Blueprint, abort, g, redirect, request, url_for
 from werkzeug.security import generate_password_hash
 
 from ...storage import db as _storage
+from .. import audit
 from .._render import page
 from .auth import TEAMS, role_required
+
+
+def _user_audit_snapshot(user: dict) -> dict:
+    """Audit-safe snapshot of a user dict: never include password_hash."""
+    return {
+        "id": user.get("id"),
+        "username": user.get("username"),
+        "email": user.get("email"),
+        "is_active": user.get("is_active"),
+        "team": user.get("team"),
+        "roles": sorted(user.get("roles", [])),
+    }
+
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -167,8 +181,20 @@ def users_new():
                 "VALUES (?, ?, ?, ?, ?)",
                 (username, email, generate_password_hash(password), team, _now()),
             )
-            _set_user_roles(conn, cur.lastrowid, selected_roles)
+            new_id = cur.lastrowid
+            _set_user_roles(conn, new_id, selected_roles)
 
+        audit.record(
+            "user.create",
+            "user",
+            new_id,
+            after={
+                "username": username,
+                "email": email,
+                "team": team,
+                "roles": sorted(selected_roles),
+            },
+        )
         return redirect(url_for("admin.users_list", flash=f"Created {username}"))
 
     return page(
@@ -231,6 +257,7 @@ def users_edit(user_id: int):
                 error=" ".join(errors),
             ), 400
 
+        before_snapshot = _user_audit_snapshot(user)
         with _storage.connect() as conn:
             conn.execute(
                 "UPDATE user SET email = ?, team = ?, is_active = ? WHERE id = ?",
@@ -243,6 +270,22 @@ def users_edit(user_id: int):
                 )
             _set_user_roles(conn, user_id, selected_roles)
 
+        after_snapshot = {
+            "id": user_id,
+            "username": user["username"],
+            "email": email,
+            "is_active": is_active,
+            "team": team,
+            "roles": sorted(selected_roles),
+            "password_changed": bool(new_password),
+        }
+        audit.record(
+            "user.update",
+            "user",
+            user_id,
+            before=before_snapshot,
+            after=after_snapshot,
+        )
         return redirect(url_for("admin.users_list", flash=f"Updated {user['username']}"))
 
     return page(
@@ -253,6 +296,61 @@ def users_edit(user_id: int):
         user=user,
         roles=roles,
         teams=TEAMS,
+    )
+
+
+@bp.route("/audit")
+@role_required("admin")
+def audit_log():
+    page_num = max(int(request.args.get("page", 1) or 1), 1)
+    per_page = 50
+    offset = (page_num - 1) * per_page
+    action_filter = request.args.get("action", "").strip() or None
+    actor_filter = request.args.get("actor", "").strip() or None
+
+    clauses, params = [], []
+    if action_filter:
+        clauses.append("action = ?")
+        params.append(action_filter)
+    if actor_filter:
+        clauses.append("actor_username = ?")
+        params.append(actor_filter)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    with _storage.connect() as conn:
+        total = conn.execute(f"SELECT COUNT(*) FROM audit_event {where}", params).fetchone()[0]
+        rows = conn.execute(
+            f"""
+            SELECT id, ts, actor_id, actor_username, action,
+                   target_type, target_id, before_json, after_json
+            FROM audit_event
+            {where}
+            ORDER BY ts DESC, id DESC
+            LIMIT ? OFFSET ?
+            """,
+            [*params, per_page, offset],
+        ).fetchall()
+        actions = [
+            r[0]
+            for r in conn.execute(
+                "SELECT DISTINCT action FROM audit_event ORDER BY action"
+            ).fetchall()
+        ]
+
+    events = [dict(r) for r in rows]
+    return page(
+        "admin_audit.html",
+        title="Audit log",
+        active="admin",
+        events=events,
+        total=total,
+        page_num=page_num,
+        per_page=per_page,
+        has_next=offset + per_page < total,
+        has_prev=page_num > 1,
+        actions=actions,
+        action_filter=action_filter or "",
+        actor_filter=actor_filter or "",
     )
 
 
@@ -268,4 +366,6 @@ def users_delete(user_id: int):
         if "admin" in user["roles"] and _admin_count(conn, exclude_user_id=user_id) == 0:
             return redirect(url_for("admin.users_list", flash="Cannot delete the last admin"))
         conn.execute("DELETE FROM user WHERE id = ?", (user_id,))
+
+    audit.record("user.delete", "user", user_id, before=_user_audit_snapshot(user))
     return redirect(url_for("admin.users_list", flash=f"Deleted {user['username']}"))

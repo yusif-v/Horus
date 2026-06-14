@@ -176,6 +176,26 @@ CREATE TABLE IF NOT EXISTS user_role (
     PRIMARY KEY (user_id, role_id)
 );
 
+-- ─── Audit log ────────────────────────────────────────────────────────────
+-- Append-only record of security-relevant mutations. `actor_username` is
+-- denormalized so events survive deletion of the acting user.
+
+CREATE TABLE IF NOT EXISTS audit_event (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts              TEXT NOT NULL,
+    actor_id        INTEGER REFERENCES user(id) ON DELETE SET NULL,
+    actor_username  TEXT,                           -- denormalized snapshot
+    action          TEXT NOT NULL,                  -- e.g. user.create, watchlist.add
+    target_type     TEXT NOT NULL,                  -- user | watchlist | …
+    target_id       TEXT,                           -- stringified PK
+    before_json     TEXT,                           -- JSON snapshot, nullable
+    after_json      TEXT                            -- JSON snapshot, nullable
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_event_ts        ON audit_event(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_event_actor     ON audit_event(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_event_action    ON audit_event(action);
+
 CREATE INDEX IF NOT EXISTS idx_user_username ON user(username);
 CREATE INDEX IF NOT EXISTS idx_user_email ON user(email);
 CREATE INDEX IF NOT EXISTS idx_user_role_user_id ON user_role(user_id);

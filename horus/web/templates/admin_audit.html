@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">Administration · audit log</div>
+<h1 class="page-title">Audit <em>· {{ total }}</em></h1>
+<p class="page-subtitle">Append-only record of mutations. Stored forever; cannot be edited from the UI.</p>
+
+<form method="get" class="filter-bar" style="margin-bottom:1.5rem;">
+  <div class="filter-group">
+    <span class="label">Action</span>
+    <select name="action" onchange="this.form.submit()">
+      <option value="">all</option>
+      {% for a in actions %}
+      <option value="{{ a }}" {% if action_filter == a %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filter-group">
+    <span class="label">Actor</span>
+    <input type="text" name="actor" value="{{ actor_filter }}" placeholder="username" style="font-family:var(--mono);font-size:12px;">
+    <button type="submit" class="btn btn-sm">Filter</button>
+    {% if action_filter or actor_filter %}
+    <a href="{{ url_for('admin.audit_log') }}" class="btn btn-sm">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if events %}
+<div class="panel">
+  <div class="panel-body flush">
+    <table>
+      <thead>
+        <tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Target</th><th>Diff</th></tr>
+      </thead>
+      <tbody>
+      {% for e in events %}
+        <tr>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">{{ e.ts[:19].replace('T',' ') }}Z</span></td>
+          <td>
+            {% if e.actor_username %}
+              <strong>{{ e.actor_username }}</strong>
+              {% if not e.actor_id %}<span style="color:var(--text-dim);font-size:10px;">(deleted)</span>{% endif %}
+            {% else %}
+              <span style="color:var(--text-dim);">—</span>
+            {% endif %}
+          </td>
+          <td><span class="chip">{{ e.action }}</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px;">{{ e.target_type }}#{{ e.target_id or '—' }}</span></td>
+          <td>
+            <details>
+              <summary style="cursor:pointer;color:var(--text-mid);font-family:var(--mono);font-size:11px;">view</summary>
+              <div style="display:flex;gap:1rem;margin-top:.5rem;">
+                {% if e.before_json %}
+                <pre style="background:var(--surface-2);padding:.5rem;border:1px solid var(--border);max-width:380px;overflow:auto;font-size:11px;color:#ef4444;">{{ e.before_json }}</pre>
+                {% endif %}
+                {% if e.after_json %}
+                <pre style="background:var(--surface-2);padding:.5rem;border:1px solid var(--border);max-width:380px;overflow:auto;font-size:11px;color:#6bbf8a;">{{ e.after_json }}</pre>
+                {% endif %}
+              </div>
+            </details>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div style="display:flex;gap:.5rem;justify-content:center;margin-top:1.5rem;">
+  {% if has_prev %}
+  <a href="{{ url_for('admin.audit_log', page=page_num-1, action=action_filter, actor=actor_filter) }}" class="btn btn-sm">← prev</a>
+  {% endif %}
+  <span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);align-self:center;">page {{ page_num }}</span>
+  {% if has_next %}
+  <a href="{{ url_for('admin.audit_log', page=page_num+1, action=action_filter, actor=actor_filter) }}" class="btn btn-sm">next →</a>
+  {% endif %}
+</div>
+{% else %}
+<div class="panel"><div class="panel-body">
+  <p style="color:var(--text-mid);">No audit events match this filter.</p>
+</div></div>
+{% endif %}
+{% endblock %}

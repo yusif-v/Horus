@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, abort, g, redirect, request, url_for
 
 from ...storage import db as _storage
+from .. import audit
 from .._render import page
 from .auth import READ_ALL, WRITE_ALL, role_required, team_required
 
@@ -134,16 +135,23 @@ def add():
 
     with _storage.connect() as conn:
         try:
-            conn.execute(
+            cur = conn.execute(
                 "INSERT INTO team_watchlist (team, vendor, product, note, "
                 "created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)",
                 (team, vendor, product, note, _now(), g.user["id"]),
             )
+            new_id = cur.lastrowid
         except sqlite3.IntegrityError:
             return redirect(
                 url_for("watchlist.index", flash=f"Already watching {vendor} {product}")
             )
 
+    audit.record(
+        "watchlist.add",
+        "watchlist",
+        new_id,
+        after={"team": team, "vendor": vendor, "product": product, "note": note},
+    )
     label = f"{vendor} {product}".strip()
     return redirect(url_for("watchlist.index", flash=f"Added {label}"))
 
@@ -165,5 +173,11 @@ def delete(entry_id: int):
                 abort(403)
         conn.execute("DELETE FROM team_watchlist WHERE id = ?", (entry_id,))
 
+    audit.record(
+        "watchlist.delete",
+        "watchlist",
+        entry_id,
+        before={"team": row[0], "vendor": row[1], "product": row[2]},
+    )
     label = f"{row[1]} {row[2]}".strip()
     return redirect(url_for("watchlist.index", flash=f"Removed {label}"))
