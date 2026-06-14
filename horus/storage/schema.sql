@@ -134,6 +134,22 @@ CREATE TABLE IF NOT EXISTS cve_watchlist (
     resolved        INTEGER DEFAULT 0  -- 1 when NVD confirms it
 );
 
+-- ─── Per-team watchlist (red/blue) ────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS team_watchlist (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    team            TEXT NOT NULL CHECK (team IN ('red', 'blue')),
+    vendor          TEXT NOT NULL,
+    product         TEXT NOT NULL DEFAULT '',   -- '' = any product from vendor
+    note            TEXT,
+    created_at      TEXT NOT NULL,
+    created_by      INTEGER REFERENCES user(id) ON DELETE SET NULL,
+    UNIQUE (team, vendor, product)
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_watchlist_team   ON team_watchlist(team);
+CREATE INDEX IF NOT EXISTS idx_team_watchlist_vendor ON team_watchlist(vendor);
+
 -- ─── User management ─────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS role (

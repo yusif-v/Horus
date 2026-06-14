@@ -9,6 +9,7 @@ from .pocs import bp as pocs_bp
 from .resources import bp as resources_bp
 from .search import bp as search_bp
 from .triage import bp as triage_bp
+from .watchlist import bp as watchlist_bp
 
 ALL_BLUEPRINTS = [
     auth_bp,
@@ -20,4 +21,5 @@ ALL_BLUEPRINTS = [
     resources_bp,
     api_bp,
     admin_bp,
+    watchlist_bp,
 ]

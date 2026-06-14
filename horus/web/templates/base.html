@@ -31,6 +31,9 @@
     <a href="/cves" class="{% if active == 'cves' %}active{% endif %}">CVEs</a>
     <a href="/pocs" class="{% if active == 'pocs' %}active{% endif %}">PoCs</a>
     <a href="/resources" class="{% if active == 'resources' %}active{% endif %}">Resources</a>
+    {% if g.user and ('admin' in g.user_roles or g.user_team in ('red', 'blue', 'both')) %}
+    <a href="/watchlist" class="{% if active == 'watchlist' %}active{% endif %}">Watchlist</a>
+    {% endif %}
     {% if g.user and 'admin' in g.user_roles %}
     <a href="/admin/users" class="{% if active == 'admin' %}active{% endif %}">Admin</a>
     {% endif %}

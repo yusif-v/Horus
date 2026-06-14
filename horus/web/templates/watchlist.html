@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">
+  Team intelligence ·
+  {% for t in teams_visible %}<span class="team-chip team-{{ t }}" style="margin-right:.35rem;">{{ t|upper }}</span>{% endfor %}
+</div>
+<h1 class="page-title">Watchlist <em>· {{ entries|length }}</em></h1>
+<p class="page-subtitle">
+  Vendor and product pins for your team. New CVEs touching these surface below the moment they're ingested.
+</p>
+
+{% if flash %}
+<div class="admin-flash">{{ flash }}</div>
+{% endif %}
+
+<div class="panel" style="margin-bottom:2rem;">
+  <div class="panel-body">
+    <form method="post" action="{{ url_for('watchlist.add') }}"
+          style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field" style="flex:0 0 110px;">
+        <label for="team">Team</label>
+        <select id="team" name="team" required>
+          {% for t in teams_visible %}
+          <option value="{{ t }}">{{ t|upper }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" style="flex:1 1 180px;">
+        <label for="vendor">Vendor</label>
+        <input type="text" id="vendor" name="vendor" required placeholder="e.g. microsoft">
+      </div>
+      <div class="field" style="flex:1 1 180px;">
+        <label for="product">Product
+          <span style="color:var(--text-dim);font-weight:normal;">(blank = any)</span>
+        </label>
+        <input type="text" id="product" name="product" placeholder="e.g. windows_server">
+      </div>
+      <div class="field" style="flex:2 1 220px;">
+        <label for="note">Note</label>
+        <input type="text" id="note" name="note" placeholder="why you're watching">
+      </div>
+      <button type="submit" class="btn btn-primary">Add</button>
+    </form>
+  </div>
+</div>
+
+{% if entries %}
+<h2 style="font-family:var(--display);font-size:1.1rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-mid);margin:0 0 .75rem;">Pins</h2>
+<div class="panel" style="margin-bottom:2rem;">
+  <div class="panel-body flush">
+    <table>
+      <thead>
+        <tr><th>Team</th><th>Vendor</th><th>Product</th><th>Note</th><th>Added by</th><th>Added</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for e in entries %}
+        <tr>
+          <td><span class="team-chip team-{{ e.team }}">{{ e.team|upper }}</span></td>
+          <td><strong>{{ e.vendor }}</strong></td>
+          <td>{% if e.product %}{{ e.product }}{% else %}<span style="color:var(--text-dim);">any</span>{% endif %}</td>
+          <td>{% if e.note %}{{ e.note }}{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">{{ e.created_by_name or '—' }}</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">{{ e.created_at[:10] }}</span></td>
+          <td>
+            <form method="post" action="{{ url_for('watchlist.delete', entry_id=e.id) }}"
+                  onsubmit="return confirm('Remove {{ e.vendor }} {{ e.product }}?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm" style="color:#ef4444;">Remove</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="panel" style="margin-bottom:2rem;"><div class="panel-body">
+  <p style="color:var(--text-mid);">No pins yet — add a vendor above to start tracking it.</p>
+</div></div>
+{% endif %}
+
+<h2 style="font-family:var(--display);font-size:1.1rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-mid);margin:0 0 .75rem;">
+  Matching CVEs <em style="font-style:normal;color:var(--accent);">· {{ cves|length }}</em>
+</h2>
+{% if cves %}
+<div class="panel">
+  <div class="panel-body flush">
+    <table>
+      <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>KEV</th><th>Vendor / Product</th><th>Published</th></tr></thead>
+      <tbody>
+      {% for c in cves %}
+        <tr>
+          <td><a href="{{ url_for('search.cve_detail', cve_id=c.id) }}"><strong>{{ c.id }}</strong></a></td>
+          <td>
+            {% if c.cvss_score is not none %}
+              <span class="badge badge-{{ (c.cvss_severity or 'low')|lower }}">{{ '%.1f'|format(c.cvss_score) }}</span>
+            {% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+          </td>
+          <td>{% if c.epss_score is not none %}{{ '%.2f'|format(c.epss_score) }}{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+          <td>{% if c.kev %}<span class="badge badge-critical">KEV</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+          <td><span style="font-family:var(--mono);font-size:12px;">{{ c.vendor }} / {{ c.product }}</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">{{ (c.published_at or '')[:10] }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="panel"><div class="panel-body">
+  <p style="color:var(--text-mid);">No CVEs match any pin yet — they'll appear here as soon as the next ingest cycle picks one up.</p>
+</div></div>
+{% endif %}
+{% endblock %}
