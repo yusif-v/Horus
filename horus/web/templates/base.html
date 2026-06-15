@@ -43,7 +43,7 @@
   </form>
   {% if g.user %}
   <div class="user-menu">
-    <span class="user-name">{{ g.user.username }}</span>
+    <a href="{{ url_for('profile.telegram') }}" class="user-name" style="text-decoration:none;">{{ g.user.username }}</a>
     {% if g.user_team and g.user_team != 'none' %}
     <span class="team-chip team-{{ g.user_team }}">{{ g.user_team|upper }}</span>
     {% endif %}

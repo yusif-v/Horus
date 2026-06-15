@@ -185,7 +185,32 @@ CREATE TABLE IF NOT EXISTS user (
     team            TEXT NOT NULL DEFAULT 'none'
                     CHECK (team IN ('red', 'blue', 'both', 'none')),
     created_at      TEXT NOT NULL,
-    last_login      TEXT
+    last_login      TEXT,
+    -- v0.10: Telegram link state. NULL until the user completes deep-link.
+    telegram_chat_id    INTEGER UNIQUE,
+    telegram_username   TEXT,
+    telegram_linked_at  TEXT
+);
+
+-- One-time deep-link tokens. Created when a user clicks "Connect Telegram";
+-- consumed when the bot receives /start <token>. Single-use, time-limited.
+CREATE TABLE IF NOT EXISTS telegram_link_token (
+    token       TEXT PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    created_at  TEXT NOT NULL,
+    expires_at  TEXT NOT NULL,
+    used_at     TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_link_token_user ON telegram_link_token(user_id);
+
+-- Per-user notification category toggles. Default-absent kinds use the
+-- DEFAULT_PREFS map in horus/web/notifications.py.
+CREATE TABLE IF NOT EXISTS notification_pref (
+    user_id     INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (user_id, kind)
 );
 
 CREATE TABLE IF NOT EXISTS user_role (

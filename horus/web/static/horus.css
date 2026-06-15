@@ -908,3 +908,18 @@ tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);    
 .status-dismissed    { color: var(--text-dim); opacity: .55; }
 .status-done         { color: var(--low); }
 tr.status-dismissed td { opacity: .55; }
+
+/* ── Telegram connect banner ─────────────────────────── */
+.telegram-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: .85rem 1.2rem;
+  margin-bottom: 1.5rem;
+  background: linear-gradient(90deg, rgba(38,158,221,.10), rgba(38,158,221,.02));
+  border: 1px solid rgba(38,158,221,.4);
+  border-radius: 3px;
+  font-size: 13px;
+}
+.telegram-banner strong { color: #29a5e0; }

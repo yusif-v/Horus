@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">Profile · notification preferences</div>
+<h1 class="page-title">Notifications</h1>
+<p class="page-subtitle">Pick which events should DM you in Telegram. These also apply to any future delivery channel.</p>
+
+{% if flash %}<div class="admin-flash">{{ flash }}</div>{% endif %}
+
+<div class="panel">
+  <div class="panel-body">
+    <form method="post" style="display:flex;flex-direction:column;gap:1.25rem;max-width:640px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% for c in categories %}
+      <label style="display:flex;gap:.85rem;align-items:flex-start;cursor:pointer;">
+        <input type="checkbox" name="pref_{{ c.kind }}" {% if c.enabled %}checked{% endif %} style="margin-top:.3rem;">
+        <span>
+          <strong>{{ c.label }}</strong>
+          {% if c.default %}<span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-left:.4rem;">(default on)</span>{% endif %}
+          <div style="color:var(--text-mid);font-size:12px;margin-top:.15rem;">{{ c.description }}</div>
+        </span>
+      </label>
+      {% endfor %}
+
+      <div style="display:flex;gap:.75rem;margin-top:.5rem;">
+        <button type="submit" class="btn btn-primary">Save preferences</button>
+        <a href="{{ url_for('profile.telegram') }}" class="btn">Back to Telegram</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

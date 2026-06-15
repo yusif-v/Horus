@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">Profile · Telegram</div>
+<h1 class="page-title">Telegram notifications</h1>
+<p class="page-subtitle">
+  Link your Telegram account to receive Horus notifications by DM. Only registered Horus users can talk to the bot —
+  the link token below is single-use and expires in 30 minutes.
+</p>
+
+{% if flash %}<div class="admin-flash">{{ flash }}</div>{% endif %}
+
+{% if not bot_configured %}
+<div class="error-banner" style="margin-bottom:1.5rem;">
+  Telegram bot is not configured (TELEGRAM_BOT_USERNAME not set). Ask an admin to configure it before linking.
+</div>
+{% endif %}
+
+<div class="panel" style="margin-bottom:2rem;">
+  <div class="panel-body">
+    {% if linked %}
+      <h2 style="font-family:var(--display);font-size:1.2rem;margin-bottom:.75rem;">Connected</h2>
+      <table style="font-family:var(--mono);font-size:12px;">
+        <tr><td style="padding:.25rem 1rem .25rem 0;color:var(--text-dim);">Telegram username</td><td>@{{ link_state.telegram_username or 'unknown' }}</td></tr>
+        <tr><td style="padding:.25rem 1rem .25rem 0;color:var(--text-dim);">Linked at</td><td>{{ link_state.telegram_linked_at }}</td></tr>
+      </table>
+      <form method="post" action="{{ url_for('profile.telegram_unlink') }}" style="margin-top:1rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm" style="color:#ef4444;"
+                onclick="return confirm('Disconnect Telegram? You will stop receiving notifications.');">
+          Disconnect
+        </button>
+      </form>
+    {% else %}
+      <h2 style="font-family:var(--display);font-size:1.2rem;margin-bottom:.75rem;">Not connected</h2>
+      {% if active_token %}
+        <p style="color:var(--text-mid);font-size:13px;">
+          Open the link below in Telegram and tap <strong>Start</strong>. The token expires at
+          <span style="font-family:var(--mono);font-size:12px;">{{ active_token.expires_at }}</span>.
+        </p>
+        <div style="margin:1rem 0;padding:1rem;background:var(--surface-2);border:1px solid var(--border);border-radius:2px;">
+          {% if deep_link %}
+            <a href="{{ deep_link }}" target="_blank" rel="noopener" class="btn btn-primary">Open in Telegram</a>
+            <div style="margin-top:.75rem;font-family:var(--mono);font-size:11px;color:var(--text-dim);word-break:break-all;">
+              {{ deep_link }}
+            </div>
+          {% else %}
+            <span style="color:var(--text-dim);">Deep link unavailable — bot username not configured.</span>
+          {% endif %}
+        </div>
+        <form method="post" action="{{ url_for('profile.telegram_generate') }}" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm">Regenerate token</button>
+        </form>
+      {% else %}
+        <p style="color:var(--text-mid);font-size:13px;margin-bottom:1rem;">
+          Generate a one-time link token, open it in Telegram, and tap <strong>Start</strong> to bind your account.
+        </p>
+        <form method="post" action="{{ url_for('profile.telegram_generate') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-primary">Generate link token</button>
+        </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">
+  ↳ <a href="{{ url_for('profile.notifications') }}">Choose which notifications to receive →</a>
+</div>
+{% endblock %}

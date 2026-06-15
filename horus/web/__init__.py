@@ -50,6 +50,7 @@ def create_app() -> Flask:
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
+        TELEGRAM_BOT_USERNAME=os.environ.get("TELEGRAM_BOT_USERNAME", ""),
     )
     for bp in ALL_BLUEPRINTS:
         app.register_blueprint(bp)

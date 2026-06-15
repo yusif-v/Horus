@@ -4,6 +4,16 @@
 <h1 class="page-title">Operating <em>picture</em>.</h1>
 <p class="page-subtitle">Aggregated CVE and exploit intelligence from NVD, CISA KEV, EPSS, GitHub PoC, and Exploit-DB. Numbers reflect the current state of the local index.</p>
 
+{% if g.user and not g.user.telegram_chat_id %}
+<div class="telegram-banner">
+  <div>
+    <strong>Telegram notifications available.</strong>
+    <span style="color:var(--text-mid);">Get DMs when KEV adds, EPSS spikes, or your watchlist matches a new CVE — only you, only your registered account.</span>
+  </div>
+  <a href="{{ url_for('profile.telegram') }}" class="btn btn-primary btn-sm">Connect Telegram</a>
+</div>
+{% endif %}
+
 <div class="posture">
   <div class="cell">
     <div class="k">Actionable now</div>
