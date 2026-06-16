@@ -123,11 +123,17 @@ def run(ctx) -> dict:
                 if url in ctx.known_poc_urls or url in github_poc_urls:
                     continue
 
+                # Only link CVEs that are actually referenced by this URL.
+                # NVD/advisory URLs like nvd.nist.gov/vuln/detail/CVE-XXXX-XXXX
+                # should only reference the specific CVE in the URL, not all CVEs
+                # mentioned in the tweet.
+                url_cves = _cves_for_url(url, cves)
+
                 github_poc_urls[url] = {
                     "url": url,
                     "source": source,
                     "discovered_via": "x",
-                    "cves": cves,
+                    "cves": url_cves,
                     "stars": None,
                     "age_days": None,
                     "description": text[:300],
@@ -185,3 +191,21 @@ def _source_for_url_type(url_type: UrlType) -> str:
         UrlType.GENERIC: "web",
     }
     return mapping.get(url_type, "web")
+
+
+def _cves_for_url(url: str, tweet_cves: list[str]) -> list[str]:
+    """Filter CVEs to only those actually referenced by the URL.
+
+    NVD/advisory URLs like nvd.nist.gov/vuln/detail/CVE-XXXX-XXXX
+    reference a specific CVE — don't link all tweet CVEs to it.
+    For non-CVE-specific URLs (e.g. GitHub repos), return all tweet CVEs.
+    """
+    import re
+    # Extract CVE ID from URL itself (e.g. nvd.nist.gov/vuln/detail/CVE-2026-21520)
+    url_cve_match = re.search(r"(CVE-\d{4}-\d{4,})", url, re.IGNORECASE)
+    if url_cve_match:
+        url_cve = url_cve_match.group(1).upper()
+        # Only return the CVE that matches the URL
+        return [c for c in tweet_cves if c.upper() == url_cve]
+    # Non-CVE-specific URL — return all tweet CVEs
+    return tweet_cves
