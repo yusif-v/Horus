@@ -29,8 +29,8 @@ web:
   workers: 2
   allow_dev_fallback: true
 
-# Telegram: set TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_USERNAME env vars.
-# See horus.yaml.example for full documentation.
+# Telegram bot — set env vars instead of hardcoding token:
+#   export TELEGRAM_BOT_TOKEN="your_token_from_botfather"
+#   export TELEGRAM_BOT_USERNAME="your_bot_username"  (without @)
 telegram:
-  enabled: false
-  bot_token: ""
+  enabled: true

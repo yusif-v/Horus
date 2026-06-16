@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-17
+
 ### Added
 - **User self-service**: `/profile/settings` — users can change their own email, team assignment, and password (current password required for password changes). Audit-logged as `user.self_update`.
 - `docs/plans/v0.10.md` — Telegram bot listener, notification dispatch, bot command reference, work items.

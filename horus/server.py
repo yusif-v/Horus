@@ -173,8 +173,9 @@ class Server:
             self._log("[WARN] telegram enabled but no bot token; notifications disabled")
             return
         try:
-            from ..notifications.dispatcher import dispatch
-            from ..pipeline import register_end_hook
+            from .notifications.dispatcher import dispatch
+            from .pipeline import register_end_hook
+
             register_end_hook(lambda result: dispatch(result.events, token))
             self._log("telegram notification dispatch registered")
         except Exception as e:
@@ -185,8 +186,8 @@ class Server:
         token = self.cfg.telegram.resolved_token()
         if not token:
             return
-        import threading
-        from ..bot.telegram import run_listener
+        from .bot.telegram import run_listener
+
         t = threading.Thread(
             target=run_listener,
             args=(token,),
@@ -280,7 +281,6 @@ class Server:
                 'Install it: pip install -e ".[server]"'
             )
         # Dev-server fallback in a daemon thread. NOT for real production.
-        import threading
 
         from . import web as _web
 
