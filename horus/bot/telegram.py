@@ -49,8 +49,7 @@ def _handle_start(api: TelegramAPI, chat_id: int, username: str | None, text: st
         if not row:
             api.send_message(
                 chat_id,
-                "❌ Invalid or expired token.\n"
-                "Generate a new one in your Horus profile.",
+                "❌ Invalid or expired token.\nGenerate a new one in your Horus profile.",
             )
             return
 
@@ -114,10 +113,10 @@ def _handle_status(api: TelegramAPI, chat_id: int) -> None:
             ).fetchall()
         }
 
-    from ...notifications import CATEGORIES, DEFAULT_PREFS
+    from ..web.notifications import CATEGORIES
 
     lines = [f"📋 *Notification Preferences for @{username}*\n"]
-    for kind, (label, desc, default) in CATEGORIES.items():
+    for kind, (label, _desc, default) in CATEGORIES.items():
         enabled = stored.get(kind, default)
         icon = "🟢" if enabled else "🔴"
         lines.append(f"{icon} *{label}* — {'ON' if enabled else 'OFF'}")
@@ -138,7 +137,7 @@ def _handle_unlink(api: TelegramAPI, chat_id: int) -> None:
         conn.execute(
             "UPDATE user SET telegram_chat_id = NULL, telegram_username = NULL, "
             "telegram_linked_at = NULL WHERE telegram_chat_id = ?",
-            (chat_id, ),
+            (chat_id,),
         )
         conn.execute(
             "UPDATE telegram_link_token SET used_at = ? "
@@ -200,7 +199,7 @@ def run_listener(token: str, poll_timeout: int = 30) -> None:
                 offset = update["update_id"] + 1
                 try:
                     _process_update(api, update)
-                except TelegramError as e:
+                except Exception as e:
                     print(f"[bot] error processing update: {e}", file=sys.stderr)
         except TelegramError as e:
             print(f"[bot] poll error: {e}", file=sys.stderr)
@@ -208,6 +207,9 @@ def run_listener(token: str, poll_timeout: int = 30) -> None:
         except KeyboardInterrupt:
             print("[bot] shutting down", file=sys.stderr)
             break
+        except Exception as e:
+            print(f"[bot] unexpected error, retrying: {e}", file=sys.stderr)
+            time.sleep(5)
 
 
 def main() -> None:

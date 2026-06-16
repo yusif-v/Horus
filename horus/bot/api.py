@@ -19,13 +19,18 @@ class TelegramAPI:
         self._timeout = timeout
         self._base = f"https://api.telegram.org/bot{token}"
 
-    def _call(self, method: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _call(
+        self,
+        method: str,
+        payload: dict[str, Any] | None = None,
+        timeout: int | None = None,
+    ) -> dict[str, Any]:
         url = f"{self._base}/{method}"
         data = json.dumps(payload).encode() if payload else None
         headers = {"Content-Type": "application/json"}
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+            with urllib.request.urlopen(req, timeout=timeout or self._timeout) as resp:
                 result: dict[str, Any] = json.loads(resp.read())
                 if not result.get("ok"):
                     raise TelegramError(f"API error: {result}")
@@ -33,6 +38,8 @@ class TelegramAPI:
         except urllib.error.HTTPError as e:
             body = e.read().decode(errors="replace")
             raise TelegramError(f"HTTP {e.code}: {body}") from e
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            raise TelegramError(f"network error: {e}") from e
 
     def get_updates(
         self, offset: int = 0, limit: int = 100, timeout: int = 30
@@ -41,7 +48,8 @@ class TelegramAPI:
         payload: dict[str, Any] = {"limit": limit, "timeout": timeout}
         if offset:
             payload["offset"] = offset
-        result = self._call("getUpdates", payload)
+        # urlopen must wait at least the long-poll window plus network slack.
+        result = self._call("getUpdates", payload, timeout=timeout + 10)
         return result.get("result", [])
 
     def send_message(
