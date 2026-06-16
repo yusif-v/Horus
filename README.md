@@ -1,6 +1,6 @@
 # Horus
 
-**Version:** 0.8.0
+**Version:** 0.10.0
 
 Daily PoC research scanner — or a 24/7 server. Treats NVD as the single source of truth for CVE data; treats GitHub, X/Twitter and Exploit-DB as signals that build a CVE *reputation score*. Enriches with CISA KEV and EPSS. Query any CVE from the local database, or run as a daemon that polls each source on its own interval. Requires Python 3.10+.
 
@@ -9,10 +9,16 @@ Daily PoC research scanner — or a 24/7 server. Treats NVD as the single source
 ### Source classification (v0.8)
 - **Authoritative** — **NVD only**. CVE ID, description, CVSS, CWE, affected products come from NVD and nowhere else.
 - **Signal sources** — never create CVE records. They corroborate what NVD has already published.
-  - **GitHub**: PoC/exploit repositories (<30d old, >10 stars, fresh PoC keywords). Confidence: `high` (>100★), `medium` (>10★), `low` otherwise.
+  - **GitHub**: PoC/exploit repositories (<90d old, >1 star, fresh PoC keywords). Confidence: `high` (>100★), `medium` (>10★), `low` otherwise.
   - **X/Twitter** (Chrome-cookie auth, birdnode-compatible): each tweet mentioning a CVE bumps that CVE's `social_mentions` counter; tweets that link to a `github.com` PoC repo feed that URL into the GitHub source for enrichment. **X never produces a PoC record on its own.**
   - **Exploit-DB**: secondary PoC links via the GitLab mirror.
 - **Signal-only CVEs** (an ID that only appears in X but not yet in NVD) go to a low-confidence `cve_watchlist` table and are resolved automatically once NVD confirms them.
+
+### Security Intelligence Resources (v0.9)
+Broad intelligence gathering beyond CVE-linked PoCs — discovers exploit tools, bypass techniques, vulnerability disclosures, red team tools, and security advisories from X/Twitter. Stored in the `security_resource` table with engagement scoring.
+
+### URL Resolution (v0.9)
+t.co shortened URLs are resolved to final destinations for proper classification. Batch resolution (5 workers, 3s timeout). Classified by destination domain: github/gitlab → poc, blogs/articles → advisory, vulmon/NVD → advisory.
 
 ### Reputation score
 A composite 0–10 score replaces the old `exploitability_score`:
@@ -42,6 +48,10 @@ The ubiquity bonus reflects what the user asked for in v0.8: a critical CVE in a
 - **Health check** — `--health-check`.
 - **CVE query** — `--query CVE-XXXX-XXXX`.
 - **24/7 server mode** — `--server`, see below.
+- **User management** — self-service profile settings, role-based access (admin/analyst/viewer).
+- **Telegram notifications** — per-user notification preferences, bot linking via deep-link tokens.
+- **Audit logging** — append-only audit log for admin and watchlist mutations.
+- **Web UI** — comprehensive dashboard with drill-down filters, see below.
 
 ## Plugin Architecture
 
@@ -242,15 +252,29 @@ python3 -m horus.web --host 0.0.0.0 --port 8080  # network-accessible
 ```
 
 **Pages:**
-- `/` — Dashboard: stats, recent CVEs, top PoCs, category breakdown
+- `/` — Dashboard: threat posture, KEV table, severity mix, EPSS buckets, recent ingest, top PoCs, attack surface, publication tempo, PoC sources, affected categories. All numbers and section headings are clickable and drill through to filtered views.
 - `/search?q=CVE-2026-11413` — Search CVEs by ID or keyword
-- `/cve/CVE-2026-11413` — Full CVE detail with PoCs, tags, products, related CVEs
-- `/cves` — Browse all CVEs, filter by severity/KEV
-- `/pocs` — Browse all PoCs, filter by source
-- `/api/stats` — JSON API for dashboard stats
-- `/api/cve/CVE-2026-11413` — JSON API for CVE detail
+- `/cve/CVE-2026-11413` — Full CVE detail with PoCs, tags, products, related CVEs, social posts, detection links (Nuclei/Sigma/YARA/Suricata/CISA/NVD/Vulmon). All tags, vendors, and categories are clickable.
+- `/cves` — Browse all CVEs with filters: severity, KEV, vendor, attack tag, category, CWE, source, EPSS/CVSS range, time window, watchlist match. Export to CSV. Share filter URL.
+- `/triage` — Action queue with lens filters (KEV/imminent/weaponized), status/assignee/age/team filters. Per-CVE triage mutations (status, note, assign).
+- `/pocs` — Browse all PoCs with source filter, sort by newest/stars, quick filters for linked/popular.
+- `/resources` — Security intelligence resources (tools, techniques, advisories, disclosures) with type/source/author filters, engagement sorting.
+- `/vendors` — Vendor exposure dashboard: CVE count, avg CVSS, avg EPSS, KEV count, categories, watchlist status. Click vendor → filtered CVE list.
+- `/watchlist` — Team watchlist management (red/blue teams).
+- `/profile/settings` — Self-service account settings (email, team, password).
+- `/profile/telegram` — Telegram notification linking.
+- `/profile/notifications` — Per-category notification preferences.
+- `/admin/users` — User management (admin only).
+- `/api/stats` — JSON API for dashboard stats.
+- `/api/cve/CVE-2026-11413` — JSON API for CVE detail.
 
-Dark theme, responsive design, works on desktop and mobile.
+**Keyboard shortcuts:**
+- `/` — focus search
+- `g` then `d/c/t/p/r/w` — go to dashboard/CVEs/triage/PoCs/resources/watchlist
+- `j` / `k` — next/prev row in table
+- `Enter` — open focused row
+
+Dark theme, responsive design, works on desktop and mobile. Sticky table headers on scroll.
 
 ## Query Output
 
@@ -447,13 +471,37 @@ Horus/
 │   │   ├── db.py         #   Schema init, migration, CRUD
 │   │   ├── health.py     #   Database integrity checks
 │   │   └── query.py      #   CVE query + enrichment report
-│   └── render/           # Output formatting
-│       ├── report.py     #   Text / markdown renderer
-│       ├── persist.py    #   Save markdown report to disk
-│       └── graph.py      #   Interactive Cytoscape.js HTML graph
+│   ├── render/           # Output formatting
+│   │   ├── report.py     #   Text / markdown renderer
+│   │   ├── persist.py    #   Save markdown report to disk
+│   │   └── graph.py      #   Interactive Cytoscape.js HTML graph
+│   └── web/              # Flask web UI
+│       ├── __init__.py   #   Flask app factory + WSGI `app` object
+│       ├── _render.py    #   Shared rendering helpers (page, error_page)
+│       ├── audit.py      #   Append-only audit log
+│       ├── csrf.py       #   CSRF protection
+│       ├── notifications.py  # Telegram notification dispatch
+│       ├── queries.py    #   DB read helpers for routes
+│       ├── routes/       #   Blueprint route modules
+│       │   ├── auth.py       #   Login, register, logout
+│       │   ├── admin.py     #   User management
+│       │   ├── api.py        #   JSON API
+│       │   ├── cves.py       #   CVE list + CSV export
+│       │   ├── dashboard.py #   Overview dashboard
+│       │   ├── pocs.py       #   PoC list
+│       │   ├── profile.py   #   Settings, Telegram, notifications
+│       │   ├── resources.py #   Security resources
+│       │   ├── search.py    #   Search + CVE detail
+│       │   ├── triage.py    #   Triage queue + mutations
+│       │   ├── vendors.py   #   Vendor exposure dashboard
+│       │   └── watchlist.py #   Team watchlist
+│       ├── templates/    #   Jinja2 templates
+│       └── static/       #   CSS + static assets
 ├── state/
 │   └── horus.db          # SQLite — all persistent state
 ├── reports/              # Generated reports + graphs
+├── docs/plans/           # Version plans and roadmaps
+├── .github/              # CI/CD workflows + Dependabot
 ├── ARCHITECTURE.md       # Plugin architecture documentation
 ├── README.md
 └── CHANGELOG.md
