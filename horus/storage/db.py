@@ -231,6 +231,59 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
             if col not in existing_user:
                 conn.execute(f"ALTER TABLE user ADD COLUMN {col} {decl}")
 
+    # v0.10 data cleanup: fix PoCs where NVD/advisory URLs were linked to
+    # multiple CVEs from the same tweet, but the URL only references one.
+    # Keep only the CVE that matches the URL path.
+    _cleanup_wrong_poc_cve_links(conn)
+
+
+def _cleanup_wrong_poc_cve_links(conn: sqlite3.Connection) -> None:
+    """Fix poc_cve rows where a CVE-specific URL was linked to unrelated CVEs.
+
+    NVD/advisory URLs like nvd.nist.gov/vuln/detail/CVE-XXXX-XXXX should only
+    be linked to the CVE in the URL path, not all CVEs mentioned in the tweet.
+    """
+    import re
+
+    # Guard: tables may not exist yet during early migration
+    has_poc = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='poc'"
+    ).fetchone()
+    has_poc_cve = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='poc_cve'"
+    ).fetchone()
+    if not has_poc or not has_poc_cve:
+        return
+
+    # Find web PoCs with multiple CVE links
+    bad = conn.execute("""
+        SELECT p.url, GROUP_CONCAT(pc.cve_id) as linked_cves
+        FROM poc p
+        JOIN poc_cve pc ON pc.poc_url = p.url
+        WHERE p.source = 'web'
+        GROUP BY p.url
+        HAVING COUNT(pc.cve_id) > 1
+    """).fetchall()
+
+    for url, linked_cves_str in bad:
+        cves = linked_cves_str.split(",")
+        # Check if URL contains a specific CVE reference
+        url_cve_match = re.search(r"(CVE-\d{4}-\d{4,})", url, re.IGNORECASE)
+        if not url_cve_match:
+            continue  # Non-CVE-specific URL — skip
+
+        url_cve = url_cve_match.group(1).upper()
+        correct_cves = [c for c in cves if c.upper() == url_cve]
+
+        if len(correct_cves) < len(cves):
+            # Delete all links for this PoC, re-add only correct ones
+            conn.execute("DELETE FROM poc_cve WHERE poc_url = ?", (url,))
+            for cve in correct_cves:
+                conn.execute(
+                    "INSERT OR IGNORE INTO poc_cve (poc_url, cve_id) VALUES (?, ?)",
+                    (url, cve),
+                )
+
 
 def initialize() -> tuple[int, int]:
     """Idempotent setup: schema + vocab + index migration + one-shot migration. Returns
@@ -578,6 +631,7 @@ def fetch_resources(
     source_filter: str | None = None,
     tag_filter: str | None = None,
     sort: str = "newest",
+    direction: str = "desc",
 ) -> tuple[list[dict[str, Any]], int]:
     conditions: list[str] = []
     params: list[Any] = []
@@ -596,12 +650,16 @@ def fetch_resources(
             0
         ]
         offset = (page - 1) * per_page
-        sort_map = {
-            "newest": "first_seen DESC",
-            "engagement": "engagement_score DESC, first_seen DESC",
-            "stars": "stars DESC NULLS LAST, first_seen DESC",
+        d_kw = "ASC" if direction == "asc" else "DESC"
+        nulls = "NULLS FIRST" if d_kw == "ASC" else "NULLS LAST"
+        sort_cols = {
+            "newest": "first_seen",
+            "engagement": "engagement_score",
+            "stars": "stars",
         }
-        order_by = sort_map.get(sort, sort_map["newest"])
+        col = sort_cols.get(sort, "first_seen")
+        primary = f"{col} {d_kw}" + (f" {nulls}" if sort == "stars" else "")
+        order_by = f"{primary}, first_seen DESC"
         rows = conn.execute(
             f"""SELECT url, resource_type, title, description, source, source_url,
                        source_author, engagement_score, tags, cve_refs, stars,
