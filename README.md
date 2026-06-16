@@ -233,6 +233,36 @@ docker run -d --name horus -p 8080:8080 -v $(pwd)/state:/data horus:0.8
 - Mount `state/` on persistent storage (`state/horus.db` is the source of truth; the JSON files are migration leftovers).
 - The `/api/stats` JSON endpoint is suitable as a liveness probe (returns 200 + counts).
 - Set a Github token via `GITHUB_TOKEN` env var to get the 5000/hr rate limit instead of 60/hr.
+- Set `HORUS_SECRET_KEY` env var for persistent sessions across restarts.
+- For Telegram notifications: set `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_BOT_USERNAME` (without @) env vars, or configure in `horus.yaml`.
+
+## Telegram Bot Notifications
+
+Horus includes an optional Telegram bot for real-time notifications. Each team deploys their own bot:
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) → get token
+2. Set env vars or add to `horus.yaml`:
+   ```bash
+   export TELEGRAM_BOT_TOKEN="123456:ABC-DEF..."
+   export TELEGRAM_BOT_USERNAME="YourBotUsername"
+   ```
+3. Enable in config: `telegram.enabled: true`
+4. Users link their accounts via Profile → Telegram → Generate Link
+
+**Notification categories** (per-user toggles):
+- 🟢 New KEV addition — CISA added a CVE to Known Exploited
+- 🟢 Critical CVE + PoC — CVSS ≥9 with public proof-of-concept
+- 🟢 Watchlist match — new CVE affects a watched vendor/product
+- 🔴 EPSS jump — exploit probability crossed 0.5
+- 🔴 New PoC for tracked CVE
+
+**Bot commands:**
+- `/start <token>` — Link Horus account (token from web UI)
+- `/status` — View notification preferences
+- `/unlink` — Disconnect Telegram
+- `/help` — Show available commands
+
+The bot listener runs as a background thread in the server. No webhook needed — uses long-polling.
 
 ## Web Interface
 

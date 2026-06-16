@@ -1,4 +1,5 @@
-# Horus server config. Pass via: python3 -m horus --server --config horus.yaml
+# Horus server config example — copy to horus.yaml and customize.
+# Pass via: python3 -m horus --server --config horus.yaml
 # All keys are optional; omitted keys fall back to defaults in horus/server.py.
 
 # Per-source poll intervals (seconds). Server only runs a source when
@@ -34,3 +35,13 @@ web:
   # If gunicorn isn't installed, fall back to Flask's dev server (with a
   # warning). Set false to fail-fast in production.
   allow_dev_fallback: true
+
+# Telegram bot for notifications. Token from @BotFather.
+# The bot listens for /start <token> to link user accounts, then sends
+# notifications when watchlist CVEs, KEV additions, EPSS jumps, etc. occur.
+# Token can also be set via TELEGRAM_BOT_TOKEN env var.
+# Bot username (without @) can be set via TELEGRAM_BOT_USERNAME env var.
+# To disable, set enabled: false or omit this section entirely.
+telegram:
+  enabled: false
+  bot_token: ""  # or set TELEGRAM_BOT_TOKEN env var
