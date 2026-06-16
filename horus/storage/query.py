@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+from typing import Any
 
 from horus.config import STATE_DIR
 
@@ -24,7 +25,7 @@ DB_PATH = STATE_DIR / "horus.db"
 # ─── Data fetching ──────────────────────────────────────────────────────────
 
 
-def _fetch_cve(conn: sqlite3.Connection, cve_id: str) -> dict | None:
+def _fetch_cve(conn: sqlite3.Connection, cve_id: str) -> dict[str, Any] | None:
     """Fetch a CVE record with all enrichment data."""
     row = conn.execute("SELECT * FROM cve WHERE id = ?", (cve_id.upper(),)).fetchone()
     if not row:
@@ -45,7 +46,7 @@ def _fetch_cve_cwes(conn: sqlite3.Connection, cve_id: str) -> list[str]:
     ]
 
 
-def _fetch_cve_products(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
+def _fetch_cve_products(conn: sqlite3.Connection, cve_id: str) -> list[dict[str, Any]]:
     return [
         {"vendor": r[0], "product": r[1], "versions": r[2], "category": r[3]}
         for r in conn.execute(
@@ -67,7 +68,7 @@ def _fetch_cve_sources(conn: sqlite3.Connection, cve_id: str) -> list[str]:
     ]
 
 
-def _fetch_linked_pocs(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
+def _fetch_linked_pocs(conn: sqlite3.Connection, cve_id: str) -> list[dict[str, Any]]:
     """Fetch PoCs directly linked to this CVE via poc_cve."""
     return [
         dict(r)
@@ -84,7 +85,7 @@ def _fetch_linked_pocs(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
     ]
 
 
-def _fetch_related_pocs(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
+def _fetch_related_pocs(conn: sqlite3.Connection, cve_id: str) -> list[dict[str, Any]]:
     """Fetch PoCs that mention this CVE in their description but aren't formally linked."""
     cve_short = cve_id.upper().replace("CVE-", "")
     return [
@@ -102,7 +103,7 @@ def _fetch_related_pocs(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
     ]
 
 
-def _fetch_related_cves(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
+def _fetch_related_cves(conn: sqlite3.Connection, cve_id: str) -> list[dict[str, Any]]:
     """Find related CVEs: same attack tags, same products, or overlapping PoCs."""
     cve_id_upper = cve_id.upper()
 
@@ -110,7 +111,7 @@ def _fetch_related_cves(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
     tags = _fetch_cve_attack_tags(conn, cve_id_upper)
     products = _fetch_cve_products(conn, cve_id_upper)
 
-    related: dict[str, dict] = {}
+    related: dict[str, dict[str, Any]] = {}
 
     # Same attack tags
     if tags:
@@ -163,7 +164,7 @@ def _fetch_related_cves(conn: sqlite3.Connection, cve_id: str) -> list[dict]:
     return list(related.values())
 
 
-def _search_cves_by_keyword(conn: sqlite3.Connection, keyword: str) -> list[dict]:
+def _search_cves_by_keyword(conn: sqlite3.Connection, keyword: str) -> list[dict[str, Any]]:
     """Search CVEs by keyword in description or ID."""
     pattern = f"%{keyword}%"
     return [
@@ -191,7 +192,7 @@ def _search_cves_by_keyword(conn: sqlite3.Connection, keyword: str) -> list[dict
 # ─── Report rendering ───────────────────────────────────────────────────────
 
 
-def _render_text(data: dict) -> str:
+def _render_text(data: dict[str, Any]) -> str:
     """Render a CVE enrichment report as plain text."""
     lines: list[str] = []
     cve = data["cve"]
@@ -289,7 +290,7 @@ def _render_text(data: dict) -> str:
     return "\n".join(lines)
 
 
-def _render_markdown(data: dict) -> str:
+def _render_markdown(data: dict[str, Any]) -> str:
     """Render a CVE enrichment report as markdown."""
     lines: list[str] = []
     cve = data["cve"]

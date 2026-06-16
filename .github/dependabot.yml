@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # Runtime dependencies — reviewed separately
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: "production"
+    labels:
+      - "dependencies"
+      - "security"
+
+  # Dev dependencies — grouped weekly
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    allow:
+      - dependency-type: "development"
+    groups:
+      dev-dependencies:
+        patterns:
+          - "ruff"
+          - "mypy"
+          - "pytest"
+    labels:
+      - "dependencies"
+      - "dev-dependencies"

@@ -4,7 +4,7 @@
 <h1 class="page-title">{{ title }} <em>· {{ total }}</em></h1>
 {% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
 
-{% if type_filters or source_filters or sort_filters %}
+{% if type_filters or source_filters or sort_filters or quick_filters or all_authors %}
 <div class="filter-bar">
   {% if type_filters %}
   <div class="filter-group">
@@ -28,6 +28,25 @@
     {% for f in sort_filters %}
     <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
     {% endfor %}
+  </div>
+  {% endif %}
+  {% if quick_filters %}
+  <div class="filter-group">
+    <span class="label">Quick</span>
+    {% for f in quick_filters %}
+    <a href="{{ f.url }}" class="chip chip-quick {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if all_authors %}
+  <div class="filter-group">
+    <span class="label">Author</span>
+    <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+      <option value="">All</option>
+      {% for a in all_authors %}
+      <option value="/resources?author={{ a }}" {% if current_author == a %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
   </div>
   {% endif %}
 </div>

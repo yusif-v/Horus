@@ -13,11 +13,66 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from ..config import STATE_DIR
 from ..core.model import CVE, PoC, Resource
 from ..core.vocab import ATTACK_TAGS, CWE_TO_TAG
+
+
+class CveRow(TypedDict, total=False):
+    id: str
+    description: str | None
+    cvss_score: float | None
+    cvss_severity: str | None
+    published_at: str | None
+    epss_score: float | None
+    kev: int
+    exploitability_score: float | None
+    social_mentions: int
+    poc_source_count: int
+    reputation_score: float | None
+    confidence: str
+    first_seen: str
+    last_seen: str
+
+
+class PocRow(TypedDict, total=False):
+    url: str
+    source: str
+    stars: int | None
+    age_days: int | None
+    description: str | None
+    fetched_date: str | None
+    first_seen: str
+    last_seen: str
+    repo_created_at: str | None
+
+
+class ProductRow(TypedDict):
+    id: int
+    vendor: str
+    product: str
+    category: str
+
+
+class ResourceRow(TypedDict, total=False):
+    url: str
+    resource_type: str
+    title: str | None
+    description: str | None
+    source: str
+    source_url: str | None
+    source_author: str | None
+    engagement_score: int
+    tags: str | None
+    cve_refs: str | None
+    stars: int | None
+    repo_created_at: str | None
+    tweet_created_at: str | None
+    first_seen: str
+    last_seen: str
+
 
 DB_PATH = STATE_DIR / "horus.db"
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
@@ -523,9 +578,9 @@ def fetch_resources(
     source_filter: str | None = None,
     tag_filter: str | None = None,
     sort: str = "newest",
-) -> tuple[list[dict], int]:
+) -> tuple[list[dict[str, Any]], int]:
     conditions: list[str] = []
-    params: list = []
+    params: list[Any] = []
     if resource_type_filter:
         conditions.append("resource_type = ?")
         params.append(resource_type_filter)

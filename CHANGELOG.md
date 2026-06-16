@@ -8,11 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `docs/plans/oss-readiness.md` — roadmap to publishable open-source
-  status (LICENSE, CI, PyPI, badges, contributor docs). Not tied to a
-  specific version — these are ongoing chores.
-- `docs/plans/v0.9.x.md` — follow-up roadmap after the Tier 4
-  code-quality landing (coverage lift, mypy expansion, supply-chain).
+- **User self-service**: `/profile/settings` — users can change their own email, team assignment, and password (current password required for password changes). Audit-logged as `user.self_update`.
+- `docs/plans/v0.10.md` — Telegram bot listener, notification dispatch, bot command reference, work items.
+- `.github/workflows/security.yml` — pip-audit on PRs, main pushes, weekly schedule. Fails on HIGH+ advisories.
+- `.github/dependabot.yml` — grouped dev-deps weekly PR, separate runtime-deps PRs.
+- `make audit` / `make sbom` — pip-audit + CycloneDX SBOM generation targets in Makefile.
+- Supply chain deps: `pip-audit>=2.7`, `cyclonedx-bom>=4.4` in `[project.optional-dependencies] dev`.
+
+### Changed
+- **Search input capped at 200 characters** — both client-side (`maxlength`) and server-side truncation.
+- **mypy --strict** expanded to `horus/storage/*`, `horus/net/http`, `horus/net/auth` (was only core + pipeline).
+
+### Fixed
+- `tests/test_server.py` — added missing `import sys` and `from unittest.mock import MagicMock` (7 tests were failing).
 - `pyproject.toml` (PEP 621) replaces `setup.py` and
   `requirements.txt`. Dev tooling lives under `[project.optional-dependencies] dev`:
   ruff, mypy, pytest-cov, pre-commit.

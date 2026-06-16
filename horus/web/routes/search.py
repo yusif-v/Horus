@@ -15,6 +15,7 @@ bp = Blueprint("search", __name__)
 @role_required(*READ_ALL)
 def search():
     query = request.args.get("q", "").strip()
+    query = query[:200]  # Cap input length
     pg = safe_int(request.args.get("page", "1"))
     if not query:
         return redirect(url_for("dashboard.index"))

@@ -38,40 +38,86 @@ def triage():
     pg = safe_int(request.args.get("page", "1"))
     lens = request.args.get("lens", "all")
     show_dismissed = request.args.get("show_dismissed") == "1"
+    status_filter = request.args.get("status")
+    assigned_filter = request.args.get("assigned")
+    unassigned = request.args.get("unassigned")
+    triage_age = request.args.get("triage_age")
+    team_filter = request.args.get("team")
     where = WHERE_BY_LENS.get(lens, WHERE_BY_LENS["all"])
     dismissed_clause = "" if show_dismissed else "AND COALESCE(t.status, 'new') != 'dismissed'"
 
+    # Build extra filter clauses and params
+    extra_clauses: list[str] = []
+    params: list = []
+    if status_filter:
+        statuses_clean = [s.strip() for s in status_filter.split(",") if s.strip() in STATUSES]
+        if statuses_clean:
+            placeholders = ",".join("?" * len(statuses_clean))
+            extra_clauses.append(f"COALESCE(t.status, 'new') IN ({placeholders})")
+            params.extend(statuses_clean)
+    if assigned_filter:
+        if assigned_filter == "me":
+            extra_clauses.append("t.assigned_to = ?")
+            params.append(g.user["id"])
+        else:
+            extra_clauses.append("u.username = ?")
+            params.append(assigned_filter)
+    if unassigned:
+        extra_clauses.append("t.assigned_to IS NULL")
+    if triage_age:
+        days = {"7d": 7, "14d": 14, "30d": 30}.get(triage_age)
+        if days:
+            extra_clauses.append("t.updated_at <= datetime('now', ?)")
+            params.append(f"-{days} days")
+    if team_filter:
+        extra_clauses.append("u.team = ?")
+        params.append(team_filter)
+
+    extra_where = (" AND " + " AND ".join(extra_clauses)) if extra_clauses else ""
+
     try:
         with db_connect() as conn:
-            total = conn.execute(f"""
-                SELECT COUNT(DISTINCT c.id) FROM cve c
-                LEFT JOIN poc_cve pc ON pc.cve_id = c.id
-                LEFT JOIN cve_triage t ON t.cve_id = c.id
-                WHERE {where} {dismissed_clause}
-            """).fetchone()[0]
-            offset = (pg - 1) * PER_PAGE_DEFAULT
-            rows = _rows_to_dicts(
-                conn.execute(
-                    f"""
-                SELECT DISTINCT c.id, c.cvss_score, c.cvss_severity, c.description,
-                       c.epss_score, c.kev, c.published_at,
-                       (SELECT COUNT(*) FROM poc_cve WHERE cve_id = c.id) AS poc_count,
-                       COALESCE(t.status, 'new') AS status,
-                       u.username AS assigned_to_name,
-                       t.note AS triage_note
-                FROM cve c
-                LEFT JOIN poc_cve pc ON pc.cve_id = c.id
-                LEFT JOIN cve_triage t ON t.cve_id = c.id
-                LEFT JOIN user u ON u.id = t.assigned_to
-                WHERE {where} {dismissed_clause}
-                ORDER BY c.kev DESC,
-                         COALESCE(c.epss_score, 0) DESC,
-                         COALESCE(c.cvss_score, 0) DESC
-                LIMIT ? OFFSET ?
-            """,
-                    (PER_PAGE_DEFAULT, offset),
-                ).fetchall()
+            count_sql = (
+                "SELECT COUNT(DISTINCT c.id) FROM cve c"
+                " LEFT JOIN poc_cve pc ON pc.cve_id = c.id"
+                " LEFT JOIN cve_triage t ON t.cve_id = c.id"
+                " LEFT JOIN user u ON u.id = t.assigned_to"
+                f" WHERE {where} {dismissed_clause} {extra_where}"
             )
+            total = conn.execute(count_sql, params).fetchone()[0]
+            offset = (pg - 1) * PER_PAGE_DEFAULT
+
+            select_sql = (
+                "SELECT DISTINCT c.id, c.cvss_score, c.cvss_severity, c.description,"
+                " c.epss_score, c.kev, c.published_at,"
+                " (SELECT COUNT(*) FROM poc_cve WHERE cve_id = c.id) AS poc_count,"
+                " COALESCE(t.status, 'new') AS status,"
+                " u.username AS assigned_to_name,"
+                " t.note AS triage_note,"
+                " t.updated_at AS triage_updated_at"
+                " FROM cve c"
+                " LEFT JOIN poc_cve pc ON pc.cve_id = c.id"
+                " LEFT JOIN cve_triage t ON t.cve_id = c.id"
+                " LEFT JOIN user u ON u.id = t.assigned_to"
+                f" WHERE {where} {dismissed_clause} {extra_where}"
+                " ORDER BY c.kev DESC,"
+                " COALESCE(c.epss_score, 0) DESC,"
+                " COALESCE(c.cvss_score, 0) DESC"
+                " LIMIT ? OFFSET ?"
+            )
+            rows = _rows_to_dicts(
+                conn.execute(select_sql, [*params, PER_PAGE_DEFAULT, offset]).fetchall()
+            )
+
+            # Fetch assignees for dropdown (may fail if user table is empty/missing)
+            try:
+                assignees = _rows_to_dicts(
+                    conn.execute(
+                        "SELECT id, username, team FROM user WHERE is_active = 1 ORDER BY username"
+                    ).fetchall()
+                )
+            except Exception:
+                assignees = []
     except Exception as e:
         return error_page(f"Database Error: {e}", active="triage"), 500
 
@@ -123,6 +169,13 @@ def triage():
         can_write=_can_write(),
         prev_url=f"/triage?page={pg - 1}{qs}" if pg > 1 else None,
         next_url=f"/triage?page={pg + 1}{qs}" if pg * PER_PAGE_DEFAULT < total else None,
+        # New filter data
+        assignees=assignees,
+        current_status=status_filter,
+        current_assigned=assigned_filter,
+        current_unassigned=unassigned,
+        current_triage_age=triage_age,
+        current_team=team_filter,
     )
 
 

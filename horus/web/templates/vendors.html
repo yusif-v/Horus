@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">{{ eyebrow|default('Attack surface · vendor intelligence') }}</div>
+<h1 class="page-title">{{ title }} <em>· {{ total }}</em></h1>
+{% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
+
+{% if sort_filters or cat_filters or wl_filters %}
+<div class="filter-bar">
+  <div class="filter-group">
+    <span class="label">Sort</span>
+    {% for f in sort_filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% if wl_filters %}
+  <div class="filter-group">
+    <span class="label">Filter</span>
+    {% for f in wl_filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% if cat_filters|length > 1 %}
+<div class="filter-bar filter-bar-secondary" style="padding-top:0;">
+  <div class="filter-group">
+    <span class="label">Category</span>
+    {% for f in cat_filters %}
+    <a href="{{ f.url }}" class="chip chip-sm {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
+{% if rows %}
+<div class="panel">
+  <div class="panel-body flush">
+    <table class="fixed-cols">
+      <colgroup>{% for w in col_widths %}<col style="width: {{ w }};">{% endfor %}</colgroup>
+      <thead><tr>{% for col in columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr class="{{ loop.cycle('odd', 'even') }}">
+        {% for cell in cells %}
+        <td>
+          {% if cell.type == 'vendor_link' %}
+            <a href="/cves?vendor={{ row[cell.key] }}" class="cve-id-cell" style="font-size:13px;">{{ row[cell.key] }}</a>
+          {% elif cell.type == 'categories' %}
+            {% if row[cell.key] %}
+              {% for cat in row[cell.key].split(',')[:5] %}
+              <a href="/cves?category={{ cat.strip() }}" class="badge badge-source" style="text-decoration:none;margin-right:3px;">{{ cat.strip() }}</a>
+              {% endfor %}
+              {% if row[cell.key].split(',')|length > 5 %}
+              <span class="badge badge-more">+{{ row[cell.key].split(',')|length - 5 }}</span>
+              {% endif %}
+            {% else %}
+              <span style="color:var(--text-dim);">—</span>
+            {% endif %}
+          {% elif cell.type == 'watchlist_badge' %}
+            {% if row[cell.key] %}
+              <span style="color:var(--accent);font-size:13px;" title="In watchlist">★</span>
+            {% else %}
+              <span style="color:var(--text-dim);">—</span>
+            {% endif %}
+          {% elif cell.type == 'plain' %}
+            {% if row[cell.key] is not none %}<span class="num">{{ row[cell.key] }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+          {% elif cell.type == 'score' %}
+            <span class="num strong" style="color:{% if row[cell.key] is not none and row[cell.key] >= 9 %}var(--critical){% elif row[cell.key] is not none and row[cell.key] >= 7 %}var(--high){% elif row[cell.key] is not none and row[cell.key] >= 4 %}var(--medium){% else %}var(--low){% endif %};">{{ row[cell.key] or '—' }}</span>
+          {% elif cell.type == 'epss' %}
+            {% if row[cell.key] is not none %}
+            <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (row[cell.key] * 100)|int }}%;"></span></span><span class="epss-text">{{ "%.2f%%"|format(row[cell.key] * 100) }}</span>
+            {% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+          {% else %}
+            {% if row[cell.key] is not none %}<span class="num">{{ row[cell.key] }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if total > per_page %}
+<div class="pagination">
+  {% if page > 1 %}<a href="{{ prev_url }}">← Prev</a>{% endif %}
+  <span class="current">{{ page }} / {{ total_pages }}</span>
+  {% if page * per_page < total %}<a href="{{ next_url }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="panel"><div class="panel-body empty-state">
+  <div class="empty-icon">No matching vendors</div>
+  <div class="empty-hint">Try adjusting your filters or ingest more CVE data.</div>
+</div></div>
+{% endif %}
+{% endblock %}

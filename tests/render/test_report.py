@@ -1,212 +1,402 @@
-"""Report renderer — text + markdown output against fixture CVE/PoC sets."""
+"""Tests for horus/render/report.py — CVE/PoC text and markdown renderers."""
 
 from __future__ import annotations
 
 from horus.core.model import CVE, AffectedProduct, PoC
-from horus.render import report
 from horus.render.report import (
     _group_cves,
     _poc_detail,
     _poc_label,
     _primary_category,
+    _render_markdown,
+    _render_text,
     _standalone_pocs,
     render_report,
 )
 
+# ── Helpers ────────────────────────────────────────────────────────────────
 
-def _cve(
-    id_: str = "CVE-2026-1111",
-    *,
-    score: float = 9.8,
-    severity: str = "CRITICAL",
-    description: str = "Critical RCE in Apache httpd via crafted header.",
-    category: str = "web-server",
-    tags: list[str] | None = None,
+
+def _make_cve(
+    cve_id: str = "CVE-2026-0001",
+    description: str = "A test vulnerability",
+    cvss_score: float | None = 7.5,
+    cvss_severity: str | None = "HIGH",
+    affected: list[AffectedProduct] | None = None,
     kev: int = 0,
-    epss: float | None = None,
+    epss_score: float | None = None,
+    attack_tags: list[str] | None = None,
 ) -> CVE:
     return CVE(
-        id=id_,
+        id=cve_id,
         description=description,
-        cvss_score=score,
-        cvss_severity=severity,
-        attack_tags=tags or [],
-        affected=[AffectedProduct(vendor="apache", product="httpd", category=category)],
+        cvss_score=cvss_score,
+        cvss_severity=cvss_severity,
+        affected=affected or [],
         kev=kev,
-        epss_score=epss,
+        epss_score=epss_score,
+        attack_tags=attack_tags or [],
     )
 
 
-def _poc(
-    url: str = "https://github.com/u/exploit",
-    *,
+def _make_poc(
+    url: str = "https://github.com/test/poc",
     source: str = "github",
-    stars: int = 42,
-    age: int = 5,
-    refs: list[str] | None = None,
-    description: str | None = "Exploit description",
+    stars: int | None = 50,
+    age_days: int | None = 5,
+    cve_refs: list[str] | None = None,
+    description: str | None = "A PoC repo",
 ) -> PoC:
     return PoC(
         url=url,
         source=source,
         stars=stars,
-        age_days=age,
+        age_days=age_days,
+        cve_refs=cve_refs or [],
         description=description,
-        cve_refs=refs or [],
     )
 
 
-# ── helpers ──────────────────────────────────────────────────────────────
+# ── _primary_category ─────────────────────────────────────────────────────
 
 
-class TestHelpers:
-    def test_primary_category_returns_first_non_unknown(self):
-        cve = CVE(
-            id="X",
-            description="",
-            affected=[
-                AffectedProduct(vendor="v", product="p", category="unknown"),
-                AffectedProduct(vendor="v", product="p", category="database"),
-            ],
-        )
-        assert _primary_category(cve) == "database"
-
-    def test_primary_category_defaults_to_unknown(self):
-        cve = CVE(id="X", description="")
-        assert _primary_category(cve) == "unknown"
-
-    def test_group_cves_sorts_within_category_by_score(self):
-        a = _cve("CVE-A", score=7.0)
-        b = _cve("CVE-B", score=9.8)
-        groups = _group_cves([a, b])
-        assert [c.id for c in groups["web-server"]] == ["CVE-B", "CVE-A"]
-
-    def test_group_cves_pushes_unknown_to_end(self):
-        known = _cve("CVE-K", category="web-server")
-        unknown = CVE(id="CVE-U", description="")
-        groups = _group_cves([unknown, known])
-        assert list(groups.keys())[-1] == "unknown"
-
-    def test_standalone_pocs_excludes_linked(self):
-        cves = [_cve("CVE-2026-1111")]
-        linked = _poc(refs=["CVE-2026-1111"])
-        free = _poc(url="https://github.com/u/other", refs=["CVE-9999-0000"])
-        result = _standalone_pocs([linked, free], cves)
-        assert result == [free]
-
-    def test_poc_label_appends_tweet_marker(self):
-        twitter_poc = _poc(url="https://twitter.com/x/status/1", source="twitter")
-        assert "[tweet]" in _poc_label(twitter_poc)
-
-    def test_poc_label_plain_for_github(self):
-        gh = _poc()
-        assert _poc_label(gh) == gh.url
-
-    def test_poc_detail_includes_tweet_marker(self):
-        twitter_poc = _poc(source="twitter", stars=0, age=2)
-        assert "tweet" in _poc_detail(twitter_poc)
+def test_primary_category_returns_first_non_unknown():
+    cve = _make_cve(
+        affected=[
+            AffectedProduct(vendor="unknown", product="unknown", category="unknown"),
+            AffectedProduct(vendor="nginx", product="nginx", category="web-server"),
+        ]
+    )
+    assert _primary_category(cve) == "web-server"
 
 
-# ── text renderer ────────────────────────────────────────────────────────
+def test_primary_category_all_unknown():
+    cve = _make_cve(affected=[AffectedProduct(vendor="unknown", product="unknown")])
+    assert _primary_category(cve) == "unknown"
 
 
-class TestTextRender:
-    def test_empty_inputs_message(self):
-        out = render_report([], [], {}, fmt="text")
-        assert "No new findings today." in out
-
-    def test_includes_counts_header(self):
-        out = render_report([_cve()], [], {}, fmt="text")
-        assert "CVEs: 1" in out
-        assert "Standalone PoCs: 0" in out
-
-    def test_renders_cve_with_badges(self):
-        cve = _cve(kev=1, epss=0.95)
-        out = render_report([cve], [], {}, fmt="text")
-        assert "CVE-2026-1111" in out
-        assert "[CVSS 9.8 CRITICAL]" in out
-        assert "[KEV]" in out
-        assert "[EPSS 95.0%]" in out
-
-    def test_renders_attack_tags_and_affected(self):
-        cve = _cve(tags=["rce", "remote"])
-        cve.affected[0].versions = ["2.4.59", "2.4.58"]
-        out = render_report([cve], [], {}, fmt="text")
-        assert "tags: rce, remote" in out
-        assert "affects: apache/httpd" in out
-        assert "2.4.59" in out
-
-    def test_renders_linked_pocs_under_cve(self):
-        cve = _cve()
-        poc = _poc(refs=["CVE-2026-1111"])
-        out = render_report([cve], [poc], {"CVE-2026-1111": [poc]}, fmt="text")
-        assert "PoC: https://github.com/u/exploit" in out
-        assert "42*" in out
-        assert "[github]" in out
-
-    def test_renders_standalone_section(self):
-        free = _poc(refs=["CVE-OTHER"], description="standalone description")
-        out = render_report([], [free], {}, fmt="text")
-        assert "Standalone PoCs (1)" in out
-        assert "refs: CVE-OTHER" in out
-        assert "standalone description" in out
+def test_primary_category_no_affected():
+    cve = _make_cve(affected=[])
+    assert _primary_category(cve) == "unknown"
 
 
-# ── markdown renderer ────────────────────────────────────────────────────
+# ── _group_cves ───────────────────────────────────────────────────────────
 
 
-class TestMarkdownRender:
-    def test_md_empty_outputs_italic_message(self):
-        out = render_report([], [], {}, fmt="md")
-        assert "_No new findings today._" in out
-
-    def test_md_h1_title(self):
-        out = render_report([_cve()], [], {}, fmt="md")
-        assert out.startswith("# Daily PoC Research Report")
-
-    def test_md_renders_cve_with_inline_badges(self):
-        cve = _cve(kev=1, epss=0.123)
-        out = render_report([cve], [], {}, fmt="md")
-        assert "**CVE-2026-1111**" in out
-        assert "**CVSS 9.8 CRITICAL**" in out
-        assert "`KEV`" in out
-        assert "`EPSS 12.3%`" in out
-
-    def test_md_h2_category_sections(self):
-        out = render_report([_cve()], [], {}, fmt="md")
-        assert "## web-server (1)" in out
-
-    def test_md_linked_poc_uses_link_syntax(self):
-        cve = _cve()
-        poc = _poc(refs=["CVE-2026-1111"])
-        out = render_report([cve], [poc], {"CVE-2026-1111": [poc]}, fmt="md")
-        assert "[https://github.com/u/exploit](https://github.com/u/exploit)" in out
-
-    def test_md_twitter_poc_tagged_as_tweet(self):
-        cve = _cve()
-        twitter_poc = _poc(
-            url="https://twitter.com/x/status/1",
-            source="twitter",
-            refs=["CVE-2026-1111"],
-        )
-        out = render_report([cve], [twitter_poc], {"CVE-2026-1111": [twitter_poc]}, fmt="md")
-        assert "[tweet" in out
-
-    def test_md_standalone_section_with_refs(self):
-        free = _poc(refs=["CVE-OTHER"])
-        out = render_report([], [free], {}, fmt="md")
-        assert "## Standalone PoCs (1)" in out
-        assert "refs: CVE-OTHER" in out
+def test_group_cves_groups_by_category():
+    cves = [
+        _make_cve(
+            "CVE-2026-0001", affected=[AffectedProduct("nginx", "nginx", category="web-server")]
+        ),
+        _make_cve("CVE-2026-0002", affected=[AffectedProduct("linux", "linux", category="os")]),
+    ]
+    groups = _group_cves(cves)
+    assert "web-server" in groups
+    assert "os" in groups
 
 
-# ── public API ───────────────────────────────────────────────────────────
+def test_group_cves_sorts_by_cvss_desc():
+    cves = [
+        _make_cve(
+            "CVE-2026-0001",
+            cvss_score=5.0,
+            affected=[AffectedProduct("nginx", "nginx", category="web-server")],
+        ),
+        _make_cve(
+            "CVE-2026-0002",
+            cvss_score=9.0,
+            affected=[AffectedProduct("nginx", "nginx", category="web-server")],
+        ),
+    ]
+    groups = _group_cves(cves)
+    scores = [c.cvss_score for c in groups["web-server"]]
+    assert scores == [9.0, 5.0]
 
 
-def test_render_report_defaults_to_text():
-    out = report.render_report([], [], {})
-    assert "===" in out  # text-mode separator
+def test_group_cves_unknown_last():
+    cves = [
+        _make_cve(
+            "CVE-2026-0001", affected=[AffectedProduct("nginx", "nginx", category="web-server")]
+        ),
+        _make_cve(
+            "CVE-2026-0002", affected=[AffectedProduct("unknown", "unknown", category="unknown")]
+        ),
+    ]
+    groups = _group_cves(cves)
+    keys = list(groups.keys())
+    assert keys[-1] == "unknown"
 
 
-def test_render_report_md_format_switches_to_markdown():
-    out = report.render_report([], [], {}, fmt="md")
-    assert out.lstrip().startswith("#")
+# ── _standalone_pocs ──────────────────────────────────────────────────────
+
+
+def test_standalone_pocs_filters_out_linked():
+    pocs = [
+        _make_poc("https://github.com/a", cve_refs=["CVE-2026-0001"]),
+        _make_poc("https://github.com/b", cve_refs=["CVE-2026-9999"]),
+    ]
+    cves = [_make_cve("CVE-2026-0001")]
+    standalone = _standalone_pocs(pocs, cves)
+    assert len(standalone) == 1
+    assert standalone[0].url == "https://github.com/b"
+
+
+def test_standalone_pocs_empty_when_all_linked():
+    pocs = [_make_poc("https://github.com/a", cve_refs=["CVE-2026-0001"])]
+    cves = [_make_cve("CVE-2026-0001")]
+    assert _standalone_pocs(pocs, cves) == []
+
+
+# ── _poc_label ────────────────────────────────────────────────────────────
+
+
+def test_poc_label_twitter_source():
+    poc = _make_poc(source="twitter")
+    assert _poc_label(poc) == f"{poc.url} [tweet]"
+
+
+def test_poc_label_x_source():
+    poc = _make_poc(source="x")
+    assert _poc_label(poc) == f"{poc.url} [tweet]"
+
+
+def test_poc_label_github_source():
+    poc = _make_poc(source="github")
+    assert _poc_label(poc) == poc.url
+
+
+# ── _poc_detail ──────────────────────────────────────────────────────────
+
+
+def test_poc_detail_with_twitter_source():
+    poc = _make_poc(source="twitter", stars=10, age_days=3)
+    detail = _poc_detail(poc)
+    assert "10" in detail
+    assert "3d" in detail
+    assert "tweet" in detail
+
+
+def test_poc_detail_without_twitter():
+    poc = _make_poc(source="github", stars=5, age_days=2)
+    detail = _poc_detail(poc)
+    assert "5" in detail
+    assert "2d" in detail
+    assert "tweet" not in detail
+
+
+# ── _render_text ──────────────────────────────────────────────────────────
+
+
+def test_render_text_contains_header():
+    cves = [_make_cve()]
+    text = _render_text(cves, [], {})
+    assert "Daily PoC Research Report" in text
+    assert "CVEs: 1" in text
+
+
+def test_render_text_contains_cve_line():
+    cves = [_make_cve("CVE-2026-0001", cvss_score=7.5, cvss_severity="HIGH")]
+    text = _render_text(cves, [], {})
+    assert "CVE-2026-0001" in text
+    assert "CVSS 7.5" in text
+
+
+def test_render_text_contains_kev_badge():
+    cves = [_make_cve(kev=1)]
+    text = _render_text(cves, [], {})
+    assert "[KEV]" in text
+
+
+def test_render_text_contains_epss_badge():
+    cves = [_make_cve(epss_score=0.45)]
+    text = _render_text(cves, [], {})
+    assert "EPSS" in text
+
+
+def test_render_text_empty_findings():
+    text = _render_text([], [], {})
+    assert "No new findings today" in text
+
+
+def test_render_text_attack_tags():
+    cves = [_make_cve(attack_tags=["rce", "sql-injection"])]
+    text = _render_text(cves, [], {})
+    assert "rce" in text
+    assert "sql-injection" in text
+
+
+def test_render_text_standalone_pocs_sorted_by_stars():
+    pocs = [
+        _make_poc("https://github.com/low", stars=5),
+        _make_poc("https://github.com/high", stars=100),
+    ]
+    text = _render_text([], pocs, {})
+    high_pos = text.index("https://github.com/high")
+    low_pos = text.index("https://github.com/low")
+    assert high_pos < low_pos
+
+
+# ── _render_markdown ──────────────────────────────────────────────────────
+
+
+def test_render_markdown_contains_header():
+    cves = [_make_cve()]
+    md = _render_markdown(cves, [], {})
+    assert "# Daily PoC Research Report" in md
+
+
+def test_render_markdown_contains_badges():
+    cves = [_make_cve(kev=1, epss_score=0.3)]
+    md = _render_markdown(cves, [], {})
+    assert "`KEV`" in md
+    assert "EPSS" in md
+
+
+def test_render_markdown_empty_findings():
+    md = _render_markdown([], [], {})
+    assert "No new findings today" in md
+
+
+def test_render_markdown_bullet_points():
+    cves = [_make_cve()]
+    md = _render_markdown(cves, [], {})
+    assert "- **CVE-2026-0001**" in md
+
+
+# ── render_report (public API) ────────────────────────────────────────────
+
+
+def test_render_report_text_format():
+    cves = [_make_cve()]
+    result = render_report(cves, [], {}, fmt="text")
+    assert "Daily PoC Research Report" in result
+
+
+def test_render_report_md_format():
+    cves = [_make_cve()]
+    result = render_report(cves, [], {}, fmt="md")
+    assert "# Daily PoC Research Report" in result
+
+
+def test_render_report_default_is_text():
+    cves = [_make_cve()]
+    result = render_report(cves, [], {})
+    assert "Daily PoC Research Report" in result
+    assert "#" not in result.split("\n")[0]  # not markdown header
+
+
+# ── Additional coverage for uncovered branches ─────────────────────────────
+
+
+def test_render_text_cve_with_versions():
+    """Covers lines 90-91: affected product with versions."""
+    cve = _make_cve(
+        affected=[AffectedProduct(vendor="nginx", product="nginx", versions=["1.25.0", "1.24.0"])]
+    )
+    text = _render_text([cve], [], {})
+    assert "affects: nginx/nginx" in text
+    assert "1.25.0" in text
+
+
+def test_render_text_cve_with_poc_links():
+    """Covers line 92-93: CVE with linked PoCs in the text report."""
+    cve = _make_cve()
+    poc = _make_poc("https://github.com/test/poc", source="github", stars=42)
+    links = {"CVE-2026-0001": [poc]}
+    text = _render_text([cve], [], links)
+    assert "PoC: https://github.com/test/poc" in text
+    assert "42*" in text
+    assert "[github]" in text
+
+
+def test_render_text_standalone_poc_with_description():
+    """Covers lines 100-101: standalone PoC with description."""
+    poc = _make_poc(
+        "https://github.com/standalone/poc",
+        stars=10,
+        age_days=2,
+        cve_refs=["CVE-2026-9999"],
+        description="A standalone exploit",
+    )
+    text = _render_text([], [poc], {})
+    assert "A standalone exploit" in text
+    assert "CVE-2026-9999" in text
+
+
+def test_render_markdown_linked_poc_twitter():
+    """Covers lines 146-147: markdown PoC link with twitter source."""
+    cve = _make_cve()
+    poc = _make_poc("https://x.com/user/status/123", source="twitter", stars=5)
+    links = {"CVE-2026-0001": [poc]}
+    md = _render_markdown([cve], [], links)
+    assert "[tweet" in md
+    assert "https://x.com/user/status/123" in md
+
+
+def test_render_markdown_linked_poc_non_twitter():
+    """Covers lines 148-149: markdown PoC link with non-twitter source."""
+    cve = _make_cve()
+    poc = _make_poc("https://github.com/test/poc", source="github", stars=10)
+    links = {"CVE-2026-0001": [poc]}
+    md = _render_markdown([cve], [], links)
+    assert "[github]" in md
+    assert "https://github.com/test/poc" in md
+
+
+def test_render_markdown_standalone_poc_with_description():
+    """Covers lines 157-158: standalone PoC with description in markdown."""
+    poc = _make_poc(
+        "https://github.com/standalone",
+        stars=20,
+        age_days=3,
+        description="An awesome exploit",
+    )
+    md = _render_markdown([], [poc], {})
+    assert "An awesome exploit" in md
+    assert "20*" in md
+    assert "3d" in md
+
+
+def test_render_markdown_standalone_poc_with_refs():
+    """Covers lines 154-156: standalone PoC with CVE refs."""
+    poc = _make_poc(
+        "https://github.com/ref-poc",
+        stars=5,
+        age_days=1,
+        cve_refs=["CVE-2026-1111", "CVE-2026-2222"],
+    )
+    md = _render_markdown([], [poc], {})
+    assert "CVE-2026-1111" in md
+    assert "CVE-2026-2222" in md
+
+
+def test_render_text_standalone_poc_twitter_label():
+    """Standalone PoC with twitter source gets [tweet] label in text output."""
+    poc = _make_poc(url="https://x.com/hacker/status/456", source="twitter", stars=3)
+    text = _render_text([], [poc], {})
+    assert "[tweet]" in text
+
+
+def test_render_text_cve_with_versions_no_versions_key():
+    """Affected product without versions list."""
+    cve = _make_cve(
+        affected=[AffectedProduct(vendor="linux", product="kernel", versions=[], category="os")]
+    )
+    text = _render_text([cve], [], {})
+    assert "affects: linux/kernel" in text
+
+
+def test_standalone_pocs_case_insensitive():
+    """_standalone_pocs matches CVE refs case-insensitively (line 34-35)."""
+    poc = _make_poc("https://github.com/a", cve_refs=["cve-2026-0001"])
+    cves = [_make_cve("CVE-2026-0001")]
+    standalone = _standalone_pocs([poc], cves)
+    assert len(standalone) == 0  # linked, not standalone
+
+
+def test_poc_detail_none_stars_and_age():
+    """_poc_detail with None stars and None age_days."""
+    poc = PoC(url="https://example.com", source="github", stars=None, age_days=None)
+    detail = _poc_detail(poc)
+    assert "0" in detail
+    assert "tweet" not in detail

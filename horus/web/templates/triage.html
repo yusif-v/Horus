@@ -17,6 +17,45 @@
     <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
     {% endfor %}
   </div>
+  {% if assignees %}
+  <div class="filter-group">
+    <span class="label">Assigned</span>
+    <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+      <option value="">All</option>
+      <option value="/triage?assigned=me" {% if current_assigned == 'me' %}selected{% endif %}>Me</option>
+      <option value="/triage?unassigned=1" {% if current_unassigned %}selected{% endif %}>Unassigned</option>
+      {% for a in assignees %}
+      <option value="/triage?assigned={{ a.username }}" {% if current_assigned == a.username %}selected{% endif %}>{{ a.username }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filter-group">
+    <span class="label">Status</span>
+    <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+      <option value="">All</option>
+      {% for s in statuses %}
+      <option value="/triage?status={{ s }}" {% if current_status == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filter-group">
+    <span class="label">Age</span>
+    <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+      <option value="">All</option>
+      <option value="/triage?triage_age=7d" {% if current_triage_age == '7d' %}selected{% endif %}>Stale &gt;7d</option>
+      <option value="/triage?triage_age=14d" {% if current_triage_age == '14d' %}selected{% endif %}>Stale &gt;14d</option>
+      <option value="/triage?triage_age=30d" {% if current_triage_age == '30d' %}selected{% endif %}>Stale &gt;30d</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <span class="label">Team</span>
+    <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+      <option value="">All</option>
+      <option value="/triage?team=red" {% if current_team == 'red' %}selected{% endif %}>Red</option>
+      <option value="/triage?team=blue" {% if current_team == 'blue' %}selected{% endif %}>Blue</option>
+    </select>
+  </div>
 </div>
 
 {% if rows %}
@@ -26,7 +65,7 @@
       <thead>
         <tr>
           <th>CVE</th><th>CVSS</th><th>EPSS</th><th>KEV</th><th>PoCs</th>
-          <th>Status</th><th>Assignee</th><th>Description</th>
+          <th>Status</th><th>Assignee</th><th>Age</th><th>Description</th>
           {% if can_write %}<th>Update</th>{% endif %}
         </tr>
       </thead>

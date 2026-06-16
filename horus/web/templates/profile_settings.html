@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">Profile · Settings</div>
+<h1 class="page-title">Account settings</h1>
+<p class="page-subtitle">Update your email, team assignment, and password. Changes take effect immediately.</p>
+
+{% if flash %}<div class="admin-flash">{{ flash }}</div>{% endif %}
+{% if error %}<div class="error-banner">{{ error }}</div>{% endif %}
+
+<div class="panel" style="max-width:600px;">
+  <div class="panel-body">
+    <form method="post" action="{{ url_for('profile.settings') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div style="margin-bottom:1.25rem;">
+        <label style="display:block;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Username</label>
+        <input type="text" value="{{ g.user.username }}" disabled
+               style="width:100%;padding:.6rem .8rem;background:var(--surface-2);border:1px solid var(--border);border-radius:2px;color:var(--text-dim);font-family:var(--mono);font-size:13px;cursor:not-allowed;">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:.3rem;">Username cannot be changed.</div>
+      </div>
+
+      <div style="margin-bottom:1.25rem;">
+        <label for="email" style="display:block;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Email</label>
+        <input type="email" id="email" name="email" value="{{ user.email }}" required
+               style="width:100%;padding:.6rem .8rem;background:var(--surface);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:var(--mono);font-size:13px;">
+      </div>
+
+      <div style="margin-bottom:1.25rem;">
+        <label for="team" style="display:block;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Team</label>
+        <select id="team" name="team"
+                style="width:100%;padding:.6rem .8rem;background:var(--surface);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:var(--mono);font-size:13px;">
+          {% for t in teams %}
+          <option value="{{ t }}" {% if user.team == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:.3rem;">red / blue = watchlist access · both = see all · none = no watchlist</div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0;">
+
+      <div style="margin-bottom:1.25rem;">
+        <label for="current_password" style="display:block;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Current password</label>
+        <input type="password" id="current_password" name="current_password"
+               style="width:100%;padding:.6rem .8rem;background:var(--surface);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:var(--mono);font-size:13px;"
+               autocomplete="current-password">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:.3rem;">Required only if changing password.</div>
+      </div>
+
+      <div style="margin-bottom:1.25rem;">
+        <label for="new_password" style="display:block;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">New password</label>
+        <input type="password" id="new_password" name="new_password" minlength="8"
+               style="width:100%;padding:.6rem .8rem;background:var(--surface);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:var(--mono);font-size:13px;"
+               autocomplete="new-password">
+      </div>
+
+      <div style="margin-bottom:1.5rem;">
+        <label for="new_password_confirm" style="display:block;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Confirm new password</label>
+        <input type="password" id="new_password_confirm" name="new_password_confirm" minlength="8"
+               style="width:100%;padding:.6rem .8rem;background:var(--surface);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:var(--mono);font-size:13px;"
+               autocomplete="new-password">
+      </div>
+
+      <button type="submit" class="btn btn-primary">Save changes</button>
+    </form>
+  </div>
+</div>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:2rem 0;">
+
+<div style="font-family:var(--mono);font-size:12px;color:var(--text-mid);">
+  <div style="margin-bottom:.5rem;">↳ <a href="{{ url_for('profile.telegram') }}">Telegram notifications</a></div>
+  <div>↳ <a href="{{ url_for('profile.notifications') }}">Notification preferences</a></div>
+</div>
+{% endblock %}

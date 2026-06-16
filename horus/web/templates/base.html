@@ -31,6 +31,7 @@
     <a href="/cves" class="{% if active == 'cves' %}active{% endif %}">CVEs</a>
     <a href="/pocs" class="{% if active == 'pocs' %}active{% endif %}">PoCs</a>
     <a href="/resources" class="{% if active == 'resources' %}active{% endif %}">Resources</a>
+    <a href="/vendors" class="{% if active == 'vendors' %}active{% endif %}">Vendors</a>
     {% if g.user and ('admin' in g.user_roles or g.user_team in ('red', 'blue', 'both')) %}
     <a href="/watchlist" class="{% if active == 'watchlist' %}active{% endif %}">Watchlist</a>
     {% endif %}
@@ -39,11 +40,11 @@
     {% endif %}
   </div>
   <form class="search" action="/search" method="get">
-    <input type="text" name="q" placeholder="CVE-ID OR KEYWORD" value="{{ search_query|default('') }}" autocomplete="off">
+    <input type="text" name="q" placeholder="CVE-ID OR KEYWORD" value="{{ search_query|default('') }}" autocomplete="off" maxlength="200">
   </form>
   {% if g.user %}
   <div class="user-menu">
-    <a href="{{ url_for('profile.telegram') }}" class="user-name" style="text-decoration:none;">{{ g.user.username }}</a>
+    <a href="{{ url_for('profile.settings') }}" class="user-name" style="text-decoration:none;">{{ g.user.username }}</a>
     {% if g.user_team and g.user_team != 'none' %}
     <span class="team-chip team-{{ g.user_team }}">{{ g.user_team|upper }}</span>
     {% endif %}
@@ -55,5 +56,58 @@
 <div class="container">
 {% block content %}{% endblock %}
 </div>
+<script>
+// Keyboard shortcuts
+(function() {
+  var gSeq = '';
+  document.addEventListener('keydown', function(e) {
+    // Don't capture when typing in inputs
+    var tag = e.target.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+
+    // Focus search on '/'
+    if (e.key === '/') {
+      e.preventDefault();
+      var s = document.querySelector('.nav .search input');
+      if (s) s.focus();
+      return;
+    }
+
+    // g-prefix navigation
+    if (e.key === 'g') { gSeq = 'g'; setTimeout(function(){ gSeq=''; }, 800); return; }
+    if (gSeq === 'g') {
+      gSeq = '';
+      var map = { 'd': '/', 'c': '/cves', 't': '/triage', 'p': '/pocs', 'r': '/resources', 'w': '/watchlist' };
+      if (map[e.key]) { window.location.href = map[e.key]; return; }
+    }
+
+    // j/k row navigation in focused table
+    if (e.key === 'j' || e.key === 'k') {
+      var rows = document.querySelectorAll('tbody tr');
+      if (!rows.length) return;
+      var focused = document.querySelector('tbody tr:focus, tbody tr.focused');
+      var idx = Array.from(rows).indexOf(focused);
+      if (e.key === 'j' && idx < rows.length - 1) {
+        if (focused) focused.classList.remove('focused');
+        rows[idx + 1].classList.add('focused');
+        rows[idx + 1].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'k' && idx > 0) {
+        if (focused) focused.classList.remove('focused');
+        rows[idx - 1].classList.add('focused');
+        rows[idx - 1].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    // Enter to open focused row
+    if (e.key === 'Enter') {
+      var focused = document.querySelector('tbody tr.focused');
+      if (focused) {
+        var link = focused.querySelector('a.cve-id-cell') || focused.querySelector('a');
+        if (link) window.location.href = link.href;
+      }
+    }
+  });
+})();
+</script>
 </body>
 </html>

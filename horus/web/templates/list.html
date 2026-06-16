@@ -4,13 +4,29 @@
 <h1 class="page-title">{{ title }} <em>· {{ total }}</em></h1>
 {% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
 
-{% if filters or sort_filters or window_filters %}
+{% if filters or sort_filters or window_filters or quick_filters or toggle_filters or all_vendors %}
 <div class="filter-bar">
   {% if filters %}
   <div class="filter-group">
-    <span class="label">Filter</span>
+    <span class="label">Severity</span>
     {% for f in filters %}
     <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if quick_filters %}
+  <div class="filter-group">
+    <span class="label">Quick</span>
+    {% for f in quick_filters %}
+    <a href="{{ f.url }}" class="chip chip-quick {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if toggle_filters %}
+  <div class="filter-group">
+    <span class="label">Has</span>
+    {% for f in toggle_filters %}
+    <a href="{{ f.url }}" class="chip chip-toggle {% if f.active %}active{% endif %}">{{ f.label }}</a>
     {% endfor %}
   </div>
   {% endif %}
@@ -31,6 +47,120 @@
   </div>
   {% endif %}
 </div>
+
+{# Dropdown filters row #}
+{% if all_vendors or all_tags or all_categories or all_cwes or all_sources %}
+<div class="filter-bar filter-bar-secondary">
+  {% if all_vendors %}
+  <div class="filter-group">
+    <span class="label">Vendor</span>
+    <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+      <option value="">All</option>
+      {% set current_vendor = active_filters.vendor|default('') %}
+      {% for v in all_vendors %}
+      <option value="/cves?{% if current_vendor != v %}vendor={{ v }}{% endif %}{% for k,val in active_filters.items() %}{% if k != 'vendor' and val %}&{{ k }}={{ val }}{% endif %}{% endfor %}" {% if current_vendor == v %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if all_tags %}
+  <div class="filter-group">
+    <span class="label">Tag</span>
+    <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+      <option value="">All</option>
+      {% set current_tag = active_filters.tag|default('') %}
+      {% for t in all_tags %}
+      <option value="/cves?{% if current_tag != t %}tag={{ t }}{% endif %}{% for k,val in active_filters.items() %}{% if k != 'tag' and val %}&{{ k }}={{ val }}{% endif %}{% endfor %}" {% if current_tag == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if all_categories %}
+  <div class="filter-group">
+    <span class="label">Category</span>
+    <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+      <option value="">All</option>
+      {% set current_cat = active_filters.category|default('') %}
+      {% for c in all_categories %}
+      <option value="/cves?{% if current_cat != c %}category={{ c }}{% endif %}{% for k,val in active_filters.items() %}{% if k != 'category' and val %}&{{ k }}={{ val }}{% endif %}{% endfor %}" {% if current_cat == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if all_cwes %}
+  <div class="filter-group">
+    <span class="label">CWE</span>
+    <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+      <option value="">All</option>
+      {% set current_cwe = active_filters.cwe|default('') %}
+      {% for c in all_cwes %}
+      <option value="/cves?{% if current_cwe != c %}cwe={{ c }}{% endif %}{% for k,val in active_filters.items() %}{% if k != 'cwe' and val %}&{{ k }}={{ val }}{% endif %}{% endfor %}" {% if current_cwe == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if all_sources %}
+  <div class="filter-group">
+    <span class="label">Source</span>
+    <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+      <option value="">All</option>
+      {% set current_source = active_filters.source|default('') %}
+      {% for s in all_sources %}
+      <option value="/cves?{% if current_source != s %}source={{ s }}{% endif %}{% for k,val in active_filters.items() %}{% if k != 'source' and val %}&{{ k }}={{ val }}{% endif %}{% endfor %}" {% if current_source == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# Active filter summary bar #}
+{% if active_filters %}
+<div class="filter-summary">
+  <span class="filter-summary-label">Active:</span>
+  {% for k, v in active_filters.items() %}
+  {% if k == 'severity' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">{{ v }} <span class="remove">×</span></a>
+  {% elif k == 'kev' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">KEV <span class="remove">×</span></a>
+  {% elif k == 'tag' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">tag:{{ v }} <span class="remove">×</span></a>
+  {% elif k == 'vendor' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">vendor:{{ v }} <span class="remove">×</span></a>
+  {% elif k == 'category' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">cat:{{ v }} <span class="remove">×</span></a>
+  {% elif k == 'cwe' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">cwe:{{ v }} <span class="remove">×</span></a>
+  {% elif k == 'source' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">src:{{ v }} <span class="remove">×</span></a>
+  {% elif k == 'window' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">window:{{ v }} <span class="remove">×</span></a>
+  {% elif k == 'has_poc' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">has PoC <span class="remove">×</span></a>
+  {% elif k == 'has_epss' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">has EPSS <span class="remove">×</span></a>
+  {% elif k == 'has_social' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">has social <span class="remove">×</span></a>
+  {% elif k == 'epss_min' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">EPSS≥{{ v }} <span class="remove">×</span></a>
+  {% elif k == 'cvss_min' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">CVSS≥{{ v }} <span class="remove">×</span></a>
+  {% elif k == 'watchlist' %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">watchlist <span class="remove">×</span></a>
+  {% elif k == 'sort' %}
+  {# sort not shown as chip, it's in the sort bar #}
+  {% else %}
+  <a href="/cves?{% for ak,av in active_filters.items() %}{% if ak != k and av %}&{{ ak }}={{ av }}{% endif %}{% endfor %}" class="filter-chip">{{ k }}:{{ v }} <span class="remove">×</span></a>
+  {% endif %}
+  {% endfor %}
+  <a href="/cves" class="filter-clear">Clear all</a>
+  {% if current_qs %}
+  <a href="/cves/export.csv{{ current_qs }}" class="filter-action" title="Export current view as CSV">⬇ CSV</a>
+  <button class="filter-action" onclick="navigator.clipboard.writeText(window.location.href);this.textContent='✓ Copied';setTimeout(()=>this.textContent='🔗 Share',2000);" title="Copy link">🔗 Share</button>
+  {% endif %}
+</div>
+{% endif %}
+
 {% endif %}
 
 {% if rows %}

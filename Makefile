@@ -1,4 +1,4 @@
-.PHONY: web shell clean
+.PHONY: web shell clean audit sbom
 
 # Activate venv and run web interface
 web:
@@ -11,3 +11,11 @@ shell:
 # Clean pycache
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
+
+# Run pip-audit to check for vulnerable dependencies
+audit:
+	@source .venv/bin/activate && pip-audit --strict
+
+# Generate a CycloneDX SBOM
+sbom:
+	@source .venv/bin/activate && cyclonedx-py environment --output-format json --output-file sbom.json

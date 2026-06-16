@@ -9,8 +9,8 @@
       {% if data.cve.cvss_severity %}<span class="badge badge-{{ data.cve.cvss_severity|lower }}">{{ data.cve.cvss_severity }}</span>{% endif %}
       {% if data.cve.kev %}<span class="badge badge-kev">CISA KEV</span>{% endif %}
       {% if data.cve.epss_score is not none and data.cve.epss_score >= 0.5 %}<span class="badge badge-epss">IMMINENT</span>{% endif %}
-      {% if data.linked_pocs %}<span class="badge badge-tag">PUBLIC POC × {{ data.linked_pocs|length }}</span>{% endif %}
-      {% for tag in data.tags %}<span class="badge badge-tag">{{ tag }}</span>{% endfor %}
+      {% if data.linked_pocs %}<span class="badge badge-tag"><a href="/cves?has_poc=1" style="color:inherit;text-decoration:none;">PUBLIC POC × {{ data.linked_pocs|length }}</a></span>{% endif %}
+      {% for tag in data.tags %}<a href="/cves?tag={{ tag }}" class="badge badge-tag">{{ tag }}</a>{% endfor %}
     </div>
     <div class="desc">{{ data.cve.description or 'No description available.' }}</div>
     <div class="timeline">
@@ -48,7 +48,7 @@
   <div class="section-head"><h2>Weakness classification</h2><span class="count">CWE</span></div>
   <div class="panel"><div class="panel-body">
     <div class="tag-cloud">
-    {% for cwe in data.cwes %}<span class="badge badge-tag">{{ cwe }}</span>{% endfor %}
+    {% for cwe in data.cwes %}<a href="/cves?cwe={{ cwe }}" class="badge badge-tag">{{ cwe }}</a>{% endfor %}
     </div>
   </div></div>
 </div>
@@ -58,7 +58,7 @@
 <div class="section">
   <div class="section-head">
     <h2>Affected products</h2>
-    <span class="count">{{ data.product_count }} product{% if data.product_count != 1 %}s{% endif %} across {{ data.products_grouped|length }} vendor{% if data.products_grouped|length != 1 %}s{% endif %}</span>
+    <span class="count"><a href="/cves?vendor={{ data.products_grouped[0].vendor if data.products_grouped else '' }}" class="meta-link">{{ data.product_count }} product{% if data.product_count != 1 %}s{% endif %} across {{ data.products_grouped|length }} vendor{% if data.products_grouped|length != 1 %}s{% endif %}</a></span>
   </div>
   <div class="panel">
     <div class="panel-body">
@@ -68,7 +68,7 @@
           {% if vendor_group.vendor == "unknown" %}
             <span style="color:var(--text-dim);">Unspecified vendor</span>
           {% else %}
-            {{ vendor_group.vendor }}
+            <a href="/cves?vendor={{ vendor_group.vendor }}" style="color:var(--text);text-decoration:none;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text)'">{{ vendor_group.vendor }}</a>
           {% endif %}
           <span class="vendor-count">{{ vendor_group.products|length }} product{% if vendor_group.products|length != 1 %}s{% endif %}</span>
         </div>
@@ -93,7 +93,7 @@
                 <span style="color:var(--text-dim);">All versions</span>
               {% endif %}
             </td>
-            <td><span class="badge badge-source">{{ product.category }}</span></td>
+            <td><a href="/cves?category={{ product.category }}" class="badge badge-source" style="text-decoration:none;">{{ product.category }}</a></td>
           </tr>
           {% endfor %}
           </tbody>
@@ -125,6 +125,27 @@
     {% endfor %}
     </div>
   </div>
+</div>
+{% endif %}
+
+{% if data.linked_pocs or data.cve.kev %}
+<div class="section">
+  <div class="section-head"><h2>Detection <em>/ rules</em></h2><span class="count">community rules</span></div>
+  <div class="panel"><div class="panel-body">
+    <div class="detection-links">
+      <a href="https://github.com/search?q={{ data.cve.id }}+nuclei+template&type=code" target="_blank" rel="noopener" class="detection-link">Nuclei templates ↗</a>
+      <a href="https://github.com/search?q={{ data.cve.id }}+sigma+rule&type=code" target="_blank" rel="noopener" class="detection-link">Sigma rules ↗</a>
+      <a href="https://github.com/search?q={{ data.cve.id }}+yara&type=code" target="_blank" rel="noopener" class="detection-link">YARA rules ↗</a>
+      {% if data.tags %}
+        {% if 'rce' in data.tags %}
+        <a href="https://github.com/search?q={{ data.cve.id }}+suricata&type=code" target="_blank" rel="noopener" class="detection-link">Suricata rules ↗</a>
+        {% endif %}
+      {% endif %}
+      <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog?search_api_fulltext={{ data.cve.id }}" target="_blank" rel="noopener" class="detection-link">CISA KEV ↗</a>
+      <a href="https://nvd.nist.gov/vuln/detail/{{ data.cve.id }}" target="_blank" rel="noopener" class="detection-link">NVD entry ↗</a>
+      <a href="https://vulmon.com/vulnerabilitydetails?qid={{ data.cve.id }}" target="_blank" rel="noopener" class="detection-link">Vulmon ↗</a>
+    </div>
+  </div></div>
 </div>
 {% endif %}
 
@@ -167,7 +188,7 @@
       <tr class="sev-{{ rc.cvss_severity }}">
         <td><a href="/cve/{{ rc.id }}" class="cve-id-cell">{{ rc.id }}</a></td>
         <td><span class="num strong">{{ rc.cvss_score or '—' }}</span> {% if rc.cvss_severity %}<span class="badge badge-{{ rc.cvss_severity|lower }}">{{ rc.cvss_severity[:3] }}</span>{% endif %}</td>
-        <td><span class="badge badge-source">{{ rc.relation|replace('_', ' ') }}</span></td>
+        <td><a href="/cves?tag={{ data.tags[0] if data.tags else '' }}" class="badge badge-source" style="text-decoration:none;">{{ rc.relation|replace('_', ' ') }}</a></td>
         <td class="desc-cell" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ rc.description[:120] }}</td>
       </tr>
       {% endfor %}

@@ -21,6 +21,7 @@ def list_pocs():
     sort = request.args.get("sort", "newest")
     if sort not in VALID_SORTS:
         sort = "newest"
+    only_linked = request.args.get("linked")
 
     try:
         rows, total = fetch_pocs(
@@ -33,6 +34,11 @@ def list_pocs():
             ]
     except Exception as e:
         return error_page(f"Database Error: {e}", active="pocs"), 500
+
+    # Filter for linked PoCs
+    if only_linked:
+        rows = [r for r in rows if r.get("cve_ids")]
+        total = len(rows)
 
     filters = [{"label": "All", "url": f"/pocs?sort={sort}", "active": not source}]
     for s in sources:
@@ -51,6 +57,20 @@ def list_pocs():
         },
     ]
 
+    # Quick filter chips
+    quick_filters = [
+        {
+            "label": "Linked to CVEs",
+            "url": f"/pocs?linked=1&sort={sort}&source={source or ''}",
+            "active": bool(only_linked),
+        },
+        {
+            "label": "Popular (>100★)",
+            "url": f"/pocs?sort=stars&source={source or ''}",
+            "active": sort == "stars",
+        },
+    ]
+
     columns = ["CVE", "URL", "Source", "Stars", "Age (d)", "Description"]
     cells = [
         {"type": "cve_links", "key": "cve_ids"},
@@ -61,6 +81,7 @@ def list_pocs():
         {"type": "truncate", "key": "description"},
     ]
     src_q = f"&source={source}" if source else ""
+    linked_q = "&linked=1" if only_linked else ""
 
     return page(
         "list.html",
@@ -75,10 +96,11 @@ def list_pocs():
         per_page=PER_PAGE_DEFAULT,
         filters=filters,
         sort_filters=sort_filters,
+        quick_filters=quick_filters,
         columns=columns,
         cells=cells,
-        prev_url=f"/pocs?page={pg - 1}{src_q}&sort={sort}" if pg > 1 else None,
-        next_url=f"/pocs?page={pg + 1}{src_q}&sort={sort}"
+        prev_url=f"/pocs?page={pg - 1}{src_q}{linked_q}&sort={sort}" if pg > 1 else None,
+        next_url=f"/pocs?page={pg + 1}{src_q}{linked_q}&sort={sort}"
         if pg * PER_PAGE_DEFAULT < total
         else None,
     )

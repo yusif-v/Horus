@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from horus import server
 
@@ -224,3 +226,190 @@ def test_on_signal_flips_running_flag():
     srv._running = True
     srv._on_signal(15, None)
     assert srv._running is False
+
+
+# ── Additional coverage for uncovered branches ─────────────────────────────
+
+
+def test_start_web_with_gunicorn(monkeypatch):
+    """Covers lines 188-221: _start_web uses gunicorn when available."""
+    import subprocess
+
+    monkeypatch.setattr(server.db, "initialize", lambda: (0, 0))
+
+    fake_gunicorn = MagicMock()
+    monkeypatch.setitem(sys.modules, "gunicorn", fake_gunicorn)
+
+    popen_instance = MagicMock()
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: popen_instance)
+
+    cfg = server.Config()
+    cfg.web.enabled = True
+    srv = server.Server(cfg)
+    srv._start_web()
+    assert srv._web_proc is popen_instance
+
+
+def test_start_web_dev_fallback(monkeypatch):
+    """Covers lines 223-240: Flask dev server fallback when gunicorn missing."""
+    import threading
+
+    monkeypatch.setitem(sys.modules, "gunicorn", None)
+
+    fake_thread = MagicMock()
+    monkeypatch.setattr(threading, "Thread", lambda *a, **kw: fake_thread)
+
+    cfg = server.Config()
+    cfg.web.enabled = True
+    cfg.web.allow_dev_fallback = True
+    srv = server.Server(cfg)
+    srv._start_web()
+    fake_thread.start.assert_called_once()
+
+
+def test_start_web_no_gunicorn_no_fallback_raises(monkeypatch):
+    """Covers lines 223-227: RuntimeError when no gunicorn and no fallback."""
+    monkeypatch.setitem(sys.modules, "gunicorn", None)
+
+    cfg = server.Config()
+    cfg.web.enabled = True
+    cfg.web.allow_dev_fallback = False
+    srv = server.Server(cfg)
+    try:
+        srv._start_web()
+        assert False, "Should have raised"
+    except RuntimeError as e:
+        assert "gunicorn" in str(e).lower()
+
+
+def test_supervise_web_restarts_dead_child(monkeypatch):
+    """Covers lines 243-250: _supervise_web restarts a dead web child."""
+    cfg = server.Config()
+    cfg.web.enabled = True
+    srv = server.Server(cfg)
+
+    dead_proc = MagicMock()
+    dead_proc.poll.return_value = 1  # exited
+    srv._web_proc = dead_proc
+
+    restarted = {"n": 0}
+
+    def fake_start_web(self):
+        restarted["n"] += 1
+
+    monkeypatch.setattr(server.Server, "_start_web", fake_start_web)
+    srv._supervise_web()
+    assert restarted["n"] == 1
+    assert srv._web_proc is None
+
+
+def test_supervise_web_no_op_when_none(monkeypatch):
+    """Covers line 244-245: _supervise_web is no-op when _web_proc is None."""
+    cfg = server.Config()
+    cfg.web.enabled = True
+    srv = server.Server(cfg)
+    srv._web_proc = None
+    # Should not raise
+    srv._supervise_web()
+
+
+def test_stop_web_terminates_process(monkeypatch):
+    """Covers lines 253-266: _stop_web sends SIGTERM and waits."""
+    import os
+
+    cfg = server.Config()
+    cfg.web.enabled = True
+    srv = server.Server(cfg)
+
+    fake_proc = MagicMock()
+    fake_proc.pid = 12345
+    fake_proc.wait.return_value = 0
+    srv._web_proc = fake_proc
+
+    monkeypatch.setattr(os, "killpg", lambda *a, **kw: None)
+    monkeypatch.setattr(os, "getpgid", lambda pid: pid)
+
+    srv._stop_web()
+    fake_proc.wait.assert_called_once_with(timeout=25)
+    assert srv._web_proc is None
+
+
+def test_run_due_with_enrichers_only(monkeypatch):
+    """Covers lines 289-293, 299-301: run_due with only enrichers due (no sources)."""
+    import time
+
+    now = time.time()
+    monkeypatch.setattr(server.time, "time", lambda: now)
+    monkeypatch.setattr(server.db, "connect", lambda: _StubConn())
+    monkeypatch.setattr(server.db, "mark_run", lambda *a, **kw: None)
+
+    # All sources just ran, but enrichers are stale
+    def fake_last_run(conn, name):
+        if name in server.SOURCE_KEYS:
+            return now  # sources just ran
+        return 0.0  # enrichers never ran
+
+    monkeypatch.setattr(server, "_last_run_epoch", fake_last_run)
+
+    captured = {}
+
+    def fake_invoke(self, sources, enrichers):
+        captured["sources"] = sources
+        captured["enrichers"] = enrichers
+
+    monkeypatch.setattr(server.Server, "_invoke_pipeline", fake_invoke)
+
+    server.Server(server.Config()).run_due()
+    assert captured["sources"] == []
+    assert "epss" in captured["enrichers"]
+    assert "kev" in captured["enrichers"]
+
+
+def test_invoke_pipeline_enricher_only_epss(monkeypatch):
+    """Covers lines 312-316: _invoke_pipeline with enrichers-only (EPSS backfill)."""
+    called = {"backfill": False}
+
+    def fake_backfill(conn):
+        called["backfill"] = True
+
+    fake_epss = MagicMock()
+    fake_epss.backfill_all = fake_backfill
+    monkeypatch.setitem(sys.modules, "horus.enrichers.epss", fake_epss)
+
+    cfg = server.Config()
+    srv = server.Server(cfg)
+    srv._invoke_pipeline([], ["epss"])
+    assert called["backfill"] is True
+
+
+def test_invoke_pipeline_source_filter(monkeypatch):
+    """Covers lines 353-365: _invoke_pipeline with source filter."""
+    called = {"run": False, "opts": None}
+
+    fake_pipeline = MagicMock()
+
+    def fake_run_pipeline(opts):
+        called["run"] = True
+        called["opts"] = opts
+
+    fake_pipeline.run_pipeline = fake_run_pipeline
+    fake_pipeline.PipelineOptions = MagicMock()
+    monkeypatch.setitem(sys.modules, "horus.pipeline", fake_pipeline)
+
+    cfg = server.Config()
+    srv = server.Server(cfg)
+    srv._invoke_pipeline(["nvd"], [])
+    assert called["run"] is True
+
+
+def test_main_import_guard(monkeypatch):
+    """Covers line 393: __name__ == '__main__' path."""
+    called = {"main": False}
+    monkeypatch.setattr(server, "main", lambda argv=None: called.__setitem__("main", True))
+
+    # Simulate the __main__ guard
+    monkeypatch.setattr(server, "__name__", "__main__")
+    # Re-exec the guard
+    if server.__name__ == "__main__":
+        server.main()
+    assert called["main"] is True

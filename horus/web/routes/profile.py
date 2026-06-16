@@ -1,4 +1,4 @@
-"""User self-service: Telegram linking + notification preferences.
+"""User self-service: Telegram linking + notification preferences + account settings.
 
 Linking flow:
   1. User clicks "Connect Telegram" → POST /profile/telegram/generate
@@ -13,6 +13,9 @@ Per-user notification preferences live in `notification_pref` and are
 edited through `/profile/notifications`. Categories are defined in
 `horus/web/notifications.py`.
 
+Account settings (`/profile/settings`) let users change their own email,
+password, and team assignment.
+
 All routes require an authenticated user (READ_ALL is enough — viewers
 can opt in to their own notifications).
 """
@@ -20,16 +23,18 @@ can opt in to their own notifications).
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, current_app, g, redirect, request, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from ...storage import db as _storage
 from .. import audit
 from .._render import page
 from ..notifications import CATEGORIES, effective_prefs
-from .auth import READ_ALL, role_required
+from .auth import READ_ALL, TEAMS, role_required
 
 bp = Blueprint("profile", __name__, url_prefix="/profile")
 
@@ -201,5 +206,117 @@ def notifications():
         title="Notifications",
         active="profile",
         categories=categories,
+        flash=request.args.get("flash", ""),
+    )
+
+
+# ─── Account settings ───────────────────────────────────────────────────────
+
+
+@bp.route("/settings", methods=["GET", "POST"])
+@role_required(*READ_ALL)
+def settings():
+    user_id = g.user["id"]
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        team = request.form.get("team", "none")
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        new_password_confirm = request.form.get("new_password_confirm", "")
+
+        errors = []
+        if not email or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+            errors.append("A valid email is required.")
+        if team not in TEAMS:
+            errors.append("Invalid team.")
+
+        # If changing password, verify current password
+        if new_password:
+            if len(new_password) < 8:
+                errors.append("New password must be at least 8 characters.")
+            if new_password != new_password_confirm:
+                errors.append("New passwords do not match.")
+            if not current_password:
+                errors.append("Current password is required to set a new password.")
+
+        if errors:
+            with _storage.connect() as conn:
+                user_row = conn.execute(
+                    "SELECT email, team FROM user WHERE id = ?", (user_id,)
+                ).fetchone()
+            return page(
+                "profile_settings.html",
+                title="Account settings",
+                active="profile",
+                user={"email": email, "team": team},
+                teams=TEAMS,
+                error=" ".join(errors),
+            ), 400
+
+        # Verify current password if changing password
+        if new_password:
+            with _storage.connect() as conn:
+                row = conn.execute(
+                    "SELECT password_hash FROM user WHERE id = ?", (user_id,)
+                ).fetchone()
+                if not row or not check_password_hash(row[0], current_password):
+                    return page(
+                        "profile_settings.html",
+                        title="Account settings",
+                        active="profile",
+                        user={"email": email, "team": team},
+                        teams=TEAMS,
+                        error="Current password is incorrect.",
+                    ), 401
+
+        # Check email uniqueness (excluding self)
+        with _storage.connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM user WHERE email = ? AND id != ?", (email, user_id)
+            ).fetchone()
+            if existing:
+                return page(
+                    "profile_settings.html",
+                    title="Account settings",
+                    active="profile",
+                    user={"email": email, "team": team},
+                    teams=TEAMS,
+                    error="Email already taken by another user.",
+                ), 409
+
+            before = conn.execute(
+                "SELECT email, team FROM user WHERE id = ?", (user_id,)
+            ).fetchone()
+
+            conn.execute(
+                "UPDATE user SET email = ?, team = ? WHERE id = ?",
+                (email, team, user_id),
+            )
+            if new_password:
+                conn.execute(
+                    "UPDATE user SET password_hash = ? WHERE id = ?",
+                    (generate_password_hash(new_password), user_id),
+                )
+
+        after = {"email": email, "team": team}
+        audit.record(
+            "user.self_update",
+            "user",
+            user_id,
+            before=dict(before) if before else None,
+            after=after,
+        )
+        return redirect(url_for("profile.settings", flash="Settings saved."))
+
+    with _storage.connect() as conn:
+        user_row = conn.execute("SELECT email, team FROM user WHERE id = ?", (user_id,)).fetchone()
+
+    return page(
+        "profile_settings.html",
+        title="Account settings",
+        active="profile",
+        user={"email": user_row[0], "team": user_row[1]} if user_row else {},
+        teams=TEAMS,
         flash=request.args.get("flash", ""),
     )

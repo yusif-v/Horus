@@ -10,6 +10,7 @@ from .profile import bp as profile_bp
 from .resources import bp as resources_bp
 from .search import bp as search_bp
 from .triage import bp as triage_bp
+from .vendors import bp as vendors_bp
 from .watchlist import bp as watchlist_bp
 
 ALL_BLUEPRINTS = [
@@ -20,6 +21,7 @@ ALL_BLUEPRINTS = [
     cves_bp,
     pocs_bp,
     resources_bp,
+    vendors_bp,
     api_bp,
     admin_bp,
     watchlist_bp,

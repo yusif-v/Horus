@@ -6,6 +6,7 @@ import json
 import time
 import urllib.error
 import urllib.request
+from typing import Any
 
 from ..config import HTTP_TIMEOUT, USER_AGENT
 
@@ -16,7 +17,7 @@ def fetch_json(
     headers: dict[str, str] | None = None,
     max_retries: int = 3,
     base_delay: float = 2.0,
-) -> dict:
+) -> dict[str, Any]:
     """Fetch URL and parse JSON. Retries with exponential backoff on transient errors."""
     final_headers = {"User-Agent": USER_AGENT}
     if accept:
@@ -29,7 +30,9 @@ def fetch_json(
         try:
             req = urllib.request.Request(url, headers=final_headers)
             with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-                return json.loads(resp.read())
+                data: dict[str, Any] = json.loads(resp.read())
+                return data
+
         except urllib.error.HTTPError as e:
             # Retry on 429 (rate limit), 500, 502, 503, 504
             if e.code in (429, 500, 502, 503, 504):
