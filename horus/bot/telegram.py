@@ -169,7 +169,7 @@ def _handle_whoami(api: TelegramAPI, chat_id: int, user: dict) -> None:
         f"• Horus user: `{_md_escape(user['username'])}`\n"
         f"• Email: `{_md_escape(user.get('email') or '—')}`\n"
         f"• Team: `{team}`\n"
-        f"• Telegram: {_md_escape(handle)} (chat_id `{chat_id}`)\n"
+        f"• Telegram: {_md_escape(handle)} (chat\\_id `{chat_id}`)\n"
         f"• Linked at: `{linked}`",
     )
 
