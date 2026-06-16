@@ -15,30 +15,34 @@
 {% endif %}
 
 <div class="posture">
-  <a href="/triage" class="cell">
+  <div class="cell">
+    <a href="/triage" class="cell-link" aria-label="Actionable now"></a>
     <div class="k">Actionable now</div>
     <div class="v warn">{{ stats.actionable }}</div>
     <div class="meta"><a href="/cves?kev=1" class="meta-link">KEV <strong>{{ stats.kev_count }}</strong></a> · <a href="/triage?lens=imminent" class="meta-link">EPSS≥0.5 w/ PoC <strong>{{ stats.imminent }}</strong></a></div>
     <div class="tick">01</div>
-  </a>
-  <a href="/triage?lens=weaponized" class="cell">
+  </div>
+  <div class="cell">
+    <a href="/triage?lens=weaponized" class="cell-link" aria-label="Weaponized"></a>
     <div class="k">Weaponized</div>
     <div class="v danger">{{ stats.weaponized }}</div>
     <div class="meta">CVSS≥9 with public PoC</div>
     <div class="tick">02</div>
-  </a>
-  <a href="/triage?lens=imminent" class="cell">
+  </div>
+  <div class="cell">
+    <a href="/triage?lens=imminent" class="cell-link" aria-label="Imminent"></a>
     <div class="k">Imminent (EPSS≥0.5)</div>
     <div class="v">{{ stats.imminent }}</div>
     <div class="meta">avg EPSS <strong>{{ "%.2f%%"|format(stats.avg_epss * 100) if stats.avg_epss else '—' }}</strong></div>
     <div class="tick">03</div>
-  </a>
-  <a href="/pocs" class="cell">
+  </div>
+  <div class="cell">
+    <a href="/pocs" class="cell-link" aria-label="PoCs linked"></a>
     <div class="k">PoCs linked</div>
     <div class="v info">{{ stats.linked_pocs }}</div>
     <div class="meta">across <a href="/cves?has_poc=1" class="meta-link"><strong>{{ stats.cves_with_pocs }}</strong> CVEs</a></div>
     <div class="tick">04</div>
-  </a>
+  </div>
 </div>
 
 {% if stats.kev_cves %}

@@ -1,0 +1,44 @@
+# Horus server config. Pass via: python3 -m horus --server --config horus.yaml
+# All keys are optional; omitted keys fall back to defaults in horus/server.py.
+
+# Per-source poll intervals (seconds). Server only runs a source when
+# now - last_run >= interval.
+poll_intervals:
+  nvd:         3600   # 1h  — NVD updates roughly every 2h
+  x_twitter:   1800   # 30m — social moves fast
+  github:      3600   # 1h  — search API rate-limited
+  gitlab:      3600   # 1h
+  exploit_db:  7200   # 2h  — slower moving
+  epss:        86400  # 24h — daily CSV
+  kev:         86400  # 24h — daily catalog
+
+# Toggle individual sources/enrichers. Defaults to true when omitted.
+sources_enabled:
+  nvd:        true
+  x_twitter:  true
+  github:     true
+  gitlab:     true
+  exploit_db: true
+  epss:       true
+  kev:        true
+
+# How often the scheduler wakes up to check which sources are due.
+check_every_seconds: 60
+
+# Embedded web UI (gunicorn). Disable if you only want the data pipeline.
+web:
+  enabled: true
+  host: 127.0.0.1
+  port: 8080
+  workers: 2
+  # If gunicorn isn't installed, fall back to Flask's dev server (with a
+  # warning). Set false to fail-fast in production.
+  allow_dev_fallback: true
+
+# Telegram bot for notifications. Token from @BotFather.
+# The bot listens for /start <token> to link user accounts, then sends
+# notifications when watchlist CVEs, KEV additions, EPSS jumps, etc. occur.
+# Token can also be set via TELEGRAM_BOT_TOKEN env var.
+telegram:
+  enabled: true
+  bot_token: "8633242764:AAHD1x2EETALJ3agHER5MUlsperG41TD6sQ"

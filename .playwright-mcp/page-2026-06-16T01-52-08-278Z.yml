@@ -1,0 +1,340 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]: SYSTEM ONLINE
+    - generic [ref=e5]: │
+    - generic [ref=e6]: DB · 2029 CVE / 132 POC
+    - generic [ref=e7]: │
+    - generic [ref=e8]: LAST INGEST · 2026-06-16T01:35
+    - generic [ref=e9]:
+      - generic [ref=e10]: BUILD · HORUS v0.10.0
+      - generic [ref=e11]: │
+      - generic [ref=e12]: 2026-06-16 01:52 UTC
+  - navigation [ref=e14]:
+    - link "Horus . CVE INTEL" [ref=e15] [cursor=pointer]:
+      - /url: /
+      - text: Horus
+      - generic [ref=e16]: .
+      - generic [ref=e17]: CVE INTEL
+    - generic [ref=e18]:
+      - link "Overview" [ref=e19] [cursor=pointer]:
+        - /url: /
+      - link "Triage" [ref=e20] [cursor=pointer]:
+        - /url: /triage
+      - link "CVEs" [ref=e21] [cursor=pointer]:
+        - /url: /cves
+      - link "PoCs" [ref=e22] [cursor=pointer]:
+        - /url: /pocs
+      - link "Resources" [ref=e23] [cursor=pointer]:
+        - /url: /resources
+      - link "Vendors" [ref=e24] [cursor=pointer]:
+        - /url: /vendors
+    - generic [ref=e25]:
+      - text: /
+      - textbox "CVE-ID OR KEYWORD" [ref=e26]
+    - generic [ref=e27]:
+      - link "Admin" [ref=e28] [cursor=pointer]:
+        - /url: /profile/settings
+      - link "Logout" [ref=e29] [cursor=pointer]:
+        - /url: /logout
+  - generic [ref=e30]:
+    - generic [ref=e31]: Attack surface · vendors
+    - heading "Vendor exposure · 23" [level=1] [ref=e32]:
+      - text: Vendor exposure
+      - emphasis [ref=e33]: · 23
+    - paragraph [ref=e34]: CVE exposure across 23 vendors indexed in the local database. Click a vendor to see all its CVEs.
+    - generic [ref=e35]:
+      - generic [ref=e36]:
+        - generic [ref=e37]: Sort
+        - link "By CVE count" [ref=e38] [cursor=pointer]:
+          - /url: /vendors?sort=count
+        - link "By avg CVSS" [ref=e39] [cursor=pointer]:
+          - /url: /vendors?sort=cvss
+        - link "By avg EPSS" [ref=e40] [cursor=pointer]:
+          - /url: /vendors?sort=epss
+        - link "A-Z" [ref=e41] [cursor=pointer]:
+          - /url: /vendors?sort=name
+      - generic [ref=e42]:
+        - generic [ref=e43]: Filter
+        - link "All vendors" [ref=e44] [cursor=pointer]:
+          - /url: /vendors?sort=count
+        - link "Watchlist only" [ref=e45] [cursor=pointer]:
+          - /url: /vendors?sort=count&watchlist=1
+    - generic [ref=e47]:
+      - generic [ref=e48]: Category
+      - link "All categories" [ref=e49] [cursor=pointer]:
+        - /url: /vendors?sort=count
+      - link "browser" [ref=e50] [cursor=pointer]:
+        - /url: /vendors?sort=count&category=browser
+      - link "ci-cd" [ref=e51] [cursor=pointer]:
+        - /url: /vendors?sort=count&category=ci-cd
+      - link "cms" [ref=e52] [cursor=pointer]:
+        - /url: /vendors?sort=count&category=cms
+      - link "framework" [ref=e53] [cursor=pointer]:
+        - /url: /vendors?sort=count&category=framework
+      - link "kernel" [ref=e54] [cursor=pointer]:
+        - /url: /vendors?sort=count&category=kernel
+      - link "language-runtime" [ref=e55] [cursor=pointer]:
+        - /url: /vendors?sort=count&category=language-runtime
+      - link "mobile" [ref=e56] [cursor=pointer]:
+        - /url: /vendors?sort=count&category=mobile
+      - link "unknown" [ref=e57] [cursor=pointer]:
+        - /url: /vendors?sort=count&category=unknown
+      - link "web-server" [ref=e58] [cursor=pointer]:
+        - /url: /vendors?sort=count&category=web-server
+    - table [ref=e61]:
+      - rowgroup [ref=e70]:
+        - row "Vendor CVEs Avg CVSS Avg EPSS KEV Categories Watchlist" [ref=e71]:
+          - columnheader "Vendor" [ref=e72]
+          - columnheader "CVEs" [ref=e73]
+          - columnheader "Avg CVSS" [ref=e74]
+          - columnheader "Avg EPSS" [ref=e75]
+          - columnheader "KEV" [ref=e76]
+          - columnheader "Categories" [ref=e77]
+          - columnheader "Watchlist" [ref=e78]
+      - rowgroup [ref=e79]:
+        - row "unknown 776 6.8 0.07% 1 cms —" [ref=e80]:
+          - cell "unknown" [ref=e81]:
+            - link "unknown" [ref=e82] [cursor=pointer]:
+              - /url: /cves?vendor=unknown
+          - cell "776" [ref=e83]
+          - cell "6.8" [ref=e84]
+          - cell "0.07%" [ref=e85]: 0.07%
+          - cell "1" [ref=e87]
+          - cell "cms" [ref=e88]:
+            - link "cms" [ref=e89] [cursor=pointer]:
+              - /url: /cves?category=cms
+          - cell "—" [ref=e90]
+        - row "microsoft 33 8.1 25.57% 0 unknown ★" [ref=e91]:
+          - cell "microsoft" [ref=e92]:
+            - link "microsoft" [ref=e93] [cursor=pointer]:
+              - /url: /cves?vendor=microsoft
+          - cell "33" [ref=e94]
+          - cell "8.1" [ref=e95]
+          - cell "25.57%" [ref=e96]: 25.57%
+          - cell "0" [ref=e98]
+          - cell "unknown" [ref=e99]:
+            - link "unknown" [ref=e100] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "★" [ref=e101]
+        - row "google 28 7.6 0.05% 0 mobile browser —" [ref=e102]:
+          - cell "google" [ref=e103]:
+            - link "google" [ref=e104] [cursor=pointer]:
+              - /url: /cves?vendor=google
+          - cell "28" [ref=e105]
+          - cell "7.6" [ref=e106]
+          - cell "0.05%" [ref=e107]: 0.05%
+          - cell "0" [ref=e109]
+          - cell "mobile browser" [ref=e110]:
+            - link "mobile" [ref=e111] [cursor=pointer]:
+              - /url: /cves?category=mobile
+            - link "browser" [ref=e112] [cursor=pointer]:
+              - /url: /cves?category=browser
+          - cell "—" [ref=e113]
+        - row "apple 28 7.3 0.03% 0 kernel —" [ref=e114]:
+          - cell "apple" [ref=e115]:
+            - link "apple" [ref=e116] [cursor=pointer]:
+              - /url: /cves?vendor=apple
+          - cell "28" [ref=e117]
+          - cell "7.3" [ref=e118]
+          - cell "0.03%" [ref=e119]: 0.03%
+          - cell "0" [ref=e121]
+          - cell "kernel" [ref=e122]:
+            - link "kernel" [ref=e123] [cursor=pointer]:
+              - /url: /cves?category=kernel
+          - cell "—" [ref=e124]
+        - row "openclaw 14 7.7 0.03% 0 unknown —" [ref=e125]:
+          - cell "openclaw" [ref=e126]:
+            - link "openclaw" [ref=e127] [cursor=pointer]:
+              - /url: /cves?vendor=openclaw
+          - cell "14" [ref=e128]
+          - cell "7.7" [ref=e129]
+          - cell "0.03%" [ref=e130]: 0.03%
+          - cell "0" [ref=e132]
+          - cell "unknown" [ref=e133]:
+            - link "unknown" [ref=e134] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "—" [ref=e135]
+        - row "adobe 14 7.3 0.02% 0 unknown —" [ref=e136]:
+          - cell "adobe" [ref=e137]:
+            - link "adobe" [ref=e138] [cursor=pointer]:
+              - /url: /cves?vendor=adobe
+          - cell "14" [ref=e139]
+          - cell "7.3" [ref=e140]
+          - cell "0.02%" [ref=e141]: 0.02%
+          - cell "0" [ref=e143]
+          - cell "unknown" [ref=e144]:
+            - link "unknown" [ref=e145] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "—" [ref=e146]
+        - row "linux 12 7.1 0.04% 0 kernel —" [ref=e147]:
+          - cell "linux" [ref=e148]:
+            - link "linux" [ref=e149] [cursor=pointer]:
+              - /url: /cves?vendor=linux
+          - cell "12" [ref=e150]
+          - cell "7.1" [ref=e151]
+          - cell "0.04%" [ref=e152]: 0.04%
+          - cell "0" [ref=e154]
+          - cell "kernel" [ref=e155]:
+            - link "kernel" [ref=e156] [cursor=pointer]:
+              - /url: /cves?category=kernel
+          - cell "—" [ref=e157]
+        - row "gitlab 8 5.9 0.02% 0 ci-cd —" [ref=e158]:
+          - cell "gitlab" [ref=e159]:
+            - link "gitlab" [ref=e160] [cursor=pointer]:
+              - /url: /cves?vendor=gitlab
+          - cell "8" [ref=e161]
+          - cell "5.9" [ref=e162]
+          - cell "0.02%" [ref=e163]: 0.02%
+          - cell "0" [ref=e165]
+          - cell "ci-cd" [ref=e166]:
+            - link "ci-cd" [ref=e167] [cursor=pointer]:
+              - /url: /cves?category=ci-cd
+          - cell "—" [ref=e168]
+        - row "apache 8 7.0 0.03% 0 web-server —" [ref=e169]:
+          - cell "apache" [ref=e170]:
+            - link "apache" [ref=e171] [cursor=pointer]:
+              - /url: /cves?vendor=apache
+          - cell "8" [ref=e172]
+          - cell "7.0" [ref=e173]
+          - cell "0.03%" [ref=e174]: 0.03%
+          - cell "0" [ref=e176]
+          - cell "web-server" [ref=e177]:
+            - link "web-server" [ref=e178] [cursor=pointer]:
+              - /url: /cves?category=web-server
+          - cell "—" [ref=e179]
+        - row "checkmk 3 5.0 0.03% 0 unknown —" [ref=e180]:
+          - cell "checkmk" [ref=e181]:
+            - link "checkmk" [ref=e182] [cursor=pointer]:
+              - /url: /cves?vendor=checkmk
+          - cell "3" [ref=e183]
+          - cell "5.0" [ref=e184]
+          - cell "0.03%" [ref=e185]: 0.03%
+          - cell "0" [ref=e187]
+          - cell "unknown" [ref=e188]:
+            - link "unknown" [ref=e189] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "—" [ref=e190]
+        - row "vercel 1 10.0 82.01% 0 framework —" [ref=e191]:
+          - cell "vercel" [ref=e192]:
+            - link "vercel" [ref=e193] [cursor=pointer]:
+              - /url: /cves?vendor=vercel
+          - cell "1" [ref=e194]
+          - cell "10.0" [ref=e195]
+          - cell "82.01%" [ref=e196]: 82.01%
+          - cell "0" [ref=e198]
+          - cell "framework" [ref=e199]:
+            - link "framework" [ref=e200] [cursor=pointer]:
+              - /url: /cves?category=framework
+          - cell "—" [ref=e201]
+        - row "tp-link 1 8.0 1.33% 0 unknown —" [ref=e202]:
+          - cell "tp-link" [ref=e203]:
+            - link "tp-link" [ref=e204] [cursor=pointer]:
+              - /url: /cves?vendor=tp-link
+          - cell "1" [ref=e205]
+          - cell "8.0" [ref=e206]
+          - cell "1.33%" [ref=e207]: 1.33%
+          - cell "0" [ref=e209]
+          - cell "unknown" [ref=e210]:
+            - link "unknown" [ref=e211] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "—" [ref=e212]
+        - row "siemens 1 9.1 58.79% 1 unknown —" [ref=e213]:
+          - cell "siemens" [ref=e214]:
+            - link "siemens" [ref=e215] [cursor=pointer]:
+              - /url: /cves?vendor=siemens
+          - cell "1" [ref=e216]
+          - cell "9.1" [ref=e217]
+          - cell "58.79%" [ref=e218]: 58.79%
+          - cell "1" [ref=e220]
+          - cell "unknown" [ref=e221]:
+            - link "unknown" [ref=e222] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "—" [ref=e223]
+        - row "roundcube 1 9.9 90.47% 0 unknown —" [ref=e224]:
+          - cell "roundcube" [ref=e225]:
+            - link "roundcube" [ref=e226] [cursor=pointer]:
+              - /url: /cves?vendor=roundcube
+          - cell "1" [ref=e227]
+          - cell "9.9" [ref=e228]
+          - cell "90.47%" [ref=e229]: 90.47%
+          - cell "0" [ref=e231]
+          - cell "unknown" [ref=e232]:
+            - link "unknown" [ref=e233] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "—" [ref=e234]
+        - row "piwigo 1 7.5 — 0 language-runtime —" [ref=e235]:
+          - cell "piwigo" [ref=e236]:
+            - link "piwigo" [ref=e237] [cursor=pointer]:
+              - /url: /cves?vendor=piwigo
+          - cell "1" [ref=e238]
+          - cell "7.5" [ref=e239]
+          - cell "—" [ref=e240]
+          - cell "0" [ref=e241]
+          - cell "language-runtime" [ref=e242]:
+            - link "language-runtime" [ref=e243] [cursor=pointer]:
+              - /url: /cves?category=language-runtime
+          - cell "—" [ref=e244]
+        - row "phpoffice 1 9.8 0.24% 0 language-runtime —" [ref=e245]:
+          - cell "phpoffice" [ref=e246]:
+            - link "phpoffice" [ref=e247] [cursor=pointer]:
+              - /url: /cves?vendor=phpoffice
+          - cell "1" [ref=e248]
+          - cell "9.8" [ref=e249]
+          - cell "0.24%" [ref=e250]: 0.24%
+          - cell "0" [ref=e252]
+          - cell "language-runtime" [ref=e253]:
+            - link "language-runtime" [ref=e254] [cursor=pointer]:
+              - /url: /cves?category=language-runtime
+          - cell "—" [ref=e255]
+        - row "perl 1 9.8 0.04% 0 unknown —" [ref=e256]:
+          - cell "perl" [ref=e257]:
+            - link "perl" [ref=e258] [cursor=pointer]:
+              - /url: /cves?vendor=perl
+          - cell "1" [ref=e259]
+          - cell "9.8" [ref=e260]
+          - cell "0.04%" [ref=e261]: 0.04%
+          - cell "0" [ref=e263]
+          - cell "unknown" [ref=e264]:
+            - link "unknown" [ref=e265] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "—" [ref=e266]
+        - row "paloaltonetworks 1 9.1 58.79% 1 unknown —" [ref=e267]:
+          - cell "paloaltonetworks" [ref=e268]:
+            - link "paloaltonetworks" [ref=e269] [cursor=pointer]:
+              - /url: /cves?vendor=paloaltonetworks
+          - cell "1" [ref=e270]
+          - cell "9.1" [ref=e271]
+          - cell "58.79%" [ref=e272]: 58.79%
+          - cell "1" [ref=e274]
+          - cell "unknown" [ref=e275]:
+            - link "unknown" [ref=e276] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "—" [ref=e277]
+        - row "mantisbt 1 9.8 0.14% 0 unknown —" [ref=e278]:
+          - cell "mantisbt" [ref=e279]:
+            - link "mantisbt" [ref=e280] [cursor=pointer]:
+              - /url: /cves?vendor=mantisbt
+          - cell "1" [ref=e281]
+          - cell "9.8" [ref=e282]
+          - cell "0.14%" [ref=e283]: 0.14%
+          - cell "0" [ref=e285]
+          - cell "unknown" [ref=e286]:
+            - link "unknown" [ref=e287] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "—" [ref=e288]
+        - row "ivanti 1 9.8 94.44% 1 unknown —" [ref=e289]:
+          - cell "ivanti" [ref=e290]:
+            - link "ivanti" [ref=e291] [cursor=pointer]:
+              - /url: /cves?vendor=ivanti
+          - cell "1" [ref=e292]
+          - cell "9.8" [ref=e293]
+          - cell "94.44%" [ref=e294]: 94.44%
+          - cell "1" [ref=e296]
+          - cell "unknown" [ref=e297]:
+            - link "unknown" [ref=e298] [cursor=pointer]:
+              - /url: /cves?category=unknown
+          - cell "—" [ref=e299]
+    - generic [ref=e300]:
+      - generic [ref=e301]: 1 / 2
+      - link "Next →" [ref=e302] [cursor=pointer]:
+        - /url: /vendors?page=2&sort=count

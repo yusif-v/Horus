@@ -1,0 +1,319 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]: SYSTEM ONLINE
+    - generic [ref=e5]: │
+    - generic [ref=e6]: DB · 2029 CVE / 132 POC
+    - generic [ref=e7]: │
+    - generic [ref=e8]: LAST INGEST · 2026-06-16T01:35
+    - generic [ref=e9]:
+      - generic [ref=e10]: BUILD · HORUS v0.10.0
+      - generic [ref=e11]: │
+      - generic [ref=e12]: 2026-06-16 01:51 UTC
+  - navigation [ref=e14]:
+    - link "Horus . CVE INTEL" [ref=e15] [cursor=pointer]:
+      - /url: /
+      - text: Horus
+      - generic [ref=e16]: .
+      - generic [ref=e17]: CVE INTEL
+    - generic [ref=e18]:
+      - link "Overview" [ref=e19] [cursor=pointer]:
+        - /url: /
+      - link "Triage" [ref=e20] [cursor=pointer]:
+        - /url: /triage
+      - link "CVEs" [ref=e21] [cursor=pointer]:
+        - /url: /cves
+      - link "PoCs" [ref=e22] [cursor=pointer]:
+        - /url: /pocs
+      - link "Resources" [ref=e23] [cursor=pointer]:
+        - /url: /resources
+      - link "Vendors" [ref=e24] [cursor=pointer]:
+        - /url: /vendors
+    - generic [ref=e25]:
+      - text: /
+      - textbox "CVE-ID OR KEYWORD" [ref=e26]
+    - generic [ref=e27]:
+      - link "Admin" [ref=e28] [cursor=pointer]:
+        - /url: /profile/settings
+      - link "Logout" [ref=e29] [cursor=pointer]:
+        - /url: /logout
+  - generic [ref=e30]:
+    - generic [ref=e31]: Proof-of-concept artifacts
+    - heading "Public exploits · 132" [level=1] [ref=e32]:
+      - text: Public exploits
+      - emphasis [ref=e33]: · 132
+    - paragraph [ref=e34]: Public exploit artifacts harvested from GitHub, Exploit-DB and other sources. Sorted by most recently seen.
+    - generic [ref=e35]:
+      - generic [ref=e36]:
+        - generic [ref=e37]: Severity
+        - link "All" [ref=e38] [cursor=pointer]:
+          - /url: /pocs?sort=newest
+        - link "exploit-db" [ref=e39] [cursor=pointer]:
+          - /url: /pocs?source=exploit-db&sort=newest
+        - link "github" [ref=e40] [cursor=pointer]:
+          - /url: /pocs?source=github&sort=newest
+        - link "gitlab" [ref=e41] [cursor=pointer]:
+          - /url: /pocs?source=gitlab&sort=newest
+        - link "web" [ref=e42] [cursor=pointer]:
+          - /url: /pocs?source=web&sort=newest
+      - generic [ref=e43]:
+        - generic [ref=e44]: Quick
+        - link "Linked to CVEs" [ref=e45] [cursor=pointer]:
+          - /url: /pocs?linked=1&sort=newest&source=
+        - link "Popular (>100★)" [ref=e46] [cursor=pointer]:
+          - /url: /pocs?sort=stars&source=
+      - generic [ref=e47]:
+        - generic [ref=e48]: Sort
+        - link "Newest" [ref=e49] [cursor=pointer]:
+          - /url: /pocs?sort=newest&source=
+        - link "Stars" [ref=e50] [cursor=pointer]:
+          - /url: /pocs?sort=stars&source=
+    - table [ref=e53]:
+      - rowgroup [ref=e54]:
+        - row "CVE URL Source Stars Age (d) Description" [ref=e55]:
+          - columnheader "CVE" [ref=e56]
+          - columnheader "URL" [ref=e57]
+          - columnheader "Source" [ref=e58]
+          - columnheader "Stars" [ref=e59]
+          - columnheader "Age (d)" [ref=e60]
+          - columnheader "Description" [ref=e61]
+      - rowgroup [ref=e62]:
+        - row "CVE-2026-27833 https://cloud.projectdiscovery.io/library/CVE-2026-27833… web ★ None 0 🚨 CVE-2026-27833 - high 🚨 Piwigo &lt; 16.3.0 - Unauthenticated Information Disclosure via History API &gt; Piwigo &lt;= 16.3.0 contains an" [ref=e63]:
+          - cell "CVE-2026-27833" [ref=e64]:
+            - link "CVE-2026-27833" [ref=e66] [cursor=pointer]:
+              - /url: /cve/CVE-2026-27833
+          - cell "https://cloud.projectdiscovery.io/library/CVE-2026-27833…" [ref=e67]:
+            - link "https://cloud.projectdiscovery.io/library/CVE-2026-27833…" [ref=e68] [cursor=pointer]:
+              - /url: https://cloud.projectdiscovery.io/library/CVE-2026-27833
+          - cell "web" [ref=e69]:
+            - generic [ref=e70]: web
+          - cell "★ None" [ref=e71]
+          - cell "0" [ref=e72]
+          - cell "🚨 CVE-2026-27833 - high 🚨 Piwigo &lt; 16.3.0 - Unauthenticated Information Disclosure via History API &gt; Piwigo &lt;= 16.3.0 contains an" [ref=e73]
+        - 'row "CVE-2026-0257 https://latesthackingnews.com/2026/06/15/globalprotect-authe… web ★ None 0 Palo Alto’s GlobalProtect Authentication Bypass Was Exploited Four Days After Disclosure: CVE-2026-0257''s GlobalProtect authentication bypas" [ref=e74]':
+          - cell "CVE-2026-0257" [ref=e75]:
+            - link "CVE-2026-0257" [ref=e77] [cursor=pointer]:
+              - /url: /cve/CVE-2026-0257
+          - cell "https://latesthackingnews.com/2026/06/15/globalprotect-authe…" [ref=e78]:
+            - link "https://latesthackingnews.com/2026/06/15/globalprotect-authe…" [ref=e79] [cursor=pointer]:
+              - /url: https://latesthackingnews.com/2026/06/15/globalprotect-authentication-bypass-cve-2026-0257-exploited/?utm_source=dlvr.it&utm_medium=twitter
+          - cell "web" [ref=e80]:
+            - generic [ref=e81]: web
+          - cell "★ None" [ref=e82]
+          - cell "0" [ref=e83]
+          - 'cell "Palo Alto’s GlobalProtect Authentication Bypass Was Exploited Four Days After Disclosure: CVE-2026-0257''s GlobalProtect authentication bypas" [ref=e84]'
+        - row "CVE-2026-8385 https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-8385… web ★ None 0 CVE-2026-8385 Unauthenticated Marker Data Disclosure in WP Go Maps WordPress Plu... https://t.co/avQzp5p2OV Customizable Vulnerability Al" [ref=e85]:
+          - cell "CVE-2026-8385" [ref=e86]:
+            - link "CVE-2026-8385" [ref=e88] [cursor=pointer]:
+              - /url: /cve/CVE-2026-8385
+          - cell "https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-8385…" [ref=e89]:
+            - link "https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-8385…" [ref=e90] [cursor=pointer]:
+              - /url: https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-8385
+          - cell "web" [ref=e91]:
+            - generic [ref=e92]: web
+          - cell "★ None" [ref=e93]
+          - cell "0" [ref=e94]
+          - cell "CVE-2026-8385 Unauthenticated Marker Data Disclosure in WP Go Maps WordPress Plu... https://t.co/avQzp5p2OV Customizable Vulnerability Al" [ref=e95]
+        - row "CVE-2026-8386 https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-8386… web ★ None 0 CVE-2026-8386 Unauthenticated Information Disclosure in WP Go Maps WordPress Plugin Before 10.0.10 https://t.co/JRpr0QNaYw" [ref=e96]:
+          - cell "CVE-2026-8386" [ref=e97]:
+            - link "CVE-2026-8386" [ref=e99] [cursor=pointer]:
+              - /url: /cve/CVE-2026-8386
+          - cell "https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-8386…" [ref=e100]:
+            - link "https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-8386…" [ref=e101] [cursor=pointer]:
+              - /url: https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-8386
+          - cell "web" [ref=e102]:
+            - generic [ref=e103]: web
+          - cell "★ None" [ref=e104]
+          - cell "0" [ref=e105]
+          - cell "CVE-2026-8386 Unauthenticated Information Disclosure in WP Go Maps WordPress Plugin Before 10.0.10 https://t.co/JRpr0QNaYw" [ref=e106]
+        - row "CVE-2026-35273 https://www.security-next.com/185824… web ★ None 0 【サイバーセキュリティ動向分析】 トレンドのセキュリティニュース（2026年6月15日時点） Oracle PeopleSoftのゼロデイ脆弱性（CVE-2026-35273）がShinyHuntersらにより5月下旬から積極的に悪用。高等教育機関などで被害拡大中。 https" [ref=e107]:
+          - cell "CVE-2026-35273" [ref=e108]:
+            - link "CVE-2026-35273" [ref=e110] [cursor=pointer]:
+              - /url: /cve/CVE-2026-35273
+          - cell "https://www.security-next.com/185824…" [ref=e111]:
+            - link "https://www.security-next.com/185824…" [ref=e112] [cursor=pointer]:
+              - /url: https://www.security-next.com/185824
+          - cell "web" [ref=e113]:
+            - generic [ref=e114]: web
+          - cell "★ None" [ref=e115]
+          - cell "0" [ref=e116]
+          - cell "【サイバーセキュリティ動向分析】 トレンドのセキュリティニュース（2026年6月15日時点） Oracle PeopleSoftのゼロデイ脆弱性（CVE-2026-35273）がShinyHuntersらにより5月下旬から積極的に悪用。高等教育機関などで被害拡大中。 https" [ref=e117]
+        - row "CVE-2026-35273 https://www.securityweek.com/google-confirms-exploitation-of… web ★ None 0 【サイバーセキュリティ動向分析】 トレンドのセキュリティニュース（2026年6月15日時点） Oracle PeopleSoftのゼロデイ脆弱性（CVE-2026-35273）がShinyHuntersらにより5月下旬から積極的に悪用。高等教育機関などで被害拡大中。 https" [ref=e118]:
+          - cell "CVE-2026-35273" [ref=e119]:
+            - link "CVE-2026-35273" [ref=e121] [cursor=pointer]:
+              - /url: /cve/CVE-2026-35273
+          - cell "https://www.securityweek.com/google-confirms-exploitation-of…" [ref=e122]:
+            - link "https://www.securityweek.com/google-confirms-exploitation-of…" [ref=e123] [cursor=pointer]:
+              - /url: https://www.securityweek.com/google-confirms-exploitation-of-oracle-peoplesoft-zero-day-by-shinyhunters/
+          - cell "web" [ref=e124]:
+            - generic [ref=e125]: web
+          - cell "★ None" [ref=e126]
+          - cell "0" [ref=e127]
+          - cell "【サイバーセキュリティ動向分析】 トレンドのセキュリティニュース（2026年6月15日時点） Oracle PeopleSoftのゼロデイ脆弱性（CVE-2026-35273）がShinyHuntersらにより5月下旬から積極的に悪用。高等教育機関などで被害拡大中。 https" [ref=e128]
+        - row "— https://github.com/lobehub/lobehub/security/advisories/GHSA-… github ★ None 0 I've earned my first CVE ever, by discovering unauthenticated SSRF at @lobehub. This vulnerability affects all versions up to and including" [ref=e129]:
+          - cell "—" [ref=e130]
+          - cell "https://github.com/lobehub/lobehub/security/advisories/GHSA-…" [ref=e131]:
+            - link "https://github.com/lobehub/lobehub/security/advisories/GHSA-…" [ref=e132] [cursor=pointer]:
+              - /url: https://github.com/lobehub/lobehub/security/advisories/GHSA-xmwj-c75x-6346
+          - cell "github" [ref=e133]:
+            - generic [ref=e134]: github
+          - cell "★ None" [ref=e135]
+          - cell "0" [ref=e136]
+          - cell "I've earned my first CVE ever, by discovering unauthenticated SSRF at @lobehub. This vulnerability affects all versions up to and including" [ref=e137]
+        - row "— https://securityonline.info/freebsd-privilege-escalation-cve… web ★ None 0 A FreeBSD privilege escalation flaw (CVE-2026-49413) in the Linuxulator lets local users get root. Public PoC exploit code makes patching ur" [ref=e138]:
+          - cell "—" [ref=e139]
+          - cell "https://securityonline.info/freebsd-privilege-escalation-cve…" [ref=e140]:
+            - link "https://securityonline.info/freebsd-privilege-escalation-cve…" [ref=e141] [cursor=pointer]:
+              - /url: https://securityonline.info/freebsd-privilege-escalation-cve-2026-49413/
+          - cell "web" [ref=e142]:
+            - generic [ref=e143]: web
+          - cell "★ None" [ref=e144]
+          - cell "0" [ref=e145]
+          - cell "A FreeBSD privilege escalation flaw (CVE-2026-49413) in the Linuxulator lets local users get root. Public PoC exploit code makes patching ur" [ref=e146]
+        - row "CVE-2026-12203 https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-12203… web ★ None 0 CVE-2026-12203 Information Disclosure in HKUDS AI-Trader Research Export Endpoin... https://t.co/DXoXJP684l Customizable Vulnerability Al" [ref=e147]:
+          - cell "CVE-2026-12203" [ref=e148]:
+            - link "CVE-2026-12203" [ref=e150] [cursor=pointer]:
+              - /url: /cve/CVE-2026-12203
+          - cell "https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-12203…" [ref=e151]:
+            - link "https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-12203…" [ref=e152] [cursor=pointer]:
+              - /url: https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-12203
+          - cell "web" [ref=e153]:
+            - generic [ref=e154]: web
+          - cell "★ None" [ref=e155]
+          - cell "0" [ref=e156]
+          - cell "CVE-2026-12203 Information Disclosure in HKUDS AI-Trader Research Export Endpoin... https://t.co/DXoXJP684l Customizable Vulnerability Al" [ref=e157]
+        - row "CVE-2026-11645 https://cyberscoop.com/us-government-anthropic-fable-5-mytho… web ★ None 0 【サイバーセキュリティ動向分析】 トレンドのセキュリティニュース（2026年6月時点） Anthropicが政府指示により最新AIモデル（Fable 5、Mythos 5）を全世界でオフラインに https://t.co/k2Gc4riC3p https://t.co/RXW7" [ref=e158]:
+          - cell "CVE-2026-11645" [ref=e159]:
+            - link "CVE-2026-11645" [ref=e161] [cursor=pointer]:
+              - /url: /cve/CVE-2026-11645
+          - cell "https://cyberscoop.com/us-government-anthropic-fable-5-mytho…" [ref=e162]:
+            - link "https://cyberscoop.com/us-government-anthropic-fable-5-mytho…" [ref=e163] [cursor=pointer]:
+              - /url: https://cyberscoop.com/us-government-anthropic-fable-5-mythos-5-export-controls/
+          - cell "web" [ref=e164]:
+            - generic [ref=e165]: web
+          - cell "★ None" [ref=e166]
+          - cell "0" [ref=e167]
+          - cell "【サイバーセキュリティ動向分析】 トレンドのセキュリティニュース（2026年6月時点） Anthropicが政府指示により最新AIモデル（Fable 5、Mythos 5）を全世界でオフラインに https://t.co/k2Gc4riC3p https://t.co/RXW7" [ref=e168]
+        - row "CVE-2026-11645 https://www.securityweek.com/… web ★ None 0 【サイバーセキュリティ動向分析】 トレンドのセキュリティニュース（2026年6月時点） Anthropicが政府指示により最新AIモデル（Fable 5、Mythos 5）を全世界でオフラインに https://t.co/k2Gc4riC3p https://t.co/RXW7" [ref=e169]:
+          - cell "CVE-2026-11645" [ref=e170]:
+            - link "CVE-2026-11645" [ref=e172] [cursor=pointer]:
+              - /url: /cve/CVE-2026-11645
+          - cell "https://www.securityweek.com/…" [ref=e173]:
+            - link "https://www.securityweek.com/…" [ref=e174] [cursor=pointer]:
+              - /url: https://www.securityweek.com/
+          - cell "web" [ref=e175]:
+            - generic [ref=e176]: web
+          - cell "★ None" [ref=e177]
+          - cell "0" [ref=e178]
+          - cell "【サイバーセキュリティ動向分析】 トレンドのセキュリティニュース（2026年6月時点） Anthropicが政府指示により最新AIモデル（Fable 5、Mythos 5）を全世界でオフラインに https://t.co/k2Gc4riC3p https://t.co/RXW7" [ref=e179]
+        - row "CVE-2025-49113 https://github.com/Dragon-Lady/linux-supply-chain-guard… github ★ None 0 @luckyhacker43 🛡️ Dragon-Lady/Linux-supply-chain-guard updated with the CVE-2025-49113 and checks for -vulnerable installed versions below" [ref=e180]:
+          - cell "CVE-2025-49113" [ref=e181]:
+            - link "CVE-2025-49113" [ref=e183] [cursor=pointer]:
+              - /url: /cve/CVE-2025-49113
+          - cell "https://github.com/Dragon-Lady/linux-supply-chain-guard…" [ref=e184]:
+            - link "https://github.com/Dragon-Lady/linux-supply-chain-guard…" [ref=e185] [cursor=pointer]:
+              - /url: https://github.com/Dragon-Lady/linux-supply-chain-guard
+          - cell "github" [ref=e186]:
+            - generic [ref=e187]: github
+          - cell "★ None" [ref=e188]
+          - cell "0" [ref=e189]
+          - cell "@luckyhacker43 🛡️ Dragon-Lady/Linux-supply-chain-guard updated with the CVE-2025-49113 and checks for -vulnerable installed versions below" [ref=e190]
+        - row "CVE-2026-54421 https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-54421… web ★ None 1 CVE-2026-54421 Unredacted Sensitive Information Disclosure in OpenStack Ironic Volume Properties PATCH https://t.co/n7Mby86vKR" [ref=e191]:
+          - cell "CVE-2026-54421" [ref=e192]:
+            - link "CVE-2026-54421" [ref=e194] [cursor=pointer]:
+              - /url: /cve/CVE-2026-54421
+          - cell "https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-54421…" [ref=e195]:
+            - link "https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-54421…" [ref=e196] [cursor=pointer]:
+              - /url: https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-54421
+          - cell "web" [ref=e197]:
+            - generic [ref=e198]: web
+          - cell "★ None" [ref=e199]
+          - cell "1" [ref=e200]
+          - cell "CVE-2026-54421 Unredacted Sensitive Information Disclosure in OpenStack Ironic Volume Properties PATCH https://t.co/n7Mby86vKR" [ref=e201]
+        - row "CVE-2026-54396 https://www.cve.org/CVERecord?id=CVE-2026-54396… web ★ None 1 🚨*CVE* CVE-2026-54396 An information disclosure vulnerability exists in the MISP AuthKey edit functionality. When a validation error occurs" [ref=e202]:
+          - cell "CVE-2026-54396" [ref=e203]:
+            - link "CVE-2026-54396" [ref=e205] [cursor=pointer]:
+              - /url: /cve/CVE-2026-54396
+          - cell "https://www.cve.org/CVERecord?id=CVE-2026-54396…" [ref=e206]:
+            - link "https://www.cve.org/CVERecord?id=CVE-2026-54396…" [ref=e207] [cursor=pointer]:
+              - /url: https://www.cve.org/CVERecord?id=CVE-2026-54396
+          - cell "web" [ref=e208]:
+            - generic [ref=e209]: web
+          - cell "★ None" [ref=e210]
+          - cell "1" [ref=e211]
+          - cell "🚨*CVE* CVE-2026-54396 An information disclosure vulnerability exists in the MISP AuthKey edit functionality. When a validation error occurs" [ref=e212]
+        - 'row "CVE-2026-50087 https://www.valtersit.com/cve/CVE-2026-50087… web ★ None 1 #CVE-2026-50087 - High severity #XSS via permissive CORS policy in Aqara IAM/SSO gateway. #CVSS 8.2. Unpatched. Review and restrict cross-or" [ref=e213]':
+          - cell "CVE-2026-50087" [ref=e214]:
+            - link "CVE-2026-50087" [ref=e216] [cursor=pointer]:
+              - /url: /cve/CVE-2026-50087
+          - cell "https://www.valtersit.com/cve/CVE-2026-50087…" [ref=e217]:
+            - link "https://www.valtersit.com/cve/CVE-2026-50087…" [ref=e218] [cursor=pointer]:
+              - /url: https://www.valtersit.com/cve/CVE-2026-50087
+          - cell "web" [ref=e219]:
+            - generic [ref=e220]: web
+          - cell "★ None" [ref=e221]
+          - cell "1" [ref=e222]
+          - 'cell "#CVE-2026-50087 - High severity #XSS via permissive CORS policy in Aqara IAM/SSO gateway. #CVSS 8.2. Unpatched. Review and restrict cross-or" [ref=e223]'
+        - row "CVE-2026-20230 https://denizhalil.com/2026/06/12/cve-2026-20230-cisco-unifi… github ★ None 2 🚨 CRITICAL FLAW 🚨 Analyzing CVE-2026-20230, a critical Cisco Unified CM flaw allowing unauthenticated root privilege escalation via WebDial" [ref=e224]:
+          - cell "CVE-2026-20230" [ref=e225]:
+            - link "CVE-2026-20230" [ref=e227] [cursor=pointer]:
+              - /url: /cve/CVE-2026-20230
+          - cell "https://denizhalil.com/2026/06/12/cve-2026-20230-cisco-unifi…" [ref=e228]:
+            - link "https://denizhalil.com/2026/06/12/cve-2026-20230-cisco-unifi…" [ref=e229] [cursor=pointer]:
+              - /url: https://denizhalil.com/2026/06/12/cve-2026-20230-cisco-unified-cm-ssrf/
+          - cell "github" [ref=e230]:
+            - generic [ref=e231]: github
+          - cell "★ None" [ref=e232]
+          - cell "2" [ref=e233]
+          - cell "🚨 CRITICAL FLAW 🚨 Analyzing CVE-2026-20230, a critical Cisco Unified CM flaw allowing unauthenticated root privilege escalation via WebDial" [ref=e234]
+        - 'row "CVE-2025-55182 https://hackerone.com/vercel_platform_protection… web ★ None 2 We introduced a dedicated HackerOne program for Vercel WAF bypasses for CVE-2025-55182 / react2shell Critical bypass: $50K https://t.co/90Nn" [ref=e235]':
+          - cell "CVE-2025-55182" [ref=e236]:
+            - link "CVE-2025-55182" [ref=e238] [cursor=pointer]:
+              - /url: /cve/CVE-2025-55182
+          - cell "https://hackerone.com/vercel_platform_protection…" [ref=e239]:
+            - link "https://hackerone.com/vercel_platform_protection…" [ref=e240] [cursor=pointer]:
+              - /url: https://hackerone.com/vercel_platform_protection
+          - cell "web" [ref=e241]:
+            - generic [ref=e242]: web
+          - cell "★ None" [ref=e243]
+          - cell "2" [ref=e244]
+          - 'cell "We introduced a dedicated HackerOne program for Vercel WAF bypasses for CVE-2025-55182 / react2shell Critical bypass: $50K https://t.co/90Nn" [ref=e245]'
+        - 'row "CVE-2026-42835 https://threataft.com/articles/cve-2026-42835-microsoft-team… github ★ None 2 🔐 🚨 CVE-2026-42835 — Microsoft Teams for Android Information disclosure via injection flaw. CVSS 8.1. 🔗 https://t.co/DembmUf4zl #CyberSec" [ref=e246]':
+          - cell "CVE-2026-42835" [ref=e247]:
+            - link "CVE-2026-42835" [ref=e249] [cursor=pointer]:
+              - /url: /cve/CVE-2026-42835
+          - cell "https://threataft.com/articles/cve-2026-42835-microsoft-team…" [ref=e250]:
+            - link "https://threataft.com/articles/cve-2026-42835-microsoft-team…" [ref=e251] [cursor=pointer]:
+              - /url: https://threataft.com/articles/cve-2026-42835-microsoft-teams-android-information-disclosure
+          - cell "github" [ref=e252]:
+            - generic [ref=e253]: github
+          - cell "★ None" [ref=e254]
+          - cell "2" [ref=e255]
+          - 'cell "🔐 🚨 CVE-2026-42835 — Microsoft Teams for Android Information disclosure via injection flaw. CVSS 8.1. 🔗 https://t.co/DembmUf4zl #CyberSec" [ref=e256]'
+        - row "CVE-2026-35273 https://threatcluster.io/cluster/chinese-hackers-exploit-mic… github ★ None 2 Attackers are exploiting CVE-2026-35273 in Oracle PeopleSoft for unauthorised data access shortly after its 11 June 2026 disclosure, and the" [ref=e257]:
+          - cell "CVE-2026-35273" [ref=e258]:
+            - link "CVE-2026-35273" [ref=e260] [cursor=pointer]:
+              - /url: /cve/CVE-2026-35273
+          - cell "https://threatcluster.io/cluster/chinese-hackers-exploit-mic…" [ref=e261]:
+            - link "https://threatcluster.io/cluster/chinese-hackers-exploit-mic…" [ref=e262] [cursor=pointer]:
+              - /url: https://threatcluster.io/cluster/chinese-hackers-exploit-microsoft-365-for-18-months-oracle-p-2d1f57ec
+          - cell "github" [ref=e263]:
+            - generic [ref=e264]: github
+          - cell "★ None" [ref=e265]
+          - cell "2" [ref=e266]
+          - cell "Attackers are exploiting CVE-2026-35273 in Oracle PeopleSoft for unauthorised data access shortly after its 11 June 2026 disclosure, and the" [ref=e267]
+        - row "CVE-2026-53826 https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-53826… web ★ None 2 CVE-2026-53826 Information Disclosure in OpenClaw Before 2026.4.26 Sandboxed Session Spawning https://t.co/gkPCDROsVf" [ref=e268]:
+          - cell "CVE-2026-53826" [ref=e269]:
+            - link "CVE-2026-53826" [ref=e271] [cursor=pointer]:
+              - /url: /cve/CVE-2026-53826
+          - cell "https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-53826…" [ref=e272]:
+            - link "https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-53826…" [ref=e273] [cursor=pointer]:
+              - /url: https://vulmon.com/vulnerabilitydetails?qid=CVE-2026-53826
+          - cell "web" [ref=e274]:
+            - generic [ref=e275]: web
+          - cell "★ None" [ref=e276]
+          - cell "2" [ref=e277]
+          - cell "CVE-2026-53826 Information Disclosure in OpenClaw Before 2026.4.26 Sandboxed Session Spawning https://t.co/gkPCDROsVf" [ref=e278]
+    - generic [ref=e279]:
+      - generic [ref=e280]: 1 / 7
+      - link "Next →" [ref=e281] [cursor=pointer]:
+        - /url: /pocs?page=2&sort=newest

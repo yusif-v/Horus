@@ -33,6 +33,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -67,11 +68,21 @@ class WebConfig:
 
 
 @dataclass
+class TelegramConfig:
+    enabled: bool = False
+    bot_token: str = ""  # or TELEGRAM_BOT_TOKEN env var
+
+    def resolved_token(self) -> str | None:
+        return self.bot_token or os.environ.get("TELEGRAM_BOT_TOKEN") or None
+
+
+@dataclass
 class Config:
     poll_intervals: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_POLL_INTERVALS))
     sources_enabled: dict[str, bool] = field(default_factory=dict)
     check_every_seconds: int = 60
     web: WebConfig = field(default_factory=WebConfig)
+    telegram: TelegramConfig = field(default_factory=TelegramConfig)
 
     def interval(self, name: str) -> int:
         return self.poll_intervals.get(name, DEFAULT_POLL_INTERVALS.get(name, 3600))
@@ -117,6 +128,10 @@ def load_config(path: str | None) -> Config:
         cfg.web.port = int(w.get("port", cfg.web.port))
         cfg.web.workers = int(w.get("workers", cfg.web.workers))
         cfg.web.allow_dev_fallback = bool(w.get("allow_dev_fallback", cfg.web.allow_dev_fallback))
+    if "telegram" in data and isinstance(data["telegram"], dict):
+        t = data["telegram"]
+        cfg.telegram.enabled = bool(t.get("enabled", cfg.telegram.enabled))
+        cfg.telegram.bot_token = str(t.get("bot_token", cfg.telegram.bot_token))
     return cfg
 
 
@@ -149,6 +164,39 @@ class Server:
         self._running = False
         self._web_proc: subprocess.Popen | None = None
 
+    # ── notification hook ────────────────────────────────────────────────────
+
+    def _register_notification_hook(self) -> None:
+        """Register the pipeline end hook for Telegram notification dispatch."""
+        token = self.cfg.telegram.resolved_token()
+        if not token:
+            self._log("[WARN] telegram enabled but no bot token; notifications disabled")
+            return
+        try:
+            from ..notifications.dispatcher import dispatch
+            from ..pipeline import register_end_hook
+            register_end_hook(lambda result: dispatch(result.events, token))
+            self._log("telegram notification dispatch registered")
+        except Exception as e:
+            self._log(f"[WARN] failed to register notification hook: {e}")
+
+    def _start_bot(self) -> None:
+        """Start the Telegram bot listener in a background thread."""
+        token = self.cfg.telegram.resolved_token()
+        if not token:
+            return
+        import threading
+        from ..bot.telegram import run_listener
+        t = threading.Thread(
+            target=run_listener,
+            args=(token,),
+            kwargs={"poll_timeout": 30},
+            daemon=True,
+            name="horus-telegram-bot",
+        )
+        t.start()
+        self._log("telegram bot listener started")
+
     # ── lifecycle ────────────────────────────────────────────────────────
 
     def start(self) -> None:
@@ -157,6 +205,12 @@ class Server:
         signal.signal(signal.SIGTERM, self._on_signal)
         signal.signal(signal.SIGINT, self._on_signal)
         db.initialize()
+
+        # Register notification dispatch hook
+        if self.cfg.telegram.enabled:
+            self._register_notification_hook()
+            self._start_bot()
+
         if self.cfg.web.enabled:
             self._start_web()
         self._log(f"server started; check_every={self.cfg.check_every_seconds}s")
