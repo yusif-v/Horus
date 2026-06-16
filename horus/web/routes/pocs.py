@@ -10,7 +10,9 @@ from .auth import READ_ALL, role_required
 
 bp = Blueprint("pocs", __name__)
 
-VALID_SORTS = {"newest", "stars"}
+VALID_SORTS = {"newest", "stars", "source"}
+# Column sort key -> sort= value the fetch_pocs() backend understands
+COL_TO_SORT = {"date": "newest", "stars": "stars"}
 
 
 @bp.route("/pocs")
@@ -19,13 +21,20 @@ def list_pocs():
     pg = safe_int(request.args.get("page", "1"))
     source = request.args.get("source")
     sort = request.args.get("sort", "newest")
+    sort_dir = request.args.get("dir", "desc")
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
     if sort not in VALID_SORTS:
         sort = "newest"
     only_linked = request.args.get("linked")
 
     try:
         rows, total = fetch_pocs(
-            page=pg, per_page=PER_PAGE_DEFAULT, source_filter=source, sort=sort
+            page=pg,
+            per_page=PER_PAGE_DEFAULT,
+            source_filter=source,
+            sort=sort,
+            direction=sort_dir,
         )
         with db_connect() as conn:
             sources = [
@@ -44,19 +53,6 @@ def list_pocs():
     for s in sources:
         filters.append({"label": s, "url": f"/pocs?source={s}&sort={sort}", "active": source == s})
 
-    sort_filters = [
-        {
-            "label": "Newest",
-            "url": f"/pocs?sort=newest&source={source or ''}",
-            "active": sort == "newest",
-        },
-        {
-            "label": "Stars",
-            "url": f"/pocs?sort=stars&source={source or ''}",
-            "active": sort == "stars",
-        },
-    ]
-
     # Quick filter chips
     quick_filters = [
         {
@@ -64,12 +60,26 @@ def list_pocs():
             "url": f"/pocs?linked=1&sort={sort}&source={source or ''}",
             "active": bool(only_linked),
         },
-        {
-            "label": "Popular (>100★)",
-            "url": f"/pocs?sort=stars&source={source or ''}",
-            "active": sort == "stars",
-        },
     ]
+
+    def _col_sort(key: str) -> dict:
+        params = []
+        if source:
+            params.append(f"source={source}")
+        if only_linked:
+            params.append("linked=1")
+        if key == sort:
+            new_dir = "asc" if sort_dir == "desc" else "desc"
+            if key != "newest":
+                params.append(f"sort={key}")
+            if new_dir != "desc":
+                params.append(f"dir={new_dir}")
+            url = "/pocs" + (("?" + "&".join(params)) if params else "")
+            return {"url": url, "active": True, "dir": sort_dir}
+        if key != "newest":
+            params.append(f"sort={key}")
+        url = "/pocs" + (("?" + "&".join(params)) if params else "")
+        return {"url": url, "active": False, "dir": "desc"}
 
     columns = ["CVE", "URL", "Source", "Stars", "Age (d)", "Description"]
     cells = [
@@ -79,6 +89,14 @@ def list_pocs():
         {"type": "stars", "key": "stars"},
         {"type": "plain", "key": "age_days"},
         {"type": "truncate", "key": "description"},
+    ]
+    column_sorts = [
+        None,
+        None,
+        _col_sort("source"),
+        _col_sort("stars"),
+        _col_sort("newest"),
+        None,
     ]
     src_q = f"&source={source}" if source else ""
     linked_q = "&linked=1" if only_linked else ""
@@ -95,10 +113,10 @@ def list_pocs():
         page=pg,
         per_page=PER_PAGE_DEFAULT,
         filters=filters,
-        sort_filters=sort_filters,
         quick_filters=quick_filters,
         columns=columns,
         cells=cells,
+        column_sorts=column_sorts,
         prev_url=f"/pocs?page={pg - 1}{src_q}{linked_q}&sort={sort}" if pg > 1 else None,
         next_url=f"/pocs?page={pg + 1}{src_q}{linked_q}&sort={sort}"
         if pg * PER_PAGE_DEFAULT < total

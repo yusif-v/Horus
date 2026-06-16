@@ -10,16 +10,25 @@ from .auth import READ_ALL, role_required
 
 bp = Blueprint("cves", __name__)
 
-ORDER_MAP = {
-    "cvss": "cvss_score DESC NULLS LAST",
-    "epss": "epss_score DESC NULLS LAST",
-    "exploit": "reputation_score DESC NULLS LAST",
-    "kev": "kev DESC, cvss_score DESC NULLS LAST",
-    "date": "published_at DESC NULLS LAST",
-    "newest": "first_seen DESC NULLS LAST",
-    "social": "social_mentions DESC NULLS LAST",
-    "poc_count": "(SELECT COUNT(*) FROM poc_cve WHERE cve_id = c.id) DESC NULLS LAST",
+ORDER_COLS = {
+    "cvss": "cvss_score",
+    "epss": "epss_score",
+    "kev": "kev",
+    "date": "published_at",
+    "newest": "first_seen",
+    "social": "social_mentions",
+    "poc_count": "(SELECT COUNT(*) FROM poc_cve WHERE cve_id = c.id)",
 }
+
+
+def _order_clause(sort: str, direction: str) -> str:
+    col = ORDER_COLS.get(sort, ORDER_COLS["cvss"])
+    d = "ASC" if direction == "asc" else "DESC"
+    nulls = "NULLS FIRST" if d == "ASC" else "NULLS LAST"
+    if sort == "kev":
+        return f"kev {d} {nulls}, cvss_score DESC NULLS LAST"
+    return f"{col} {d} {nulls}"
+
 
 WINDOW_DAYS = {"day": 1, "week": 7, "month": 30}
 
@@ -37,6 +46,11 @@ def list_cves():
     severity = request.args.get("severity")
     kev_only = request.args.get("kev")
     sort = request.args.get("sort", "cvss")
+    sort_dir = request.args.get("dir", "desc")
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
+    if sort not in ORDER_COLS:
+        sort = "cvss"
     window = request.args.get("window", "all")
     month = request.args.get("month")
     tag = request.args.get("tag")
@@ -109,7 +123,7 @@ def list_cves():
         params.append(source)
 
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
-    order = ORDER_MAP.get(sort, ORDER_MAP["cvss"])
+    order = _order_clause(sort, sort_dir)
 
     try:
         with db_connect() as conn:
@@ -179,6 +193,7 @@ def list_cves():
         ("cwe", cwe),
         ("source", source),
         ("sort", sort if sort != "cvss" else None),
+        ("dir", sort_dir if sort_dir != "desc" else None),
     ]:
         if v:
             active[k] = v
@@ -249,18 +264,18 @@ def list_cves():
         {"label": "Watchlist hits", "url": "/cves?watchlist=1", "active": bool(watchlist)},
     ]
 
-    # Sort filters
-    sort_filters = [
-        {"label": "By CVSS", "url": f"/cves{_qs(sort='cvss')}", "active": sort == "cvss"},
-        {"label": "By EPSS", "url": f"/cves{_qs(sort='epss')}", "active": sort == "epss"},
-        {
-            "label": "By Exploitability",
-            "url": f"/cves{_qs(sort='exploit')}",
-            "active": sort == "exploit",
-        },
-        {"label": "By Social", "url": f"/cves{_qs(sort='social')}", "active": sort == "social"},
-        {"label": "Newest", "url": f"/cves{_qs(sort='date')}", "active": sort == "date"},
-    ]
+    def _col_sort(key: str) -> dict:
+        if key == sort:
+            new_dir = "asc" if sort_dir == "desc" else "desc"
+            url_dir = new_dir if new_dir != "desc" else None
+            url_sort = key if key != "cvss" else None
+            return {
+                "url": f"/cves{_qs(sort=url_sort, dir=url_dir)}",
+                "active": True,
+                "dir": sort_dir,
+            }
+        url_sort = key if key != "cvss" else None
+        return {"url": f"/cves{_qs(sort=url_sort, dir=None)}", "active": False, "dir": "desc"}
 
     # Window filters
     window_filters = [
@@ -302,7 +317,7 @@ def list_cves():
         "Description",
         "Ingested",
     ]
-    col_widths = ["140px", "70px", "100px", "80px", "60px", "60px", "70px", "auto", "110px"]
+    col_widths = ["140px", "70px", "120px", "130px", "60px", "60px", "70px", "auto", "110px"]
     cells = [
         {"type": "cve_link", "key": "id"},
         {"type": "score", "key": "cvss_score"},
@@ -313,6 +328,17 @@ def list_cves():
         {"type": "plain", "key": "social_mentions"},
         {"type": "truncate", "key": "description"},
         {"type": "date", "key": "published_at"},
+    ]
+    column_sorts = [
+        None,
+        _col_sort("cvss"),
+        _col_sort("cvss"),
+        _col_sort("epss"),
+        _col_sort("kev"),
+        _col_sort("poc_count"),
+        _col_sort("social"),
+        None,
+        _col_sort("date"),
     ]
 
     return page(
@@ -328,12 +354,12 @@ def list_cves():
         per_page=PER_PAGE_DEFAULT,
         filters=filters,
         quick_filters=quick_filters,
-        sort_filters=sort_filters,
         window_filters=window_filters,
         toggle_filters=toggle_filters,
         columns=columns,
         col_widths=col_widths,
         cells=cells,
+        column_sorts=column_sorts,
         prev_url=_page_qs(pg - 1) if pg > 1 else None,
         next_url=_page_qs(pg + 1) if pg * PER_PAGE_DEFAULT < total else None,
         # Dropdown filter data
@@ -362,6 +388,11 @@ def export_csv():
     severity = request.args.get("severity")
     kev_only = request.args.get("kev")
     sort = request.args.get("sort", "cvss")
+    sort_dir = request.args.get("dir", "desc")
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
+    if sort not in ORDER_COLS:
+        sort = "cvss"
     window = request.args.get("window", "all")
     month = request.args.get("month")
     tag = request.args.get("tag")
@@ -434,7 +465,7 @@ def export_csv():
         params.append(source)
 
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
-    order = ORDER_MAP.get(sort, ORDER_MAP["cvss"])
+    order = _order_clause(sort, sort_dir)
 
     try:
         with db_connect() as conn:

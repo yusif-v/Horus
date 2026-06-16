@@ -10,7 +10,7 @@ from .auth import READ_ALL, role_required
 
 bp = Blueprint("vendors", __name__)
 
-VALID_SORTS = {"count", "cvss", "epss", "name"}
+VALID_SORTS = {"count", "cvss", "epss", "name", "kev", "watchlist"}
 
 
 @bp.route("/vendors")
@@ -18,18 +18,28 @@ VALID_SORTS = {"count", "cvss", "epss", "name"}
 def list_vendors():
     pg = safe_int(request.args.get("page", "1"))
     sort = request.args.get("sort", "count")
+    sort_dir = request.args.get("dir", "desc")
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
     if sort not in VALID_SORTS:
         sort = "count"
     category_filter = request.args.get("category")
     watchlist_only = request.args.get("watchlist")
 
-    sort_map = {
-        "count": "cve_count DESC",
-        "cvss": "avg_cvss DESC NULLS LAST",
-        "epss": "avg_epss DESC NULLS LAST",
-        "name": "v.vendor ASC",
+    sort_cols = {
+        "count": "cve_count",
+        "cvss": "avg_cvss",
+        "epss": "avg_epss",
+        "name": "p.vendor",
+        "kev": "kev_count",
     }
-    order = sort_map.get(sort, sort_map["count"])
+    d = "ASC" if sort_dir == "asc" else "DESC"
+    nulls = "NULLS FIRST" if d == "ASC" else "NULLS LAST"
+    # Watchlist sort is applied in Python after we know in_watchlist
+    if sort == "watchlist":
+        order = "cve_count DESC"
+    else:
+        order = f"{sort_cols[sort]} {d}" + (f" {nulls}" if sort in ("cvss", "epss") else "")
 
     try:
         with db_connect() as conn:
@@ -77,6 +87,13 @@ def list_vendors():
             for row in all_rows:
                 row["in_watchlist"] = row["vendor"] in watchlist_vendors
 
+            if sort == "watchlist":
+                reverse = sort_dir != "asc"
+                all_rows.sort(
+                    key=lambda r: (bool(r["in_watchlist"]), r["cve_count"]),
+                    reverse=reverse,
+                )
+
             total = len(all_rows)
             offset = (pg - 1) * PER_PAGE_DEFAULT
             rows = all_rows[offset : offset + PER_PAGE_DEFAULT]
@@ -91,12 +108,24 @@ def list_vendors():
     except Exception as e:
         return error_page(f"Database Error: {e}", active="vendors"), 500
 
-    sort_filters = [
-        {"label": "By CVE count", "url": "/vendors?sort=count", "active": sort == "count"},
-        {"label": "By avg CVSS", "url": "/vendors?sort=cvss", "active": sort == "cvss"},
-        {"label": "By avg EPSS", "url": "/vendors?sort=epss", "active": sort == "epss"},
-        {"label": "A-Z", "url": "/vendors?sort=name", "active": sort == "name"},
-    ]
+    def _col_sort(key: str) -> dict:
+        parts = []
+        if category_filter:
+            parts.append(f"category={category_filter}")
+        if watchlist_only:
+            parts.append("watchlist=1")
+        if key == sort:
+            new_dir = "asc" if sort_dir == "desc" else "desc"
+            if key != "count":
+                parts.append(f"sort={key}")
+            if new_dir != "desc":
+                parts.append(f"dir={new_dir}")
+            url = "/vendors" + (("?" + "&".join(parts)) if parts else "")
+            return {"url": url, "active": True, "dir": sort_dir}
+        if key != "count":
+            parts.append(f"sort={key}")
+        url = "/vendors" + (("?" + "&".join(parts)) if parts else "")
+        return {"url": url, "active": False, "dir": "desc"}
 
     # Category filter chips
     cat_filters = [
@@ -128,7 +157,7 @@ def list_vendors():
     ]
 
     columns = ["Vendor", "CVEs", "Avg CVSS", "Avg EPSS", "KEV", "Categories", "Watchlist"]
-    col_widths = ["200px", "80px", "100px", "100px", "70px", "auto", "100px"]
+    col_widths = ["200px", "80px", "100px", "135px", "70px", "auto", "100px"]
     cells = [
         {"type": "vendor_link", "key": "vendor"},
         {"type": "plain", "key": "cve_count"},
@@ -137,6 +166,15 @@ def list_vendors():
         {"type": "plain", "key": "kev_count"},
         {"type": "categories", "key": "categories"},
         {"type": "watchlist_badge", "key": "in_watchlist"},
+    ]
+    column_sorts = [
+        _col_sort("name"),
+        _col_sort("count"),
+        _col_sort("cvss"),
+        _col_sort("epss"),
+        _col_sort("kev"),
+        None,
+        _col_sort("watchlist"),
     ]
 
     qs = (
@@ -156,12 +194,12 @@ def list_vendors():
         total=total,
         page=pg,
         per_page=PER_PAGE_DEFAULT,
-        sort_filters=sort_filters,
         cat_filters=cat_filters,
         wl_filters=wl_filters,
         columns=columns,
         col_widths=col_widths,
         cells=cells,
+        column_sorts=column_sorts,
         prev_url=f"/vendors?page={pg - 1}{qs}" if pg > 1 else None,
         next_url=f"/vendors?page={pg + 1}{qs}" if pg * PER_PAGE_DEFAULT < total else None,
         total_pages=total_pages,

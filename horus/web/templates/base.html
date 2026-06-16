@@ -1,13 +1,33 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme-pref="{{ (g.user.theme_preference if g.user else None) or 'system' }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ title }} — Horus</title>
+<script>
+(function() {
+  var root = document.documentElement;
+  var saved = localStorage.getItem('horus_theme') || root.dataset.themePref || 'system';
+  function resolve(p) {
+    if (p === 'system') return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    return p;
+  }
+  root.dataset.theme = resolve(saved);
+  root.dataset.themePref = saved;
+  try {
+    matchMedia('(prefers-color-scheme: light)').addEventListener('change', function() {
+      if ((localStorage.getItem('horus_theme') || root.dataset.themePref) === 'system') {
+        root.dataset.theme = resolve('system');
+      }
+    });
+  } catch (e) {}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='horus.css') }}">
+{% if g.user %}<meta name="csrf-token" content="{{ csrf_token() }}">{% endif %}
 </head>
 <body>
 <div class="rail">
@@ -42,6 +62,11 @@
   <form class="search" action="/search" method="get">
     <input type="text" name="q" placeholder="CVE-ID OR KEYWORD" value="{{ search_query|default('') }}" autocomplete="off" maxlength="200">
   </form>
+  <div class="theme-toggle" role="group" aria-label="Theme">
+    <button type="button" data-theme-set="light"  title="Light theme">☀</button>
+    <button type="button" data-theme-set="system" title="Match system">◐</button>
+    <button type="button" data-theme-set="dark"   title="Dark theme">☾</button>
+  </div>
   {% if g.user %}
   <div class="user-menu">
     <a href="{{ url_for('profile.settings') }}" class="user-name" style="text-decoration:none;">{{ g.user.username }}</a>
@@ -57,6 +82,40 @@
 {% block content %}{% endblock %}
 </div>
 <script>
+// Theme toggle (Light / System / Dark)
+(function() {
+  var root = document.documentElement;
+  function resolve(p) {
+    if (p === 'system') return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    return p;
+  }
+  function paint() {
+    var pref = root.dataset.themePref || 'system';
+    document.querySelectorAll('[data-theme-set]').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.themeSet === pref);
+    });
+  }
+  paint();
+  document.querySelectorAll('[data-theme-set]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var pref = btn.dataset.themeSet;
+      localStorage.setItem('horus_theme', pref);
+      root.dataset.themePref = pref;
+      root.dataset.theme = resolve(pref);
+      paint();
+      {% if g.user %}
+      var t = document.querySelector('meta[name=csrf-token]');
+      fetch('/profile/theme', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded',
+                  'X-CSRF-Token': t ? t.content : ''},
+        body: 'theme=' + encodeURIComponent(pref) + (t ? '&csrf_token=' + encodeURIComponent(t.content) : '')
+      }).catch(function(){});
+      {% endif %}
+    });
+  });
+})();
+
 // Keyboard shortcuts
 (function() {
   var gSeq = '';

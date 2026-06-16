@@ -226,6 +226,7 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
             ("telegram_chat_id", "INTEGER"),
             ("telegram_username", "TEXT"),
             ("telegram_linked_at", "TEXT"),
+            ("theme_preference", "TEXT NOT NULL DEFAULT 'system'"),
         ]
         for col, decl in user_additions:
             if col not in existing_user:
@@ -656,9 +657,12 @@ def fetch_resources(
             "newest": "first_seen",
             "engagement": "engagement_score",
             "stars": "stars",
+            "type": "resource_type",
+            "source": "source",
+            "author": "source_author",
         }
         col = sort_cols.get(sort, "first_seen")
-        primary = f"{col} {d_kw}" + (f" {nulls}" if sort == "stars" else "")
+        primary = f"{col} {d_kw}" + (f" {nulls}" if sort in ("stars", "author") else "")
         order_by = f"{primary}, first_seen DESC"
         rows = conn.execute(
             f"""SELECT url, resource_type, title, description, source, source_url,

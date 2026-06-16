@@ -12,7 +12,7 @@ from .auth import READ_ALL, role_required
 
 bp = Blueprint("resources", __name__)
 
-VALID_SORTS = {"newest", "engagement", "stars"}
+VALID_SORTS = {"newest", "engagement", "stars", "type", "source", "author"}
 VALID_TYPES = {"poc", "exploit", "tool", "technique", "advisory", "bypass", "disclosure"}
 
 
@@ -24,6 +24,9 @@ def list_resources():
     source = request.args.get("source")
     tag = request.args.get("tag")
     sort = request.args.get("sort", "newest")
+    sort_dir = request.args.get("dir", "desc")
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
     has_cve = request.args.get("has_cve")
     engagement_min = request.args.get("engagement_min")
     author = request.args.get("author")
@@ -40,6 +43,7 @@ def list_resources():
             source_filter=source,
             tag_filter=tag,
             sort=sort,
+            direction=sort_dir,
         )
         with db.connect() as conn:
             sources = [
@@ -111,23 +115,18 @@ def list_resources():
             }
         )
 
-    sort_filters = [
-        {
-            "label": "Newest",
-            "url": _qs(sort="newest", resource_type=resource_type, source=source, tag=tag),
-            "active": sort == "newest",
-        },
-        {
-            "label": "Engagement",
-            "url": _qs(sort="engagement", resource_type=resource_type, source=source, tag=tag),
-            "active": sort == "engagement",
-        },
-        {
-            "label": "Stars",
-            "url": _qs(sort="stars", resource_type=resource_type, source=source, tag=tag),
-            "active": sort == "stars",
-        },
-    ]
+    def _col_sort(key: str) -> dict:
+        kw = dict(resource_type=resource_type, source=source, tag=tag)
+        if key == sort:
+            new_dir = "asc" if sort_dir == "desc" else "desc"
+            url = _qs(
+                sort=key if key != "newest" else None,
+                dir=new_dir if new_dir != "desc" else None,
+                **kw,
+            )
+            return {"url": url, "active": True, "dir": sort_dir}
+        url = _qs(sort=key if key != "newest" else None, **kw)
+        return {"url": url, "active": False, "dir": "desc"}
 
     # Quick filter chips
     quick_filters = [
@@ -159,6 +158,15 @@ def list_resources():
         {"type": "tags", "key": "tags"},
         {"type": "date", "key": "published_date"},
     ]
+    column_sorts = [
+        _col_sort("type"),
+        None,
+        _col_sort("source"),
+        _col_sort("author"),
+        _col_sort("engagement"),
+        None,
+        _col_sort("newest"),
+    ]
 
     query_parts = _current_qs(
         resource_type=resource_type,
@@ -185,10 +193,10 @@ def list_resources():
         per_page=PER_PAGE_DEFAULT,
         type_filters=type_filters,
         source_filters=source_filters,
-        sort_filters=sort_filters,
         quick_filters=quick_filters,
         columns=columns,
         cells=cells,
+        column_sorts=column_sorts,
         prev_url=prev_url,
         next_url=next_url,
         # New filter data

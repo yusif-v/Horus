@@ -4,23 +4,17 @@
 <h1 class="page-title">{{ title }} <em>· {{ total }}</em></h1>
 {% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
 
-{% if sort_filters or cat_filters or wl_filters %}
+{% if cat_filters or wl_filters %}
+{% if wl_filters %}
 <div class="filter-bar">
-  <div class="filter-group">
-    <span class="label">Sort</span>
-    {% for f in sort_filters %}
-    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
-    {% endfor %}
-  </div>
-  {% if wl_filters %}
   <div class="filter-group">
     <span class="label">Filter</span>
     {% for f in wl_filters %}
     <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
     {% endfor %}
   </div>
-  {% endif %}
 </div>
+{% endif %}
 {% if cat_filters|length > 1 %}
 <div class="filter-bar filter-bar-secondary" style="padding-top:0;">
   <div class="filter-group">
@@ -38,7 +32,7 @@
   <div class="panel-body flush">
     <table class="fixed-cols">
       <colgroup>{% for w in col_widths %}<col style="width: {{ w }};">{% endfor %}</colgroup>
-      <thead><tr>{% for col in columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+      <thead><tr>{% for col in columns %}{% set s = column_sorts[loop.index0] if column_sorts else None %}<th>{% if s %}<a href="{{ s.url }}" class="col-sort {% if s.active %}active{% endif %}">{{ col }}{% if s.active %}<span class="arrow">{{ '▼' if s.dir == 'desc' else '▲' }}</span>{% endif %}</a>{% else %}{{ col }}{% endif %}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for row in rows %}
       <tr class="{{ loop.cycle('odd', 'even') }}">

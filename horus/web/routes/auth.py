@@ -109,7 +109,9 @@ def load_user() -> None:
         return
     with _storage.connect() as conn:
         row = conn.execute(
-            "SELECT id, username, email, is_active, team, telegram_chat_id FROM user WHERE id = ?",
+            "SELECT id, username, email, is_active, team, telegram_chat_id,"
+            " COALESCE(theme_preference, 'system') AS theme_preference"
+            " FROM user WHERE id = ?",
             (user_id,),
         ).fetchone()
         if row is None or not row[3]:

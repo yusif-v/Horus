@@ -36,6 +36,17 @@
         <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:.3rem;">red / blue = watchlist access · both = see all · none = no watchlist</div>
       </div>
 
+      <div style="margin-bottom:1.25rem;">
+        <label for="theme" style="display:block;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Theme</label>
+        <select id="theme" name="theme"
+                style="width:100%;padding:.6rem .8rem;background:var(--surface);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:var(--mono);font-size:13px;">
+          {% for t in themes %}
+          <option value="{{ t }}" {% if user.theme_preference == t %}selected{% endif %}>{{ t|capitalize }}</option>
+          {% endfor %}
+        </select>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:.3rem;">system = follow OS setting · use the ☀ / ◐ / ☾ button in the nav to switch on the fly</div>
+      </div>
+
       <hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0;">
 
       <div style="margin-bottom:1.25rem;">

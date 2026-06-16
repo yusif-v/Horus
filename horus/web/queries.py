@@ -382,7 +382,11 @@ def get_cve_detail(cve_id: str) -> dict | None:
 
 
 def fetch_pocs(
-    page: int = 1, per_page: int = 20, source_filter: str | None = None, sort: str = "age"
+    page: int = 1,
+    per_page: int = 20,
+    source_filter: str | None = None,
+    sort: str = "age",
+    direction: str = "desc",
 ) -> tuple[list[dict], int]:
     with db_connect() as conn:
         where, params = "", []
@@ -394,12 +398,18 @@ def fetch_pocs(
         age_expr = """CAST((julianday('now') - julianday(
             COALESCE(p.repo_created_at, p.first_seen)
         )) AS INTEGER)"""
-        # Sort mapping
-        sort_map = {
-            "newest": f"{age_expr} ASC, p.first_seen DESC",
-            "stars": "p.stars DESC NULLS LAST, p.first_seen DESC",
-        }
-        order_by = sort_map.get(sort, sort_map["newest"])
+        d = "ASC" if direction == "asc" else "DESC"
+        nulls = "NULLS FIRST" if d == "ASC" else "NULLS LAST"
+        # "newest=desc" means newest first (smallest age). Flip when asc.
+        if sort == "newest":
+            primary = f"{age_expr} {'DESC' if direction == 'asc' else 'ASC'}"
+            order_by = f"{primary}, p.first_seen DESC"
+        elif sort == "stars":
+            order_by = f"p.stars {d} {nulls}, p.first_seen DESC"
+        elif sort == "source":
+            order_by = f"p.source {d}, p.first_seen DESC"
+        else:
+            order_by = f"{age_expr} ASC, p.first_seen DESC"
         rows = conn.execute(
             f"""SELECT p.url, p.source, p.stars, p.description, p.first_seen,
                        p.repo_created_at,

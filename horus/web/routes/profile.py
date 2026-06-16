@@ -39,6 +39,7 @@ from .auth import READ_ALL, TEAMS, role_required
 bp = Blueprint("profile", __name__, url_prefix="/profile")
 
 LINK_TOKEN_TTL = timedelta(minutes=30)
+THEMES = {"light", "dark", "system"}
 
 
 def _now() -> datetime:
@@ -210,6 +211,23 @@ def notifications():
     )
 
 
+# ─── Theme preference (nav toggle) ──────────────────────────────────────────
+
+
+@bp.route("/theme", methods=["POST"])
+@role_required(*READ_ALL)
+def set_theme():
+    theme = request.form.get("theme", "system")
+    if theme not in THEMES:
+        return ("invalid theme", 400)
+    with _storage.connect() as conn:
+        conn.execute(
+            "UPDATE user SET theme_preference = ? WHERE id = ?",
+            (theme, g.user["id"]),
+        )
+    return ("", 204)
+
+
 # ─── Account settings ───────────────────────────────────────────────────────
 
 
@@ -221,6 +239,7 @@ def settings():
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         team = request.form.get("team", "none")
+        theme = request.form.get("theme", "system")
         current_password = request.form.get("current_password", "")
         new_password = request.form.get("new_password", "")
         new_password_confirm = request.form.get("new_password_confirm", "")
@@ -230,6 +249,8 @@ def settings():
             errors.append("A valid email is required.")
         if team not in TEAMS:
             errors.append("Invalid team.")
+        if theme not in THEMES:
+            errors.append("Invalid theme.")
 
         # If changing password, verify current password
         if new_password:
@@ -249,8 +270,9 @@ def settings():
                 "profile_settings.html",
                 title="Account settings",
                 active="profile",
-                user={"email": email, "team": team},
+                user={"email": email, "team": team, "theme_preference": theme},
                 teams=TEAMS,
+                themes=["system", "light", "dark"],
                 error=" ".join(errors),
             ), 400
 
@@ -290,8 +312,8 @@ def settings():
             ).fetchone()
 
             conn.execute(
-                "UPDATE user SET email = ?, team = ? WHERE id = ?",
-                (email, team, user_id),
+                "UPDATE user SET email = ?, team = ?, theme_preference = ? WHERE id = ?",
+                (email, team, theme, user_id),
             )
             if new_password:
                 conn.execute(
@@ -310,13 +332,24 @@ def settings():
         return redirect(url_for("profile.settings", flash="Settings saved."))
 
     with _storage.connect() as conn:
-        user_row = conn.execute("SELECT email, team FROM user WHERE id = ?", (user_id,)).fetchone()
+        user_row = conn.execute(
+            "SELECT email, team, COALESCE(theme_preference, 'system') AS theme_preference"
+            " FROM user WHERE id = ?",
+            (user_id,),
+        ).fetchone()
 
     return page(
         "profile_settings.html",
         title="Account settings",
         active="profile",
-        user={"email": user_row[0], "team": user_row[1]} if user_row else {},
+        user={
+            "email": user_row[0],
+            "team": user_row[1],
+            "theme_preference": user_row[2],
+        }
+        if user_row
+        else {},
         teams=TEAMS,
+        themes=["system", "light", "dark"],
         flash=request.args.get("flash", ""),
     )
