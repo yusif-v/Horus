@@ -4,14 +4,18 @@ Usage:
     python -m horus.bot.telegram --token <bot_token>
 
 Commands:
-    /start <token>  — Link Horus account via deep-link token
-    /help           — Show available commands
+    /start <token>  — Link Horus account via deep-link token (only pre-link command)
+    /help           — Show available commands (open)
+    /whoami         — Show Horus account bound to this chat
     /status         — Show notification preferences summary
     /unlink         — Disconnect Telegram from Horus account
     /cve <query>    — Search CVEs by ID or keyword (top 10)
     /kev            — Latest 10 known-exploited CVEs
     /top            — Top 10 CVEs by EPSS
     /poc <query>    — Search PoCs by URL/description (top 10)
+
+All commands except /start and /help require the chat to be linked to a
+Horus account; anything else returns an "access restricted" message.
 """
 
 from __future__ import annotations
@@ -40,21 +44,27 @@ def _md_escape(text: str) -> str:
     return text.replace("_", r"\_").replace("*", r"\*").replace("`", r"\`").replace("[", r"\[")
 
 
-def _require_linked(api: TelegramAPI, chat_id: int) -> int | None:
-    """Return user_id if the chat is linked, else send error and return None."""
+def _linked_user(chat_id: int) -> dict | None:
+    """Return user row (dict) for a linked chat, or None if not linked."""
     with _storage.connect() as conn:
         row = conn.execute(
-            "SELECT id FROM user WHERE telegram_chat_id = ?",
+            "SELECT id, username, email, team, telegram_username, telegram_linked_at"
+            " FROM user WHERE telegram_chat_id = ?",
             (chat_id,),
         ).fetchone()
-    if not row:
-        api.send_message(
-            chat_id,
-            "❌ Your Telegram is not linked to a Horus account.\n"
-            "Generate a link token at /profile/telegram and use /start <token>.",
-        )
-        return None
-    return int(row[0])
+    return dict(row) if row else None
+
+
+def _not_linked_message(api: TelegramAPI, chat_id: int) -> None:
+    api.send_message(
+        chat_id,
+        "🔒 *Access restricted*\n\n"
+        "This bot is only for registered Horus users. To use it, you need a "
+        "Horus account and a one-time link token:\n\n"
+        f"1. Sign in at {_base_url()}\n"
+        "2. Go to *Profile → Telegram → Generate link token*\n"
+        "3. Tap the resulting link or send `/start <token>` here.",
+    )
 
 
 def _fmt_cve_row(cve: dict) -> str:
@@ -136,9 +146,10 @@ def _handle_help(api: TelegramAPI, chat_id: int) -> None:
         "*Horus CVE Intelligence Bot*\n\n"
         "*Account*\n"
         "• `/start <token>` — Link your Horus account\n"
+        "• `/whoami` — Show the Horus user bound to this chat\n"
         "• `/status` — View notification preferences\n"
         "• `/unlink` — Disconnect this Telegram account\n\n"
-        "*Queries* (account must be linked):\n"
+        "*Queries*\n"
         "• `/cve <id|keyword>` — Lookup or keyword search (top 10)\n"
         "• `/kev` — Latest 10 known-exploited CVEs\n"
         "• `/top` — Top 10 CVEs by EPSS\n"
@@ -147,10 +158,24 @@ def _handle_help(api: TelegramAPI, chat_id: int) -> None:
     )
 
 
+def _handle_whoami(api: TelegramAPI, chat_id: int, user: dict) -> None:
+    linked = user.get("telegram_linked_at") or "—"
+    team = (user.get("team") or "none").upper()
+    tg_handle = user.get("telegram_username")
+    handle = f"@{tg_handle}" if tg_handle else "(no Telegram handle)"
+    api.send_message(
+        chat_id,
+        "👤 *Identity*\n\n"
+        f"• Horus user: `{_md_escape(user['username'])}`\n"
+        f"• Email: `{_md_escape(user.get('email') or '—')}`\n"
+        f"• Team: `{team}`\n"
+        f"• Telegram: {_md_escape(handle)} (chat_id `{chat_id}`)\n"
+        f"• Linked at: `{linked}`",
+    )
+
+
 def _handle_cve(api: TelegramAPI, chat_id: int, text: str) -> None:
     """Lookup by CVE-ID or keyword search across description/products."""
-    if _require_linked(api, chat_id) is None:
-        return
     parts = text.split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
         api.send_message(chat_id, "Usage: `/cve <CVE-ID or keyword>`\nExample: `/cve Windows`")
@@ -193,8 +218,6 @@ def _handle_cve(api: TelegramAPI, chat_id: int, text: str) -> None:
 
 
 def _handle_kev(api: TelegramAPI, chat_id: int) -> None:
-    if _require_linked(api, chat_id) is None:
-        return
     with _storage.connect() as conn:
         rows = conn.execute(
             "SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
@@ -213,8 +236,6 @@ def _handle_kev(api: TelegramAPI, chat_id: int) -> None:
 
 
 def _handle_top(api: TelegramAPI, chat_id: int) -> None:
-    if _require_linked(api, chat_id) is None:
-        return
     with _storage.connect() as conn:
         rows = conn.execute(
             "SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
@@ -234,8 +255,6 @@ def _handle_top(api: TelegramAPI, chat_id: int) -> None:
 
 
 def _handle_poc(api: TelegramAPI, chat_id: int, text: str) -> None:
-    if _require_linked(api, chat_id) is None:
-        return
     parts = text.split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
         api.send_message(chat_id, "Usage: `/poc <keyword>`\nExample: `/poc Confluence`")
@@ -349,10 +368,22 @@ def _process_update(api: TelegramAPI, update: dict) -> None:
     head = text.split()[0]
     cmd = head.split("@", 1)[0].lower()
 
+    # /start and /help are the only commands available before linking.
     if cmd == "/start":
         _handle_start(api, chat_id, username, text)
-    elif cmd in ("/help", "/h"):
+        return
+    if cmd in ("/help", "/h"):
         _handle_help(api, chat_id)
+        return
+
+    # Everything else requires a linked Horus account.
+    user = _linked_user(chat_id)
+    if not user:
+        _not_linked_message(api, chat_id)
+        return
+
+    if cmd == "/whoami":
+        _handle_whoami(api, chat_id, user)
     elif cmd == "/status":
         _handle_status(api, chat_id)
     elif cmd == "/unlink":
@@ -365,6 +396,8 @@ def _process_update(api: TelegramAPI, update: dict) -> None:
         _handle_top(api, chat_id)
     elif cmd == "/poc":
         _handle_poc(api, chat_id, text)
+    elif cmd.startswith("/"):
+        api.send_message(chat_id, f"Unknown command `{_md_escape(cmd)}` — try /help.")
 
 
 def run_listener(token: str, poll_timeout: int = 30) -> None:
