@@ -18,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 
-from flask import Blueprint, abort, g, redirect, request, url_for
+from flask import Blueprint, abort, g, redirect, request, url_for, Response
 
 from ...storage import db as _storage
 from .. import audit
@@ -130,6 +130,12 @@ def add():
         allowed = _user_team_scope()
         if team not in allowed:
             abort(403, description="cannot add to a team you don't belong to")
+
+    # Bulk import via CSV/JSON
+    bulk_file = request.files.get("bulk_file")
+    if bulk_file and bulk_file.filename:
+        return _bulk_import(bulk_file, team, note)
+
     if not vendor:
         return redirect(url_for("watchlist.index", flash="Vendor required"))
 
@@ -154,6 +160,78 @@ def add():
     )
     label = f"{vendor} {product}".strip()
     return redirect(url_for("watchlist.index", flash=f"Added {label}"))
+
+
+def _bulk_import(file, team: str, note: str | None):
+    """Handle CSV or JSON bulk import of watchlist entries.
+
+    CSV format: vendor,product (header optional)
+    JSON format: [{"vendor": "...", "product": "..."}, ...]
+    """
+    import csv
+    import io
+    import json
+
+    filename = file.filename.lower()
+    content = file.read().decode("utf-8-sig")
+    entries: list[dict[str, str]] = []
+
+    if filename.endswith(".json"):
+        try:
+            data = json.loads(content)
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        v = str(item.get("vendor", item.get("Vendor", ""))).strip()
+                        p = str(item.get("product", item.get("Product", ""))).strip()
+                        if v:
+                            entries.append({"vendor": v, "product": p})
+        except json.JSONDecodeError as e:
+            from flask import redirect, url_for
+            return redirect(url_for("watchlist.index", flash=f"JSON error: {e}"))
+    else:
+        # CSV — try to detect header
+        reader = csv.reader(io.StringIO(content))
+        for row in reader:
+            if not row or not row[0].strip():
+                continue
+            # Skip common header names
+            if row[0].strip().lower() in ("vendor", "name", "product"):
+                continue
+            v = row[0].strip()
+            p = row[1].strip() if len(row) > 1 else ""
+            if v:
+                entries.append({"vendor": v, "product": p})
+
+    if not entries:
+        from flask import redirect, url_for
+        return redirect(url_for("watchlist.index", flash="No valid entries found in file"))
+
+    added = 0
+    skipped = 0
+    with _storage.connect() as conn:
+        for entry in entries:
+            try:
+                conn.execute(
+                    "INSERT INTO team_watchlist (team, vendor, product, note, "
+                    "created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+                    (team, entry["vendor"], entry["product"], note, _now(), g.user["id"]),
+                )
+                added += 1
+            except sqlite3.IntegrityError:
+                skipped += 1
+
+    audit.record(
+        "watchlist.bulk_import",
+        "watchlist",
+        f"team={team}",
+        after={"added": added, "skipped": skipped, "file": file.filename},
+    )
+    from flask import redirect, url_for
+    msg = f"Imported {added} entries"
+    if skipped:
+        msg += f" ({skipped} duplicates skipped)"
+    return redirect(url_for("watchlist.index", flash=msg))
 
 
 @bp.route("/<int:entry_id>/delete", methods=["POST"])

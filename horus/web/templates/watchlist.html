@@ -45,6 +45,41 @@
   </div>
 </div>
 
+{# ── Bulk import ── #}
+<div class="panel" style="margin-bottom:2rem;">
+  <div class="panel-body">
+    <div style="font-family:var(--display);font-size:.85rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-mid);margin-bottom:.75rem;">
+      Bulk import
+    </div>
+    <form method="post" action="{{ url_for('watchlist.add') }}" enctype="multipart/form-data"
+          style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field" style="flex:1 1 200px;">
+        <label for="bulk_file">CSV or JSON file</label>
+        <input type="file" id="bulk_file" name="bulk_file" accept=".csv,.json" required
+               style="font-family:var(--mono);font-size:12px;padding:.5rem;">
+      </div>
+      <div class="field" style="flex:1 1 160px;">
+        <label for="bulk_team">Team</label>
+        <select id="bulk_team" name="team" required>
+          {% for t in teams_visible %}
+          <option value="{{ t }}">{{ t|upper }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" style="flex:1 1 160px;">
+        <label for="bulk_note">Note <span style="color:var(--text-dim);font-weight:normal;">(optional)</span></label>
+        <input type="text" id="bulk_note" name="note" placeholder="applied to all imported entries">
+      </div>
+      <button type="submit" class="btn btn-primary">Import</button>
+    </form>
+    <div style="margin-top:.75rem;font-size:12px;color:var(--text-dim);">
+      <strong>CSV:</strong> <code>vendor,product</code> per line (header row auto-detected) &nbsp;·&nbsp;
+      <strong>JSON:</strong> <code>[{"vendor":"...","product":"..."}, ...]</code>
+    </div>
+  </div>
+</div>
+
 {% if entries %}
 <h2 style="font-family:var(--display);font-size:1.1rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-mid);margin:0 0 .75rem;">Pins</h2>
 <div class="panel" style="margin-bottom:2rem;">

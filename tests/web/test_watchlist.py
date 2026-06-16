@@ -262,3 +262,101 @@ class TestDelete:
         _seed_admin_and_team_user(client, "red1", "red", role="analyst")
         r = client.post(f"/watchlist/{entry_id}/delete")
         assert r.status_code == 403
+
+
+class TestBulkImport:
+    def test_csv_bulk_import(self, client):
+        _seed_admin_and_team_user(client, "red1", "red", role="analyst")
+        import io
+        csv_data = "vendor,product\nacme,vpn\ncontoso,office\n"
+        r = client.post(
+            "/watchlist/add",
+            data={
+                "team": "red",
+                "bulk_file": (io.BytesIO(csv_data.encode()), "pins.csv"),
+                "note": "bulk test",
+            },
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        assert r.status_code == 200
+        with db.connect() as conn:
+            rows = conn.execute(
+                "SELECT vendor, product FROM team_watchlist ORDER BY vendor"
+            ).fetchall()
+        assert len(rows) == 2
+        assert tuple(rows[0]) == ("acme", "vpn")
+        assert tuple(rows[1]) == ("contoso", "office")
+
+    def test_json_bulk_import(self, client):
+        _seed_admin_and_team_user(client, "blue1", "blue", role="analyst")
+        import io
+        json_data = '[{"vendor":"nginx","product":"nginx"},{"vendor":"apache","product":""}]'
+        r = client.post(
+            "/watchlist/add",
+            data={
+                "team": "blue",
+                "bulk_file": (io.BytesIO(json_data.encode()), "pins.json"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        assert r.status_code == 200
+        with db.connect() as conn:
+            rows = conn.execute(
+                "SELECT vendor, product FROM team_watchlist ORDER BY vendor"
+            ).fetchall()
+        assert len(rows) == 2
+        assert tuple(rows[0]) == ("apache", "")
+        assert tuple(rows[1]) == ("nginx", "nginx")
+
+    def test_csv_with_header_auto_detected(self, client):
+        _seed_admin_and_team_user(client, "red1", "red", role="analyst")
+        import io
+        csv_data = "Vendor,Product\nmicrosoft,windows\n"
+        r = client.post(
+            "/watchlist/add",
+            data={
+                "team": "red",
+                "bulk_file": (io.BytesIO(csv_data.encode()), "vendors.csv"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        assert r.status_code == 200
+        with db.connect() as conn:
+            row = conn.execute("SELECT vendor, product FROM team_watchlist").fetchone()
+        assert tuple(row) == ("microsoft", "windows")
+
+    def test_bulk_import_duplicate_skipped(self, client):
+        _seed_admin_and_team_user(client, "red1", "red", role="analyst")
+        import io
+        csv_data = "vendor,product\nacme,vpn\nacme,vpn\n"
+        r = client.post(
+            "/watchlist/add",
+            data={
+                "team": "red",
+                "bulk_file": (io.BytesIO(csv_data.encode()), "dupes.csv"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        assert r.status_code == 200
+        with db.connect() as conn:
+            count = conn.execute("SELECT COUNT(*) FROM team_watchlist").fetchone()[0]
+        assert count == 1  # duplicate skipped
+
+    def test_bulk_import_empty_file(self, client):
+        _seed_admin_and_team_user(client, "red1", "red", role="analyst")
+        import io
+        r = client.post(
+            "/watchlist/add",
+            data={
+                "team": "red",
+                "bulk_file": (io.BytesIO(b""), "empty.csv"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        assert r.status_code == 200
+        assert b"No valid entries" in r.data
