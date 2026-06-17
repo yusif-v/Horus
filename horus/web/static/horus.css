@@ -227,7 +227,7 @@ a:hover { color: var(--accent); }
 /* ── Hero threat-posture grid ────────────────────────── */
 .posture {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  grid-template-columns: repeat(4, 1fr);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 3px;
@@ -282,11 +282,13 @@ a.section-link:hover { color: var(--accent); }
   position: absolute; inset: 0;
   z-index: 1;
 }
+/* Let clicks anywhere on the cell fall through to the full-cell overlay link,
+   while the nested meta sub-links stay independently clickable. */
 .posture .cell .k,
 .posture .cell .v,
-.posture .cell .meta { position: relative; z-index: 2; }
-.posture .cell .meta-link { position: relative; z-index: 3; }
-.posture .cell .tick { z-index: 2; }
+.posture .cell .meta,
+.posture .cell .tick { pointer-events: none; }
+.posture .cell .meta-link { position: relative; z-index: 2; pointer-events: auto; }
 
 /* ── Clickable bar rows ──────────────────────────────── */
 .bar-row.clickable { text-decoration: none; color: inherit; display: flex; align-items: center; gap: 1rem; padding: .35rem 0; border-radius: 2px; transition: background .15s; cursor: pointer; }
