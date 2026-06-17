@@ -104,13 +104,15 @@ class PipelineResult:
     source_results: dict[str, dict[str, Any]] = field(default_factory=dict)
     report_text: str = ""
     # Events extracted during the pipeline run for notification dispatch
-    events: dict[str, list[dict]] = field(default_factory=lambda: {
-        "kev_new": [],
-        "epss_jump": [],
-        "critical_cve": [],
-        "watchlist_match": [],
-        "poc_new": [],
-    })
+    events: dict[str, list[dict]] = field(
+        default_factory=lambda: {
+            "kev_new": [],
+            "epss_jump": [],
+            "critical_cve": [],
+            "watchlist_match": [],
+            "poc_new": [],
+        }
+    )
 
 
 # ── Selection helpers ────────────────────────────────────────────────────────
@@ -193,7 +195,9 @@ def run_pipeline(
         step += 1
         label = getattr(mod, "NAME", name)
         log(f"[{step}/{total_steps}] running {label}...")
-        provided = {"x_discovered_urls": x_discovered_urls} if name == "github" else {}
+        provided = (
+            {"x_discovered_urls": x_discovered_urls} if name in ("github", "codeberg") else {}
+        )
         ctx = SourceContext(
             known_cve_ids=known_cve_ids,
             known_poc_urls=known_poc_urls,
@@ -377,6 +381,7 @@ def register_end_hook(fn: Callable[[PipelineResult], None]) -> None:
 
 # ── Event extraction ─────────────────────────────────────────────────────────
 
+
 def _build_events(
     cves: list[CVE], pocs: list[PoC], enricher_ctx: EnricherContext
 ) -> dict[str, list[dict]]:
@@ -395,67 +400,76 @@ def _build_events(
     for cve in cves:
         # KEV additions
         if cve.kev:
-            events["kev_new"].append({
-                "cve_id": cve.id,
-                "cvss_score": cve.cvss_score,
-                "cvss_severity": cve.cvss_severity,
-            })
+            events["kev_new"].append(
+                {
+                    "cve_id": cve.id,
+                    "cvss_score": cve.cvss_score,
+                    "cvss_severity": cve.cvss_severity,
+                }
+            )
 
         # Critical CVE with PoC
         if cve.cvss_score is not None and cve.cvss_score >= 9:
             poc_count = sum(1 for p in pocs if cve.id in (p.cve_refs or []))
             if poc_count > 0:
-                events["critical_cve"].append({
-                    "cve_id": cve.id,
-                    "cvss_score": cve.cvss_score,
-                    "cvss_severity": cve.cvss_severity,
-                    "poc_count": poc_count,
-                })
+                events["critical_cve"].append(
+                    {
+                        "cve_id": cve.id,
+                        "cvss_score": cve.cvss_score,
+                        "cvss_severity": cve.cvss_severity,
+                        "poc_count": poc_count,
+                    }
+                )
 
         # EPSS jump (score >= 0.5)
         if cve.epss_score is not None and cve.epss_score >= 0.5:
-            events["epss_jump"].append({
-                "cve_id": cve.id,
-                "epss_score": cve.epss_score,
-            })
+            events["epss_jump"].append(
+                {
+                    "cve_id": cve.id,
+                    "epss_score": cve.epss_score,
+                }
+            )
 
     # Watchlist matches — check team_watchlist table
     try:
         from .storage import db as _db
+
         with _db.connect() as conn:
-            wl_rows = conn.execute(
-                "SELECT team, vendor, product FROM team_watchlist"
-            ).fetchall()
+            wl_rows = conn.execute("SELECT team, vendor, product FROM team_watchlist").fetchall()
             for cve in cves:
                 for wl_team, wl_vendor, wl_product in wl_rows:
                     # Check if this CVE affects a watched vendor/product
-                    cve_products = getattr(cve, 'products', []) or []
+                    cve_products = getattr(cve, "products", []) or []
                     for cp in cve_products:
                         vendor_match = (
-                            cp.get("vendor", "").lower() == wl_vendor.lower()
-                            if wl_vendor else True
+                            cp.get("vendor", "").lower() == wl_vendor.lower() if wl_vendor else True
                         )
                         product_match = (
                             cp.get("product", "").lower() == wl_product.lower()
-                            if wl_product else True
+                            if wl_product
+                            else True
                         )
                         if vendor_match and product_match:
-                            events["watchlist_match"].append({
-                                "cve_id": cve.id,
-                                "vendor": wl_vendor or cp.get("vendor", ""),
-                                "product": wl_product or cp.get("product", ""),
-                                "team": wl_team,
-                            })
+                            events["watchlist_match"].append(
+                                {
+                                    "cve_id": cve.id,
+                                    "vendor": wl_vendor or cp.get("vendor", ""),
+                                    "product": wl_product or cp.get("product", ""),
+                                    "team": wl_team,
+                                }
+                            )
     except Exception:
         pass  # Watchlist table may not exist yet
 
     # New PoCs for tracked CVEs
     for poc in pocs:
-        for ref in (poc.cve_refs or []):
-            events["poc_new"].append({
-                "cve_id": ref,
-                "url": poc.url,
-                "source": poc.source,
-            })
+        for ref in poc.cve_refs or []:
+            events["poc_new"].append(
+                {
+                    "cve_id": ref,
+                    "url": poc.url,
+                    "source": poc.source,
+                }
+            )
 
     return events

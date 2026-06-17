@@ -23,6 +23,7 @@ class UrlType(Enum):
     GITHUB_RAW = "github_raw"
     GITLAB_REPO = "gitlab_repo"
     GITLAB_SNIPPET = "gitlab_snippet"
+    CODEBERG_REPO = "codeberg_repo"
     PASTEBIN = "pastebin"
     HACKERONE = "hackerone"
     BUGCROWD = "bugcrowd"
@@ -74,6 +75,14 @@ _GITLAB_SNIPPET_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Codeberg: codeberg.org/user/repo
+_CODEBERG_REPO_RE = re.compile(
+    r"https?://(?:www\.)?codeberg\.org/"
+    r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+"
+    r"(?![A-Za-z0-9._-])",
+    re.IGNORECASE,
+)
+
 # Pastebin
 _PASTEBIN_RE = re.compile(
     r"https?://(?:www\.)?pastebin\.com/(?:raw/)?[A-Za-z0-9]+",
@@ -105,6 +114,7 @@ _URL_PATTERNS: list[tuple[re.Pattern, UrlType]] = [
     (_GITHUB_REPO_RE, UrlType.GITHUB_REPO),
     (_GITLAB_SNIPPET_RE, UrlType.GITLAB_SNIPPET),
     (_GITLAB_REPO_RE, UrlType.GITLAB_REPO),
+    (_CODEBERG_REPO_RE, UrlType.CODEBERG_REPO),
     (_PASTEBIN_RE, UrlType.PASTEBIN),
     (_HACKERONE_RE, UrlType.HACKERONE),
     (_BUGCROWD_RE, UrlType.BUGCROWD),
@@ -153,6 +163,12 @@ def canonicalize_url(url: str, url_type: UrlType) -> str:
         parts = path.split("/")
         if len(parts) >= 2:
             return f"https://gitlab.com/{parts[0]}/{parts[1]}"
+
+    elif url_type == UrlType.CODEBERG_REPO:
+        # codeberg.org/user/repo -> keep only first 2 path segments
+        parts = path.split("/")
+        if len(parts) >= 2:
+            return f"https://codeberg.org/{parts[0]}/{parts[1]}"
 
     elif url_type == UrlType.PASTEBIN:
         # pastebin.com/raw/XXX or pastebin.com/XXX -> pastebin.com/XXX

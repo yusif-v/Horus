@@ -367,6 +367,19 @@ def poc_from_gitlab(raw: dict[str, Any]) -> PoC:
     )
 
 
+def poc_from_codeberg(raw: dict[str, Any]) -> PoC:
+    text = f"{raw.get('repo', '')} {raw.get('description', '')} {raw.get('url', '')}"
+    return PoC(
+        url=raw.get("url", ""),
+        source="codeberg",
+        stars=raw.get("stars"),
+        age_days=None,  # Computed dynamically from repo_created_at
+        description=raw.get("description"),
+        cve_refs=raw.get("cves") or extract_cves(text),
+        repo_created_at=raw.get("repo_created_at"),
+    )
+
+
 def poc_from_pastebin(raw: dict[str, Any]) -> PoC:
     return PoC(
         url=raw.get("url", ""),
@@ -398,6 +411,7 @@ POC_BUILDERS = {
     "nitter": poc_from_nitter,
     "exploit-db": poc_from_exploitdb,
     "gitlab": poc_from_gitlab,
+    "codeberg": poc_from_codeberg,
     "pastebin": poc_from_pastebin,
     "hackerone": poc_from_web,
     "bugcrowd": poc_from_web,
@@ -412,6 +426,7 @@ def deduplicate_pocs(pocs: list[PoC]) -> list[PoC]:
         "exploit-db": 3,
         "github": 2,
         "gitlab": 2,
+        "codeberg": 2,
         "hackerone": 2,
         "bugcrowd": 2,
         "pastebin": 1,

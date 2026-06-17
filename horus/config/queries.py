@@ -17,6 +17,20 @@ GITHUB_QUERIES = [
     "security exploit repo",
 ]
 
+CODEBERG_QUERIES = [
+    "CVE-2026 exploit poc",
+    "CVE-2025 exploit poc",
+    "CVE-2024 exploit poc",
+    "0day exploit",
+    "RCE PoC CVE",
+    "vulnerability exploit proof-of-concept",
+    "CVE poc",
+    "exploit CVE-2026",
+    "exploit CVE-2025",
+    "CVE exploit code",
+    "security exploit",
+]
+
 FRESH_POC_KEYWORDS = [
     "poc",
     "exploit",

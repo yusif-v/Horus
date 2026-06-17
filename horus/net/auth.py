@@ -36,3 +36,12 @@ def github_token() -> str | None:
         pass
 
     return None
+
+
+@lru_cache(maxsize=1)
+def codeberg_token() -> str | None:
+    """Return Codeberg API token from CODEBERG_TOKEN env var, or None."""
+    tok = os.environ.get("CODEBERG_TOKEN")
+    if tok:
+        return tok.strip()
+    return None
