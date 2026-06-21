@@ -54,6 +54,7 @@
     <a href="/cves" class="{% if active == 'cves' %}active{% endif %}">CVEs</a>
     <a href="/pocs" class="{% if active == 'pocs' %}active{% endif %}">PoCs</a>
     <a href="/resources" class="{% if active == 'resources' %}active{% endif %}">Resources</a>
+    <a href="/news" class="{% if active == 'news' %}active{% endif %}">News</a>
     <a href="/vendors" class="{% if active == 'vendors' %}active{% endif %}">Vendors</a>
     {% if g.user and ('admin' in g.user_roles or g.user_team in ('red', 'blue', 'both')) %}
     <a href="/watchlist" class="{% if active == 'watchlist' %}active{% endif %}">Watchlist</a>

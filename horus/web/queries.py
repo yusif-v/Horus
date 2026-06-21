@@ -7,6 +7,7 @@ route or test. Returns plain dicts / lists of dicts.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from ..storage import db as _storage
 
@@ -435,3 +436,45 @@ def safe_int(value: str, default: int = 1, min_val: int = 1, max_val: int = 1000
         return max(min_val, min(int(value), max_val))
     except (ValueError, TypeError):
         return default
+
+
+# ── News ─────────────────────────────────────────────────────────────────────
+
+
+def get_news(
+    page: int = 1,
+    per_page: int = 20,
+    tier_filter: int | None = None,
+    source_filter: str | None = None,
+    sort: str = "newest",
+    direction: str = "desc",
+) -> tuple[list[dict], int]:
+    conditions: list[str] = []
+    params: list[Any] = []
+    if tier_filter is not None:
+        conditions.append("tier = ?")
+        params.append(tier_filter)
+    if source_filter:
+        conditions.append("source = ?")
+        params.append(source_filter)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    with db_connect() as conn:
+        total = conn.execute(f"SELECT COUNT(*) FROM news_article {where}", params).fetchone()[0]
+        offset = (page - 1) * per_page
+        d_kw = "ASC" if direction == "asc" else "DESC"
+        sort_cols = {
+            "newest": "first_seen",
+            "tier": "tier",
+            "source": "source",
+            "published": "published_at",
+        }
+        col = sort_cols.get(sort, "first_seen")
+        order_by = f"{col} {d_kw}, first_seen DESC"
+        rows = conn.execute(
+            f"""SELECT id, title, url, source, tier, summary, published_at, first_seen
+                FROM news_article
+                {where}
+                ORDER BY {order_by} LIMIT ? OFFSET ?""",
+            [*params, per_page, offset],
+        ).fetchall()
+        return _rows_to_dicts(rows), total

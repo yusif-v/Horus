@@ -98,6 +98,13 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
         help="One-shot data backfill: 'products' re-normalizes vendor/product names; "
         "'poc_cve' re-scans PoCs for CVE refs; 'all' runs both.",
     )
+    p.add_argument(
+        "--export-json",
+        type=str,
+        default=None,
+        metavar="DIR",
+        help="Export the database to CVE-Intel-compatible JSON files in DIR, then exit.",
+    )
 
     # Server mode
     p.add_argument(
@@ -178,6 +185,17 @@ def _cmd_backfill(target: str) -> None:
     print(run_backfill(target).summary())
 
 
+def _cmd_export_json(output_dir: str) -> None:
+    from .export_json import export_all
+    from .storage import db as _db_module
+
+    db_path = str(_db_module.DB_PATH)
+    written = export_all(db_path, output_dir)
+    for path in written:
+        print(f"  {path}")
+    print(f"Exported {len(written)} files to {output_dir}")
+
+
 def _cmd_server(args) -> None:
     from .server import Server, load_config
 
@@ -216,6 +234,8 @@ def main(argv: list[str] | None = None) -> None:
         return _cmd_backfill_epss()
     if args.backfill:
         return _cmd_backfill(args.backfill)
+    if args.export_json:
+        return _cmd_export_json(args.export_json)
     if args.server or args.server_once:
         return _cmd_server(args)
     if args.auth_status:

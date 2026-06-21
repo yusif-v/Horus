@@ -49,6 +49,7 @@ def auth_client(client):
         "/cves",
         "/pocs",
         "/resources",
+        "/news",
         "/search?q=test",
         "/api/stats",
     ],

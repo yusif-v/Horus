@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">{{ eyebrow|default('Security news · RSS feeds') }}</div>
+<h1 class="page-title">{{ title }} <em>· {{ total }}</em></h1>
+{% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
+
+{% if filters or source_filters %}
+<div class="filter-bar">
+  {% if filters %}
+  <div class="filter-group">
+    <span class="label">Tier</span>
+    {% for f in filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if source_filters %}
+  <div class="filter-group">
+    <span class="label">Source</span>
+    {% for f in source_filters %}
+    <a href="{{ f.url }}" class="chip {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if rows %}
+<div class="panel">
+  <div class="panel-body flush">
+    <table>
+      <thead><tr>{% for col in columns %}{% set s = column_sorts[loop.index0] if column_sorts else None %}<th>{% if s %}<a href="{{ s.url }}" class="col-sort {% if s.active %}active{% endif %}">{{ col }}{% if s.active %}<span class="arrow">{{ '▼' if s.dir == 'desc' else '▲' }}</span>{% endif %}</a>{% else %}{{ col }}{% endif %}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        {% for cell in cells %}
+        <td>
+          {% if cell.type == 'tier_badge' %}
+            {% set tier = row[cell.key] %}
+            <span class="badge badge-tier-{{ tier }}" style="font-weight:600;">T{{ tier }}</span>
+          {% elif cell.type == 'news_title' %}
+            <div style="max-width:500px;">
+              <a href="{{ row.url }}" target="_blank" rel="noopener" style="font-weight:500;">{{ row.title[:100] }}</a>
+              {% if row.summary %}
+                <div style="font-size:12px;color:var(--text-dim);margin-top:2px;">{{ row.summary[:120] }}{% if row.summary|length > 120 %}…{% endif %}</div>
+              {% endif %}
+            </div>
+          {% elif cell.type == 'badge' %}{% if row[cell.key] %}<span class="badge badge-{{ row[cell.key]|lower }}">{{ row[cell.key] }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+          {% elif cell.type == 'date' %}<span class="num">{{ row[cell.key][:10] if row[cell.key] else '—' }}</span>
+          {% else %}{% if row[cell.key] is not none %}<span class="num">{{ row[cell.key] }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}{% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if total > per_page %}
+<div class="pagination">
+  {% if page > 1 %}<a href="{{ prev_url }}">← Prev</a>{% endif %}
+  <span class="current">{{ page }} / {{ (total / per_page)|round(0, 'ceil')|int }}</span>
+  {% if page * per_page < total %}<a href="{{ next_url }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="panel"><div class="panel-body" style="padding:3rem 2rem;text-align:center;">
+  <div style="font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--text-dim);text-transform:uppercase;">No news articles — run the news pipeline first</div>
+</div></div>
+{% endif %}
+{% endblock %}

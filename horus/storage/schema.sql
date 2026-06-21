@@ -186,6 +186,7 @@ CREATE TABLE IF NOT EXISTS user (
                     CHECK (team IN ('red', 'blue', 'both', 'none')),
     created_at      TEXT NOT NULL,
     last_login      TEXT,
+    theme_preference TEXT NOT NULL DEFAULT 'system',
     -- v0.10: Telegram link state. NULL until the user completes deep-link.
     telegram_chat_id    INTEGER UNIQUE,
     telegram_username   TEXT,
