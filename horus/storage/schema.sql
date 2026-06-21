@@ -269,3 +269,21 @@ CREATE INDEX IF NOT EXISTS idx_security_resource_source ON security_resource(sou
 CREATE INDEX IF NOT EXISTS idx_security_resource_engagement ON security_resource(engagement_score);
 CREATE INDEX IF NOT EXISTS idx_security_resource_first_seen ON security_resource(first_seen);
 CREATE INDEX IF NOT EXISTS idx_security_resource_tweet_created ON security_resource(tweet_created_at);
+
+-- ─── News articles (RSS feed items) ───────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS news_article (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    title           TEXT NOT NULL,
+    url             TEXT NOT NULL UNIQUE,
+    source          TEXT NOT NULL,              -- feed key (cisa, hacker_news, etc.)
+    tier            INTEGER NOT NULL DEFAULT 3, -- 1 (critical) .. 5 (noise)
+    summary         TEXT,
+    published_at    TEXT,
+    first_seen      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_news_article_source ON news_article(source);
+CREATE INDEX IF NOT EXISTS idx_news_article_tier ON news_article(tier);
+CREATE INDEX IF NOT EXISTS idx_news_article_published ON news_article(published_at);
+CREATE INDEX IF NOT EXISTS idx_news_article_first_seen ON news_article(first_seen);

@@ -29,8 +29,9 @@ web:
   workers: 2
   allow_dev_fallback: true
 
-# Telegram bot — set env vars instead of hardcoding token:
+# Telegram bot — token can be set here (this file is gitignored) or via env var:
 #   export TELEGRAM_BOT_TOKEN="your_token_from_botfather"
 #   export TELEGRAM_BOT_USERNAME="your_bot_username"  (without @)
 telegram:
   enabled: true
+  bot_token: "8633242764:AAHD1x2EETALJ3agHER5MUlsperG41TD6sQ"
