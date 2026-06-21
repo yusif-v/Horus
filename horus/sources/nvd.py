@@ -686,7 +686,7 @@ def _extract_affected(configurations: list) -> list[dict]:
     return list(out.values())
 
 
-def _extract_cvss(metrics: dict) -> tuple[float | None, str | None]:
+def _extract_cvss(metrics: dict) -> tuple[float | None, str | None, str | None]:
     for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
         entries = metrics.get(key)
         if not entries:
@@ -697,8 +697,8 @@ def _extract_cvss(metrics: dict) -> tuple[float | None, str | None]:
             continue
         score = data.get("baseScore")
         if score is not None:
-            return score, data.get("baseSeverity")
-    return None, None
+            return score, data.get("baseSeverity"), data.get("vectorString")
+    return None, None, None
 
 
 def _resolve_start(now: datetime, last_run_iso: str | None) -> datetime:
@@ -760,7 +760,7 @@ def run(ctx) -> dict:
                     desc = d.get("value", "")
                     break
 
-            score, severity = _extract_cvss(cve.get("metrics", {}))
+            score, severity, cvss_vector = _extract_cvss(cve.get("metrics", {}))
 
             if ctx.min_cvss is not None and (score is None or score < ctx.min_cvss):
                 continue
@@ -782,6 +782,7 @@ def run(ctx) -> dict:
                     "description": desc[:300],
                     "cvss_score": score,
                     "severity": severity,
+                    "cvss_vector": cvss_vector,
                     "cwe_ids": _extract_cwes(cve.get("weaknesses", [])),
                     "affected": _extract_affected(cve.get("configurations", [])),
                     "published_at": published_at,

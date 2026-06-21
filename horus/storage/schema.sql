@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS cve (
     description     TEXT,                       -- nullable: stub rows from JSON migration
     cvss_score      REAL,
     cvss_severity   TEXT,
+    cvss_vector     TEXT,
     published_at    TEXT,
     epss_score      REAL,                       -- EPSS probability (0-1)
     kev             INTEGER DEFAULT 0,          -- CISA Known Exploited (0/1)

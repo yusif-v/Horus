@@ -295,6 +295,7 @@ def cve_from_nvd(raw: dict[str, Any]) -> CVE:
         description=desc,
         cvss_score=raw.get("cvss_score"),
         cvss_severity=raw.get("severity"),
+        cvss_vector=raw.get("cvss_vector"),
         published_at=raw.get("published_at"),
         attack_tags=classify_attack_tags(desc, cwes),
         cwe_ids=cwes,

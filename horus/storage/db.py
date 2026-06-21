@@ -215,6 +215,19 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
         if col not in existing:
             conn.execute(f"ALTER TABLE cve ADD COLUMN {col} {decl}")
 
+    # cve table — additions from v0.12.
+    cve_exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='cve'"
+    ).fetchone()
+    if cve_exists:
+        existing_cve = {row[1] for row in conn.execute("PRAGMA table_info(cve)")}
+        cve_additions = [
+            ("cvss_vector", "TEXT"),
+        ]
+        for col, decl in cve_additions:
+            if col not in existing_cve:
+                conn.execute(f"ALTER TABLE cve ADD COLUMN {col} {decl}")
+
     # user table — additions from v0.10.
     user_exists = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='user'"
@@ -403,15 +416,16 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
 
     conn.execute(
         """INSERT INTO cve
-              (id, description, cvss_score, cvss_severity, published_at,
+              (id, description, cvss_score, cvss_severity, cvss_vector, published_at,
                epss_score, kev, reputation_score, confidence,
                social_mentions, poc_source_count,
                first_seen, last_seen)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              description           = COALESCE(excluded.description, cve.description),
              cvss_score            = COALESCE(excluded.cvss_score, cve.cvss_score),
              cvss_severity         = COALESCE(excluded.cvss_severity, cve.cvss_severity),
+             cvss_vector           = COALESCE(excluded.cvss_vector, cve.cvss_vector),
              published_at          = COALESCE(excluded.published_at, cve.published_at),
              epss_score            = COALESCE(excluded.epss_score, cve.epss_score),
              kev                   = MAX(excluded.kev, cve.kev),
@@ -426,6 +440,7 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
             cve.description,
             cve.cvss_score,
             cve.cvss_severity,
+            cve.cvss_vector,
             cve.published_at.isoformat() if cve.published_at else None,
             cve.epss_score,
             cve.kev,

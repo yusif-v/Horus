@@ -54,11 +54,42 @@ def rail_stats() -> dict:
 # ── dashboard ───────────────────────────────────────────────────────────────
 
 
-def get_stats(year: int | None = None) -> dict:
+def _window_clause(window: str | None) -> str:
+    """Return a SQL WHERE fragment that filters CVEs by publication time window.
+
+    Supported values:
+        '7d'  → published_at >= date('now', '-7 days')
+        '30d' → published_at >= date('now', '-30 days')
+        '90d' → published_at >= date('now', '-90 days')
+        '1y'  → published_at >= date('now', '-1 year')
+        None / 'all' → '' (no filter)
+    """
+    if not window or window == "all":
+        return ""
+    mapping = {
+        "7d": "-7 days",
+        "30d": "-30 days",
+        "90d": "-90 days",
+        "1y": "-1 year",
+    }
+    offset = mapping.get(window)
+    if offset is None:
+        return ""
+    return f"published_at >= date('now', '{offset}')"
+
+
+def get_stats(year: int | None = None, window: str | None = None, recent_limit: int = 5) -> dict:
     """All counts/breakdowns for the dashboard + /api/stats.
 
     If *year* is given, every query is scoped to CVEs published in that
     year (``strftime('%Y', published_at) = <year>``).
+
+    *window* is a time-window filter applied on top of the year filter:
+      '7d'   → last 7 days
+      '30d'  → last 30 days
+      '90d'  → last 90 days
+      '1y'   → last 1 year
+      None/'all' → no time window
     """
     with db_connect() as conn:
         # Build WHERE clause fragments for year-scoping
@@ -68,9 +99,12 @@ def get_stats(year: int | None = None) -> dict:
             year_where = "strftime('%Y', published_at) = ?"
             year_param = [str(year)]
 
+        # Time-window clause
+        window_clause = _window_clause(window)
+
         def _extra(*conds: str) -> str:
-            """Build WHERE clause from year + extra conditions."""
-            parts = [year_where, *conds]
+            """Build WHERE clause from year + window + extra conditions."""
+            parts = [year_where, window_clause, *conds]
             parts = [p for p in parts if p]
             if parts:
                 return "WHERE " + " AND ".join(parts)
@@ -161,8 +195,8 @@ def get_stats(year: int | None = None) -> dict:
             conn.execute(
                 f"SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
                 f" FROM cve {_extra()}"
-                f" ORDER BY published_at DESC LIMIT 10",
-                year_param,
+                f" ORDER BY published_at DESC LIMIT ?",
+                [*year_param, recent_limit],
             ).fetchall()
         )
 

@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
+
 <div class="eyebrow">Threat posture · live</div>
 <h1 class="page-title">Operating <em>picture</em>.</h1>
-<p class="page-subtitle">Aggregated CVE and exploit intelligence from NVD, CISA KEV, EPSS, GitHub PoC, and Exploit-DB. Numbers reflect the current state of the local index.</p>
+<p class="page-subtitle">Aggregated CVE and exploit intelligence from NVD, CISA KEV, EPSS, GitHub PoC, and Exploit-DB. Data for the selected time window.</p>
 
 {% if g.user and not g.user.telegram_chat_id %}
 <div class="telegram-banner">
@@ -14,33 +15,57 @@
 </div>
 {% endif %}
 
+<!-- Year + Window selectors -->
+<div class="dashboard-controls">
+  <div class="control-group">
+    <span class="control-label">Year</span>
+    <div class="pill-group">
+      <a href="/{% if window %}?window={{ window }}{% endif %}" class="pill {% if not year %}active{% endif %}">All</a>
+      {% for y in range(2026, 2014, -1) %}
+      <a href="/?year={{ y }}{% if window %}&window={{ window }}{% endif %}" class="pill {% if year == y %}active{% endif %}">{{ y }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="control-group">
+    <span class="control-label">Window</span>
+    <div class="pill-group">
+      <a href="/{% if year %}?year={{ year }}{% endif %}" class="pill {% if not window %}active{% endif %}">All</a>
+      <a href="/{% if year %}?year={{ year }}&{% else %}?{% endif %}window=7d" class="pill {% if window == '7d' %}active{% endif %}">7d</a>
+      <a href="/{% if year %}?year={{ year }}&{% else %}?{% endif %}window=30d" class="pill {% if window == '30d' %}active{% endif %}">30d</a>
+      <a href="/{% if year %}?year={{ year }}&{% else %}?{% endif %}window=90d" class="pill {% if window == '90d' %}active{% endif %}">90d</a>
+      <a href="/{% if year %}?year={{ year }}&{% else %}?{% endif %}window=1y" class="pill {% if window == '1y' %}active{% endif %}">1y</a>
+    </div>
+  </div>
+</div>
+
+<!-- KPI Cards -->
 <div class="posture">
   <div class="cell">
     <a href="/triage" class="cell-link" aria-label="Actionable now"></a>
     <div class="k">Actionable now</div>
-    <div class="v warn">{{ stats.actionable }}</div>
-    <div class="meta"><a href="/cves?kev=1" class="meta-link">KEV <strong>{{ stats.kev_count }}</strong></a> · <a href="/triage?lens=imminent" class="meta-link">EPSS≥0.5 w/ PoC <strong>{{ stats.imminent }}</strong></a></div>
+    <div class="v warn">{{ stats.actionable or 0 }}</div>
+    <div class="meta"><a href="/cves?kev=1" class="meta-link">KEV <strong>{{ stats.kev_count or 0 }}</strong></a> · <a href="/triage?lens=imminent" class="meta-link">EPSS≥0.5 w/ PoC <strong>{{ stats.imminent or 0 }}</strong></a></div>
     <div class="tick">01</div>
   </div>
   <div class="cell">
     <a href="/triage?lens=weaponized" class="cell-link" aria-label="Weaponized"></a>
     <div class="k">Weaponized</div>
-    <div class="v danger">{{ stats.weaponized }}</div>
+    <div class="v danger">{{ stats.weaponized or 0 }}</div>
     <div class="meta">CVSS≥9 with public PoC</div>
     <div class="tick">02</div>
   </div>
   <div class="cell">
     <a href="/triage?lens=imminent" class="cell-link" aria-label="Imminent"></a>
     <div class="k">Imminent (EPSS≥0.5)</div>
-    <div class="v">{{ stats.imminent }}</div>
+    <div class="v">{{ stats.imminent or 0 }}</div>
     <div class="meta">avg EPSS <strong>{{ "%.2f%%"|format(stats.avg_epss * 100) if stats.avg_epss else '—' }}</strong></div>
     <div class="tick">03</div>
   </div>
   <div class="cell">
     <a href="/pocs" class="cell-link" aria-label="PoCs linked"></a>
     <div class="k">PoCs linked</div>
-    <div class="v info">{{ stats.linked_pocs }}</div>
-    <div class="meta">across <a href="/cves?has_poc=1" class="meta-link"><strong>{{ stats.cves_with_pocs }}</strong> CVEs</a></div>
+    <div class="v info">{{ stats.linked_pocs or 0 }}</div>
+    <div class="meta">across <a href="/cves?has_poc=1" class="meta-link"><strong>{{ stats.cves_with_pocs or 0 }}</strong> CVEs</a></div>
     <div class="tick">04</div>
   </div>
 </div>
@@ -48,205 +73,130 @@
 <script>
 window.__DASHBOARD_DATA__ = {
   severity: {{ stats.severity_breakdown | tojson }},
-  epss:     {{ stats.epss_buckets | tojson }},
   trend:    {{ stats.monthly_cves | tojson }},
-  attacks:  {{ stats.top_tags | tojson }}
+  attacks:  {{ stats.top_tags | tojson }},
+  epss:     {{ stats.epss_buckets | tojson }}
 };
 </script>
 <script src="{{ url_for('static', filename='dashboard-charts.js') }}" defer></script>
 
+<!-- Charts + Live News (2 columns) -->
+<div class="dashboard-main">
+  <div class="dashboard-charts">
+    <div class="section">
+      <div class="section-head"><h2>Analytics</h2><span class="count">visual breakdown</span></div>
+      <div class="panel"><div class="panel-body">
+        <div class="chart-grid">
+          <div class="chart-cell">
+            <div class="chart-title">Severity distribution</div>
+            <canvas id="severityChart"></canvas>
+          </div>
+          <div class="chart-cell">
+            <div class="chart-title">Publication trend</div>
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- Live News Feed -->
+  <div class="dashboard-news">
+    <div class="section">
+      <div class="section-head">
+        <h2>Live News</h2>
+        <span class="count"><a href="/news" class="meta-link">View all →</a></span>
+      </div>
+      <div class="panel"><div class="panel-body">
+        {% if news_articles %}
+        <div class="news-feed">
+          {% for article in news_articles %}
+          <a href="{{ article.url }}" target="_blank" class="news-item">
+            <div class="news-dot tier-{{ article.tier }}"></div>
+            <div class="news-content">
+              <div class="news-title">{{ article.title[:80] }}{% if article.title|length > 80 %}…{% endif %}</div>
+              <div class="news-meta">{{ article.source }} · Tier {{ article.tier }}</div>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">No news yet. Run the news source.</div>
+        {% endif %}
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<!-- CVE Table with filters -->
 <div class="section">
   <div class="section-head">
-    <h2>Analytics <em style="font-family:var(--serif);font-style:italic;color:var(--accent);">/ charts</em></h2>
-    <span class="count">visual breakdown</span>
+    <h2>Recent CVEs</h2>
+    <span class="count">{{ stats.cve_count or 0 }} indexed · <a href="/cves" class="meta-link">View all →</a></span>
   </div>
-  <div class="panel"><div class="panel-body">
-    <div class="chart-grid">
-      <div class="chart-cell">
-        <div class="chart-title">Severity distribution</div>
-        <canvas id="severityChart"></canvas>
-      </div>
-      <div class="chart-cell">
-        <div class="chart-title">Exploit probability (EPSS)</div>
-        <canvas id="epssChart"></canvas>
-      </div>
-      <div class="chart-cell">
-        <div class="chart-title">Publication trend</div>
-        <canvas id="trendChart"></canvas>
-      </div>
-      <div class="chart-cell">
-        <div class="chart-title">Top attack vectors</div>
-        <canvas id="attackChart"></canvas>
-      </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar" id="dashboard-filters">
+    <div class="filter-group">
+      <span class="label">Severity</span>
+      <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+        <option value="">All</option>
+        <option value="/cves?severity=CRITICAL">Critical</option>
+        <option value="/cves?severity=HIGH">High</option>
+        <option value="/cves?severity=MEDIUM">Medium</option>
+        <option value="/cves?severity=LOW">Low</option>
+      </select>
     </div>
+    <div class="filter-group">
+      <span class="label">KEV</span>
+      <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+        <option value="">All</option>
+        <option value="/cves?kev=1">KEV only</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <span class="label">EPSS</span>
+      <select class="filter-select" onchange="if(this.value)location.href=this.value;">
+        <option value="">All</option>
+        <option value="/cves?epss_min=0.5">High (≥0.5)</option>
+        <option value="/cves?epss_min=0.1&epss_max=0.5">Medium (0.1–0.5)</option>
+        <option value="/cves?epss_max=0.1">Low (&lt;0.1)</option>
+      </select>
+    </div>
+  </div>
+
+  {% if stats.recent_cves %}
+  <div class="panel"><div class="panel-body flush">
+    <table id="dashboard-cve-table">
+      <thead><tr><th>CVE</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>KEV</th><th>Published</th></tr></thead>
+      <tbody>
+      {% for cve in stats.recent_cves %}
+      <tr class="cve-row {% if cve.cvss_severity %}sev-{{ cve.cvss_severity }}{% endif %}{% if cve.kev %} kev-row{% endif %}" data-cve-id="{{ cve.id }}" onclick="openCvePanel('{{ cve.id }}')">
+        <td><a href="/cve/{{ cve.id }}" class="cve-id-cell" onclick="event.stopPropagation()">{{ cve.id }}</a></td>
+        <td><span class="num strong" style="color:{% if cve.cvss_score and cve.cvss_score >= 9 %}var(--critical){% elif cve.cvss_score and cve.cvss_score >= 7 %}var(--high){% elif cve.cvss_score and cve.cvss_score >= 4 %}var(--medium){% else %}var(--low){% endif %};">{{ cve.cvss_score or '—' }}</span></td>
+        <td>{% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }}</span>{% else %}—{% endif %}</td>
+        <td>{% if cve.epss_score is not none %}<span class="epss-text">{{ "%.1f%%"|format(cve.epss_score * 100) }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+        <td>{% if cve.kev %}<span class="badge badge-kev badge-kev-animated">KEV</span>{% else %}—{% endif %}</td>
+        <td><span class="num">{{ cve.published_at[:10] if cve.published_at else '—' }}</span></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
   </div></div>
-</div>
-
-{% if stats.kev_cves %}
-<div class="section">
-  <div class="section-head">
-    <h2><a href="/cves?kev=1" class="section-link">Known exploited</a> <em style="font-family:var(--serif);font-style:italic;color:var(--critical);">/ kev</em></h2>
-    <span class="count">{{ stats.kev_count }} total</span>
-    <div class="actions"><a href="/triage?lens=kev">View all →</a></div>
-  </div>
-  <div class="panel">
-    <div class="panel-body flush">
-      <table>
-        <thead><tr><th>CVE</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>Vector summary</th></tr></thead>
-        <tbody>
-        {% for cve in stats.kev_cves %}
-        <tr class="sev-{{ cve.cvss_severity }}">
-          <td><a href="/cve/{{ cve.id }}" class="cve-id-cell">{{ cve.id }}</a></td>
-          <td><span class="num strong">{{ cve.cvss_score or '—' }}</span></td>
-          <td>{% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }}</span>{% else %}—{% endif %}</td>
-          <td>{% if cve.epss_score is not none %}<span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span><span class="epss-text">{{ "%.1f%%"|format(cve.epss_score * 100) }}</span>{% else %}—{% endif %}</td>
-          <td class="desc-cell" style="max-width:480px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ cve.description[:140] if cve.description else '—' }}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-{% endif %}
-
-<div class="two-col">
-  {% if stats.severity_breakdown %}
-  <div>
-    <div class="section-head">
-      <h2><a href="/cves" class="section-link">Severity mix</a></h2>
-      <span class="count"><a href="/cves" class="meta-link">{{ stats.cve_count }} indexed</a></span>
-    </div>
-    <div class="panel"><div class="panel-body">
-      <div class="bar-chart">
-      {% set sev_max = stats.severity_breakdown|map(attribute='cnt')|max %}
-      {% for sev in stats.severity_breakdown %}
-      <a href="/cves?severity={{ sev.cvss_severity }}" class="bar-row clickable">
-        <span class="bar-label">{{ sev.cvss_severity }}</span>
-        <div class="bar-track"><div class="bar-fill {{ sev.cvss_severity|lower }}" style="width: {{ (sev.cnt / sev_max * 100)|int }}%;"></div></div>
-        <span class="bar-value">{{ sev.cnt }}</span>
-      </a>
-      {% endfor %}
-      </div>
-    </div></div>
-  </div>
-  {% endif %}
-
-  {% if stats.epss_buckets %}
-  <div>
-    <div class="section-head">
-      <h2><a href="/cves?has_epss=1" class="section-link">Exploit probability</a></h2>
-      <span class="count"><a href="/cves?has_epss=1" class="meta-link">EPSS · {{ stats.with_epss }} scored</a></span>
-    </div>
-    <div class="panel"><div class="panel-body">
-      <div class="bar-chart">
-      {% set epss_max = stats.epss_buckets|map(attribute='cnt')|max %}
-      {% set epss_classes = {'Very High (≥0.5)': 'epss-vhigh', 'High (0.1-0.5)': 'epss-high', 'Medium (0.01-0.1)': 'epss-med', 'Low (<0.01)': 'epss-low'} %}
-      {% set epss_links = {'Very High (≥0.5)': '/cves?epss_min=0.5', 'High (0.1-0.5)': '/cves?epss_min=0.1&epss_max=0.5', 'Medium (0.01-0.1)': '/cves?epss_min=0.01&epss_max=0.1', 'Low (<0.01)': '/cves?epss_max=0.01'} %}
-      {% for bucket in stats.epss_buckets %}
-      <a href="{{ epss_links.get(bucket.bucket, '/cves') }}" class="bar-row clickable">
-        <span class="bar-label">{{ bucket.bucket }}</span>
-        <div class="bar-track"><div class="bar-fill {{ epss_classes.get(bucket.bucket, 'epss-low') }}" style="width: {{ (bucket.cnt / epss_max * 100)|int }}%;"></div></div>
-        <span class="bar-value">{{ bucket.cnt }}</span>
-      </a>
-      {% endfor %}
-      </div>
-    </div></div>
-  </div>
+  {% else %}
+  <div class="panel"><div class="panel-body" style="text-align:center;padding:2rem;color:var(--text-dim);">No CVEs match the current filters.</div></div>
   {% endif %}
 </div>
 
-<div class="section">
-  <div class="section-head">
-    <h2>Highest <em>EPSS</em></h2>
-    <span class="count">most likely to be exploited</span>
-    <div class="actions"><a href="/cves?sort=epss">All by EPSS →</a></div>
-  </div>
-  <div class="panel">
-    <div class="panel-body flush">
-      <table>
-        <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>KEV</th><th>Description</th></tr></thead>
-        <tbody>
-        {% for cve in stats.highest_epss %}
-        <tr class="sev-{{ cve.cvss_severity }}">
-          <td><a href="/cve/{{ cve.id }}" class="cve-id-cell">{{ cve.id }}</a></td>
-          <td><span class="num strong">{{ cve.cvss_score or '—' }}</span></td>
-          <td><span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (cve.epss_score * 100)|int }}%;"></span></span><span class="badge badge-epss">{{ "%.2f%%"|format(cve.epss_score * 100) }}</span></td>
-          <td>{% if cve.kev %}<span class="badge badge-kev">KEV</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
-          <td class="desc-cell" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{% if cve.description %}{{ cve.description[:140] }}{% else %}—{% endif %}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
+<!-- Bottom stats -->
 <div class="two-col">
+  {% if stats.top_tags %}
   <div>
-    <div class="section-head"><h2><a href="/cves?sort=date&window=week" class="section-link">Recent ingest</a></h2><span class="count">last 10</span></div>
-    <div class="panel"><div class="panel-body flush">
-      <table>
-        <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>Published</th></tr></thead>
-        <tbody>
-        {% for cve in stats.recent_cves %}
-        <tr class="sev-{{ cve.cvss_severity }}">
-          <td><a href="/cve/{{ cve.id }}" class="cve-id-cell">{{ cve.id }}</a></td>
-          <td><span class="num strong">{{ cve.cvss_score or '—' }}</span> {% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity[:3] }}</span>{% endif %}</td>
-          <td>{% if cve.epss_score is not none %}<span class="epss-text">{{ "%.1f%%"|format(cve.epss_score * 100) }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
-          <td><span class="num">{{ cve.published_at[:10] if cve.published_at else '—' }}</span></td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div></div>
-  </div>
-  <div>
-    <div class="section-head"><h2><a href="/pocs" class="section-link">Top PoCs</a> <em>by reach</em></h2><span class="count">★ ranked</span></div>
-    <div class="panel"><div class="panel-body flush">
-      <table>
-        <thead><tr><th>Source</th><th>Stars</th><th>URL</th></tr></thead>
-        <tbody>
-        {% for poc in stats.top_pocs %}
-        <tr>
-          <td><a href="/pocs?source={{ poc.source }}" class="badge badge-source">{{ poc.source }}</a></td>
-          <td><span class="num strong" style="color:var(--accent);">★ {{ poc.stars }}</span></td>
-          <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="{{ poc.url }}" target="_blank" style="font-family:var(--mono);font-size:12px;">{{ poc.url[:55] }}…</a></td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div></div>
-  </div>
-</div>
-
-{% if stats.top_tags %}
-<div class="section">
-  <div class="section-head"><h2><a href="/cves" class="section-link">Attack surface</a></h2><span class="count">top vectors observed</span></div>
-  <div class="panel"><div class="panel-body">
-    {% set max_tag = stats.top_tags|map(attribute='cnt')|max %}
-    <div class="tag-cloud">
-      {% for tag in stats.top_tags %}
-      <a href="/cves?tag={{ tag.tag }}" class="badge badge-tag {% if tag.cnt > max_tag * 0.6 %}large{% endif %}">{{ tag.tag }} · {{ tag.cnt }}</a>
-      {% endfor %}
-    </div>
-  </div></div>
-</div>
-{% endif %}
-
-<div class="two-col">
-  {% if stats.monthly_cves %}
-  <div>
-    <div class="section-head"><h2><a href="/cves?sort=date" class="section-link">Publication tempo</a></h2><span class="count">last 6 months</span></div>
+    <div class="section-head"><h2><a href="/cves" class="section-link">Attack surface</a></h2><span class="count">top vectors</span></div>
     <div class="panel"><div class="panel-body">
-      <div class="bar-chart">
-      {% set month_max = stats.monthly_cves|map(attribute='cnt')|max %}
-      {% for m in stats.monthly_cves %}
-      <a href="/cves?window=month&month={{ m.month }}" class="bar-row clickable">
-        <span class="bar-label">{{ m.month }}</span>
-        <div class="bar-track"><div class="bar-fill monthly" style="width: {{ (m.cnt / month_max * 100)|int }}%;"></div></div>
-        <span class="bar-value">{{ m.cnt }}</span>
-      </a>
+      <div class="tag-cloud">
+      {% for tag in stats.top_tags[:15] %}
+      <a href="/cves?tag={{ tag.tag }}" class="badge badge-tag {% if tag.cnt > 10 %}large{% endif %}">{{ tag.tag }} · {{ tag.cnt }}</a>
       {% endfor %}
       </div>
     </div></div>
@@ -255,33 +205,28 @@ window.__DASHBOARD_DATA__ = {
 
   {% if stats.sources %}
   <div>
-    <div class="section-head"><h2><a href="/pocs" class="section-link">PoC sources</a></h2><span class="count"><a href="/pocs" class="meta-link">{{ stats.poc_count }} artifacts</a></span></div>
+    <div class="section-head"><h2><a href="/pocs" class="section-link">PoC sources</a></h2><span class="count">{{ stats.poc_count or 0 }} artifacts</span></div>
     <div class="panel"><div class="panel-body">
-      <div class="bar-chart">
-      {% set src_max = stats.sources|map(attribute='cnt')|max %}
       {% for src in stats.sources %}
-      <a href="/pocs?source={{ src.source }}" class="bar-row clickable">
-        <span class="bar-label">{{ src.source }}</span>
-        <div class="bar-track"><div class="bar-fill epss-high" style="width: {{ (src.cnt / src_max * 100)|int }}%;"></div></div>
-        <span class="bar-value">{{ src.cnt }}</span>
-      </a>
+      <a href="/pocs?source={{ src.source }}" class="badge badge-source">{{ src.source }} · {{ src.cnt }}</a>
       {% endfor %}
-      </div>
     </div></div>
   </div>
   {% endif %}
 </div>
 
-{% if stats.categories %}
-<div class="section">
-  <div class="section-head"><h2><a href="/cves" class="section-link">Affected product categories</a></h2><span class="count"><a href="/cves" class="meta-link">{{ stats.categories|length }} categories</a></span></div>
-  <div class="panel"><div class="panel-body">
-    <div class="tag-cloud">
-    {% for cat in stats.categories %}
-    <a href="/cves?category={{ cat.category }}" class="badge badge-tag {% if cat.cnt > 50 %}large{% endif %}">{{ cat.category }} · {{ cat.cnt }}</a>
-    {% endfor %}
-    </div>
-  </div></div>
+<!-- Slide-out CVE detail panel -->
+<div id="cve-panel-overlay" class="cve-panel-overlay" onclick="closeCvePanel()"></div>
+<div id="cve-panel" class="cve-panel">
+  <div class="cve-panel-header">
+    <span id="cve-panel-title" class="cve-panel-title">CVE Detail</span>
+    <button class="cve-panel-close" onclick="closeCvePanel()">×</button>
+  </div>
+  <div id="cve-panel-body" class="cve-panel-body">
+    <div style="text-align:center;padding:40px;color:var(--text-dim);">Click a CVE row to view details.</div>
+  </div>
 </div>
-{% endif %}
+
+<script src="{{ url_for('static', filename='dashboard-cve-panel.js') }}" defer></script>
+
 {% endblock %}

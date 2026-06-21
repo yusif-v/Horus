@@ -117,16 +117,25 @@ def test_extract_cwes_dedups_and_sorts():
 
 def test_extract_cvss_prefers_v31():
     metrics = {
-        "cvssMetricV31": [{"cvssData": {"baseScore": 9.8, "baseSeverity": "CRITICAL"}}],
+        "cvssMetricV31": [
+            {
+                "cvssData": {
+                    "baseScore": 9.8,
+                    "baseSeverity": "CRITICAL",
+                    "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                }
+            }
+        ],
         "cvssMetricV2": [{"cvssData": {"baseScore": 5.0, "baseSeverity": "MEDIUM"}}],
     }
-    score, sev = nvd._extract_cvss(metrics)
+    score, sev, vec = nvd._extract_cvss(metrics)
     assert score == 9.8
     assert sev == "CRITICAL"
+    assert vec == "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
 
 
 def test_extract_cvss_missing_returns_none():
-    assert nvd._extract_cvss({}) == (None, None)
+    assert nvd._extract_cvss({}) == (None, None, None)
 
 
 def test_resolve_start_no_last_run_uses_default_lookback():

@@ -36,6 +36,7 @@ class CVE:
     description: str
     cvss_score: float | None = None
     cvss_severity: str | None = None
+    cvss_vector: str | None = None
     published_at: datetime | None = None
     attack_tags: list[str] = field(default_factory=list)
     cwe_ids: list[str] = field(default_factory=list)
