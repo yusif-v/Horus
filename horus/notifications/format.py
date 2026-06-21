@@ -40,11 +40,7 @@ def _format_epss(item: dict) -> str:
     cve_id = item.get("cve_id", "Unknown")
     score = item.get("epss_score", 0)
     pct = f"{score * 100:.1f}%" if score else "N/A"
-    return (
-        f"📊 *EPSS JUMP*\n"
-        f"*{cve_id}* — EPSS now {pct}\n"
-        f"https://nvd.nist.gov/vuln/detail/{cve_id}"
-    )
+    return f"📊 *EPSS JUMP*\n*{cve_id}* — EPSS now {pct}\nhttps://nvd.nist.gov/vuln/detail/{cve_id}"
 
 
 def _format_critical(item: dict) -> str:
@@ -80,7 +76,5 @@ def _format_poc(item: dict) -> str:
     url = item.get("url", "")
     source = item.get("source", "")
     return (
-        f"🔧 *NEW PoC*\n"
-        f"*{cve_id}* — [{source}]({url})\n"
-        f"https://nvd.nist.gov/vuln/detail/{cve_id}"
+        f"🔧 *NEW PoC*\n*{cve_id}* — [{source}]({url})\nhttps://nvd.nist.gov/vuln/detail/{cve_id}"
     )

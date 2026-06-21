@@ -18,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 
-from flask import Blueprint, abort, g, redirect, request, url_for, Response
+from flask import Blueprint, abort, g, redirect, request, url_for
 
 from ...storage import db as _storage
 from .. import audit
@@ -188,6 +188,7 @@ def _bulk_import(file, team: str, note: str | None):
                             entries.append({"vendor": v, "product": p})
         except json.JSONDecodeError as e:
             from flask import redirect, url_for
+
             return redirect(url_for("watchlist.index", flash=f"JSON error: {e}"))
     else:
         # CSV — try to detect header
@@ -205,6 +206,7 @@ def _bulk_import(file, team: str, note: str | None):
 
     if not entries:
         from flask import redirect, url_for
+
         return redirect(url_for("watchlist.index", flash="No valid entries found in file"))
 
     added = 0
@@ -228,6 +230,7 @@ def _bulk_import(file, team: str, note: str | None):
         after={"added": added, "skipped": skipped, "file": file.filename},
     )
     from flask import redirect, url_for
+
     msg = f"Imported {added} entries"
     if skipped:
         msg += f" ({skipped} duplicates skipped)"

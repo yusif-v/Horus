@@ -201,6 +201,7 @@ def _cves_for_url(url: str, tweet_cves: list[str]) -> list[str]:
     For non-CVE-specific URLs (e.g. GitHub repos), return all tweet CVEs.
     """
     import re
+
     # Extract CVE ID from URL itself (e.g. nvd.nist.gov/vuln/detail/CVE-2026-21520)
     url_cve_match = re.search(r"(CVE-\d{4}-\d{4,})", url, re.IGNORECASE)
     if url_cve_match:

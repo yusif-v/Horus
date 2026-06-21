@@ -8,10 +8,10 @@ from __future__ import annotations
 import sys
 from datetime import datetime, timezone
 
-from ..storage import db as _storage
 from ..bot.api import TelegramAPI, TelegramError
+from ..storage import db as _storage
+from ..web.notifications import DEFAULT_PREFS
 from .format import format_event_message
-from ..web.notifications import CATEGORIES, DEFAULT_PREFS
 
 
 def _now_str() -> str:
@@ -47,8 +47,7 @@ def dispatch(events: dict[str, list[dict]], token: str | None = None) -> None:
     with _storage.connect() as conn:
         # Get all users with Telegram linked
         users = conn.execute(
-            "SELECT id, username, telegram_chat_id FROM user "
-            "WHERE telegram_chat_id IS NOT NULL"
+            "SELECT id, username, telegram_chat_id FROM user WHERE telegram_chat_id IS NOT NULL"
         ).fetchall()
 
         if not users:
@@ -102,4 +101,5 @@ def _batch_messages(messages: list[str], max_len: int = 4000) -> list[str]:
 def _get_token() -> str | None:
     """Get bot token from env var."""
     import os
+
     return os.environ.get("TELEGRAM_BOT_TOKEN") or None
