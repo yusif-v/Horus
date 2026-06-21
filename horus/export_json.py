@@ -143,7 +143,7 @@ def _fetch_cves_for_year(conn: sqlite3.Connection, year: str) -> list[dict[str, 
         SELECT id, description, cvss_score, cvss_severity, epss_score, kev, published_at
         FROM cve
         WHERE SUBSTR(published_at, 1, 4) = ?
-        ORDER BY cvss_score DESC NULLS LAST
+        ORDER BY cvss_score DESC
         """,
         (year,),
     ).fetchall()
@@ -182,7 +182,7 @@ def _fetch_linked_repos(conn: sqlite3.Connection, cve_id: str) -> list[dict[str,
             FROM poc_cve pc
             JOIN poc p ON p.url = pc.poc_url
             WHERE pc.cve_id = ?
-            ORDER BY p.stars DESC NULLS LAST
+            ORDER BY p.stars DESC
             """,
             (cve_id,),
         )

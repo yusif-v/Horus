@@ -676,7 +676,7 @@ def fetch_resources(
         ]
         offset = (page - 1) * per_page
         d_kw = "ASC" if direction == "asc" else "DESC"
-        nulls = "NULLS FIRST" if d_kw == "ASC" else "NULLS LAST"
+
         sort_cols = {
             "newest": "first_seen",
             "engagement": "engagement_score",
@@ -686,7 +686,7 @@ def fetch_resources(
             "author": "source_author",
         }
         col = sort_cols.get(sort, "first_seen")
-        primary = f"{col} {d_kw}" + (f" {nulls}" if sort in ("stars", "author") else "")
+        primary = f"{col} {d_kw}"
         order_by = f"{primary}, first_seen DESC"
         rows = conn.execute(
             f"""SELECT url, resource_type, title, description, source, source_url,

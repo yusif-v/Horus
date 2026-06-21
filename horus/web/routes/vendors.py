@@ -34,12 +34,11 @@ def list_vendors():
         "kev": "kev_count",
     }
     d = "ASC" if sort_dir == "asc" else "DESC"
-    nulls = "NULLS FIRST" if d == "ASC" else "NULLS LAST"
     # Watchlist sort is applied in Python after we know in_watchlist
     if sort == "watchlist":
         order = "cve_count DESC"
     else:
-        order = f"{sort_cols[sort]} {d}" + (f" {nulls}" if sort in ("cvss", "epss") else "")
+        order = f"{sort_cols[sort]} {d}"
 
     try:
         with db_connect() as conn:

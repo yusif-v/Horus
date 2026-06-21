@@ -15,7 +15,7 @@ ORDER_COLS = {
     "epss": "epss_score",
     "kev": "kev",
     "date": "published_at",
-    "newest": "first_seen",
+    "newest": "published_at",
     "social": "social_mentions",
     "poc_count": "(SELECT COUNT(*) FROM poc_cve WHERE cve_id = c.id)",
 }
@@ -24,10 +24,9 @@ ORDER_COLS = {
 def _order_clause(sort: str, direction: str) -> str:
     col = ORDER_COLS.get(sort, ORDER_COLS["cvss"])
     d = "ASC" if direction == "asc" else "DESC"
-    nulls = "NULLS FIRST" if d == "ASC" else "NULLS LAST"
     if sort == "kev":
-        return f"kev {d} {nulls}, cvss_score DESC NULLS LAST"
-    return f"{col} {d} {nulls}"
+        return f"kev {d}, cvss_score DESC"
+    return f"{col} {d}"
 
 
 WINDOW_DAYS = {"day": 1, "week": 7, "month": 30}
@@ -321,7 +320,7 @@ def list_cves():
         "PoCs",
         "Social",
         "Description",
-        "Ingested",
+        "Published",
     ]
     col_widths = ["140px", "70px", "120px", "130px", "60px", "60px", "70px", "auto", "110px"]
     cells = [

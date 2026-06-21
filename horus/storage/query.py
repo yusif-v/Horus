@@ -78,7 +78,7 @@ def _fetch_linked_pocs(conn: sqlite3.Connection, cve_id: str) -> list[dict[str, 
             FROM poc_cve pc
             JOIN poc p ON p.url = pc.poc_url
             WHERE pc.cve_id = ?
-            ORDER BY p.stars DESC NULLS LAST
+            ORDER BY p.stars DESC
         """,
             (cve_id.upper(),),
         )
@@ -96,7 +96,7 @@ def _fetch_related_pocs(conn: sqlite3.Connection, cve_id: str) -> list[dict[str,
             FROM poc
             WHERE (description LIKE ? OR url LIKE ?)
               AND url NOT IN (SELECT poc_url FROM poc_cve WHERE cve_id = ?)
-            ORDER BY stars DESC NULLS LAST
+            ORDER BY stars DESC
         """,
             (f"%{cve_id.upper()}%", f"%{cve_short}%", cve_id.upper()),
         )
@@ -181,7 +181,7 @@ def _search_cves_by_keyword(conn: sqlite3.Connection, keyword: str) -> list[dict
             SELECT id, cvss_score, cvss_severity, description, epss_score, kev
             FROM cve
             WHERE id LIKE ? OR description LIKE ?
-            ORDER BY cvss_score DESC NULLS LAST
+            ORDER BY cvss_score DESC
             LIMIT 20
         """,
             (pattern, pattern),

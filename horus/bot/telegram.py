@@ -199,7 +199,7 @@ def _handle_cve(api: TelegramAPI, chat_id: int, text: str) -> None:
                 " LEFT JOIN cve_product cp ON cp.cve_id = c.id"
                 " LEFT JOIN product p ON p.id = cp.product_id"
                 " WHERE c.description LIKE ? OR p.vendor LIKE ? OR p.product LIKE ?"
-                " ORDER BY c.published_at DESC NULLS LAST LIMIT 10",
+                " ORDER BY c.published_at DESC LIMIT 10",
                 (pattern, pattern, pattern),
             ).fetchall()
 
@@ -221,7 +221,7 @@ def _handle_kev(api: TelegramAPI, chat_id: int) -> None:
     with _storage.connect() as conn:
         rows = conn.execute(
             "SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
-            " FROM cve WHERE kev = 1 ORDER BY published_at DESC NULLS LAST LIMIT 10"
+            " FROM cve WHERE kev = 1 ORDER BY published_at DESC LIMIT 10"
         ).fetchall()
     cves = [dict(r) for r in rows]
     if not cves:

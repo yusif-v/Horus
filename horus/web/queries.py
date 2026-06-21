@@ -161,7 +161,7 @@ def get_stats(year: int | None = None) -> dict:
             conn.execute(
                 f"SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
                 f" FROM cve {_extra()}"
-                f" ORDER BY published_at DESC NULLS LAST LIMIT 10",
+                f" ORDER BY published_at DESC LIMIT 10",
                 year_param,
             ).fetchall()
         )
@@ -187,7 +187,7 @@ def get_stats(year: int | None = None) -> dict:
             conn.execute(
                 f"""
             SELECT id, cvss_score, cvss_severity, epss_score, description FROM cve
-            {_extra("kev = 1")} ORDER BY cvss_score DESC NULLS LAST LIMIT 10
+            {_extra("kev = 1")} ORDER BY cvss_score DESC LIMIT 10
         """,
                 year_param,
             ).fetchall()
@@ -269,7 +269,7 @@ def search_cves(query: str, page: int = 1, per_page: int = 20) -> tuple[list[dic
                 cve_id = f"CVE-{cve_id}"
             rows = conn.execute(
                 "SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
-                " FROM cve WHERE id LIKE ? ORDER BY cvss_score DESC NULLS LAST",
+                " FROM cve WHERE id LIKE ? ORDER BY cvss_score DESC",
                 (f"{cve_id}%",),
             ).fetchall()
             results = _rows_to_dicts(rows)
@@ -284,7 +284,7 @@ def search_cves(query: str, page: int = 1, per_page: int = 20) -> tuple[list[dic
         rows = conn.execute(
             "SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
             " FROM cve WHERE id LIKE ? OR description LIKE ?"
-            " ORDER BY cvss_score DESC NULLS LAST LIMIT ? OFFSET ?",
+            " ORDER BY cvss_score DESC LIMIT ? OFFSET ?",
             (pattern, pattern, per_page, offset),
         ).fetchall()
         return _rows_to_dicts(rows), total
@@ -353,7 +353,7 @@ def get_cve_detail(cve_id: str) -> dict | None:
                 """
             SELECT p.url, p.source, p.stars, p.age_days, p.description, p.exploit_type
             FROM poc_cve pc JOIN poc p ON p.url = pc.poc_url
-            WHERE pc.cve_id = ? ORDER BY p.stars DESC NULLS LAST
+            WHERE pc.cve_id = ? ORDER BY p.stars DESC
         """,
                 (cve_id,),
             )
@@ -449,13 +449,13 @@ def fetch_pocs(
             COALESCE(p.repo_created_at, p.first_seen)
         )) AS INTEGER)"""
         d = "ASC" if direction == "asc" else "DESC"
-        nulls = "NULLS FIRST" if d == "ASC" else "NULLS LAST"
+
         # "newest=desc" means newest first (smallest age). Flip when asc.
         if sort == "newest":
             primary = f"{age_expr} {'DESC' if direction == 'asc' else 'ASC'}"
             order_by = f"{primary}, p.first_seen DESC"
         elif sort == "stars":
-            order_by = f"p.stars {d} {nulls}, p.first_seen DESC"
+            order_by = f"p.stars {d}, p.first_seen DESC"
         elif sort == "source":
             order_by = f"p.source {d}, p.first_seen DESC"
         else:
