@@ -71,7 +71,7 @@
       </thead>
       <tbody>
       {% for row in rows %}
-      <tr class="{% if row.cvss_severity %}sev-{{ row.cvss_severity }}{% endif %} status-{{ row.status }}">
+      <tr class="{% if row.cvss_severity %}sev-{{ row.cvss_severity }}{% endif %} status-{{ row.status }}{% if row.kev %} kev-row{% endif %}">
         <td><a href="/cve/{{ row.id }}" class="cve-id-cell">{{ row.id }}</a></td>
         <td>
           {% if row.cvss_score is not none %}
@@ -83,7 +83,7 @@
             <span class="num">{{ "%.1f%%"|format(row.epss_score * 100) }}</span>
           {% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
         </td>
-        <td>{% if row.kev %}<span class="badge badge-critical">KEV</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+        <td>{% if row.kev %}<span class="badge badge-kev badge-kev-animated">KEV</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
         <td><span class="num">{{ row.poc_count }}</span></td>
         <td><span class="status-chip status-{{ row.status }}">{{ row.status }}</span></td>
         <td>

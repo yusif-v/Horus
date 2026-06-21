@@ -18,7 +18,7 @@
   <div class="filter-group">
     <span class="label">Quick</span>
     {% for f in quick_filters %}
-    <a href="{{ f.url }}" class="chip chip-quick {% if f.active %}active{% endif %}">{{ f.label }}</a>
+    <a href="{{ f.url }}" class="chip chip-quick{% if f.cls %} {{ f.cls }}{% endif %}{% if f.active %} active{% endif %}">{{ f.label }}</a>
     {% endfor %}
   </div>
   {% endif %}
@@ -163,7 +163,7 @@
       <thead><tr>{% for col in columns %}{% set s = column_sorts[loop.index0] if column_sorts else None %}<th>{% if s %}<a href="{{ s.url }}" class="col-sort {% if s.active %}active{% endif %}">{{ col }}{% if s.active %}<span class="arrow">{{ '▼' if s.dir == 'desc' else '▲' }}</span>{% endif %}</a>{% else %}{{ col }}{% endif %}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for row in rows %}
-      <tr class="{% if row.cvss_severity %}sev-{{ row.cvss_severity }}{% endif %}">
+      <tr class="{% if row.cvss_severity %}sev-{{ row.cvss_severity }}{% endif %}{% if row.kev %} kev-row{% endif %}">
         {% for cell in cells %}
         <td>
           {% if cell.type == 'cve_link' %}<a href="/cve/{{ row[cell.key] }}" class="cve-id-cell">{{ row[cell.key] }}</a>
@@ -189,7 +189,7 @@
             {% if row[cell.key] is not none %}
             <span class="epss-bar"><span class="epss-bar-fill" style="width: {{ (row[cell.key] * 100)|int }}%;"></span></span><span class="epss-text">{{ "%.1f%%"|format(row[cell.key] * 100) }}</span>
             {% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
-          {% elif cell.type == 'kev' %}{% if row[cell.key] %}<span class="badge badge-kev">KEV</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
+          {% elif cell.type == 'kev' %}{% if row[cell.key] %}<span class="badge badge-kev badge-kev-animated">KEV</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}
           {% elif cell.type == 'date' %}<span class="num">{{ row[cell.key][:10] if row[cell.key] else '—' }}</span>
           {% else %}{% if row[cell.key] is not none %}<span class="num">{{ row[cell.key] }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}{% endif %}
         </td>

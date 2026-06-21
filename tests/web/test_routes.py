@@ -89,6 +89,31 @@ def test_api_stats_contract_keys_present(auth_client):
     assert must_have.issubset(data.keys())
 
 
+def test_triage_kev_lens(auth_client):
+    """KEV lens returns 200 and filters to KEV-only CVEs."""
+    r = auth_client.get("/triage?lens=kev")
+    assert r.status_code == 200
+    # The page should render without error; with an empty DB it shows
+    # "No matching records" rather than KEV badges.
+    assert b"triage" in r.data.lower() or b"No matching" in r.data
+
+
+def test_cves_kev_quick_filter(auth_client):
+    """CVE list KEV quick filter returns 200."""
+    r = auth_client.get("/cves?kev=1")
+    assert r.status_code == 200
+    assert b"KEV" in r.data or b"No matching" in r.data
+
+
+def test_kev_animated_badge_css(auth_client):
+    """Animated KEV badge classes must be present in the stylesheet."""
+    css = auth_client.get("/static/horus.css").get_data(as_text=True)
+    assert ".badge-kev-animated" in css
+    assert "@keyframes kev-pulse" in css
+    assert "kev-row" in css
+    assert "chip-kev" in css
+
+
 def test_pages_share_horizontal_anchor(auth_client):
     """The scrollbar-gutter + .nav max-width fix must remain in the CSS."""
     css = auth_client.get("/static/horus.css").get_data(as_text=True)

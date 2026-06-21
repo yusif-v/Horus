@@ -430,6 +430,33 @@ tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);    
   border-color: var(--critical); font-weight: 600;
 }
 .badge-kev::before { content: "⏵"; font-size: 10px; }
+
+/* Animated KEV badge — subtle pulse draw */
+.badge-kev-animated {
+  animation: kev-pulse 2.4s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(251,55,72,.45);
+}
+@keyframes kev-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(251,55,72,.45); }
+  60%  { box-shadow: 0 0 0 6px rgba(251,55,72,0); }
+  100% { box-shadow: 0 0 0 0 rgba(251,55,72,0); }
+}
+html[data-theme="light"] .badge-kev-animated {
+  animation: kev-pulse-light 2.4s ease-in-out infinite;
+}
+@keyframes kev-pulse-light {
+  0%   { box-shadow: 0 0 0 0 rgba(214,31,51,.35); }
+  60%  { box-shadow: 0 0 0 6px rgba(214,31,51,0); }
+  100% { box-shadow: 0 0 0 0 rgba(214,31,51,0); }
+}
+
+/* KEV row highlight — faint red left border + hover tint */
+tbody tr.kev-row td:first-child {
+  box-shadow: inset 3px 0 0 var(--critical);
+}
+tbody tr.kev-row:hover td {
+  background: rgba(251,55,72,.04);
+}
 .badge-epss     { background: rgba(var(--info-rgb),.08); color: var(--info); border-color: rgba(var(--info-rgb),.25); }
 .badge-source   { background: var(--surface-2); color: var(--text-mid); border-color: var(--border); }
 .badge-tag      { background: rgba(var(--accent-rgb),.06); color: var(--accent); border-color: rgba(var(--accent-rgb),.2); }
@@ -617,6 +644,29 @@ tbody tr.sev-LOW td:first-child      { box-shadow: inset 3px 0 0 var(--low);    
 }
 .chip:hover { color: var(--text); border-color: var(--border-hi); }
 .chip.active { background: var(--accent); color: #0a0d0c; border-color: var(--accent); font-weight: 500; }
+.chip-quick {
+  border-color: var(--border-hi);
+  font-weight: 500;
+}
+.chip-quick.active {
+  background: var(--accent);
+  color: #0a0d0c;
+}
+.chip-kev {
+  border-color: rgba(251,55,72,.4);
+  color: var(--critical);
+  font-weight: 600;
+}
+.chip-kev:hover {
+  border-color: var(--critical);
+  color: var(--critical);
+}
+.chip-kev.active {
+  background: var(--critical);
+  color: #fff;
+  border-color: var(--critical);
+  box-shadow: 0 0 12px rgba(251,55,72,.35);
+}
 
 /* ── Pagination ──────────────────────────────────────── */
 .pagination {

@@ -246,6 +246,12 @@ def list_cves():
     # Quick filter chips
     quick_filters = [
         {
+            "label": "KEV Only",
+            "url": f"/cves?kev=1{_qs(kev=None).replace('?', '&') if _qs(kev=None) else ''}",
+            "active": bool(kev_only),
+            "cls": "chip-kev",
+        },
+        {
             "label": "Critical + PoC",
             "url": "/cves?severity=CRITICAL&has_poc=1",
             "active": severity == "CRITICAL" and bool(has_poc),
