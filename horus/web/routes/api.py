@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
-from ..queries import get_cve_detail, get_stats
+from ..queries import get_cve_detail, get_stats, search_cves
 from .auth import READ_ALL, role_required
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -14,7 +14,37 @@ bp = Blueprint("api", __name__, url_prefix="/api")
 @role_required(*READ_ALL)
 def stats():
     try:
-        return jsonify(get_stats())
+        year = request.args.get("year", type=int)
+        return jsonify(get_stats(year=year))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/cves")
+@role_required(*READ_ALL)
+def cves():
+    """List CVEs, optionally filtered by year with pagination."""
+    try:
+        year = request.args.get("year", type=int)
+        page = request.args.get("page", default=1, type=int)
+        per_page = request.args.get("per_page", default=20, type=int)
+        # Clamp per_page to a sane range
+        per_page = max(1, min(per_page, 100))
+
+        results, total = search_cves("", page=page, per_page=per_page)
+
+        if year is not None:
+            year_str = str(year)
+            results = [r for r in results if r.get("published_at", "").startswith(year_str)]
+
+        return jsonify(
+            {
+                "results": results,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

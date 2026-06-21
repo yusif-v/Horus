@@ -54,30 +54,55 @@ def rail_stats() -> dict:
 # ── dashboard ───────────────────────────────────────────────────────────────
 
 
-def get_stats() -> dict:
-    """All counts/breakdowns for the dashboard + /api/stats."""
+def get_stats(year: int | None = None) -> dict:
+    """All counts/breakdowns for the dashboard + /api/stats.
+
+    If *year* is given, every query is scoped to CVEs published in that
+    year (``strftime('%Y', published_at) = <year>``).
+    """
     with db_connect() as conn:
-        cve_count = conn.execute("SELECT COUNT(*) FROM cve").fetchone()[0]
+        # Build WHERE clause fragments for year-scoping
+        year_where = ""
+        year_param: list[str] = []
+        if year is not None:
+            year_where = "strftime('%Y', published_at) = ?"
+            year_param = [str(year)]
+
+        def _extra(*conds: str) -> str:
+            """Build WHERE clause from year + extra conditions."""
+            parts = [year_where, *conds]
+            parts = [p for p in parts if p]
+            if parts:
+                return "WHERE " + " AND ".join(parts)
+            return ""
+
+        def _cve_count(*extra_conds: str) -> int:
+            where = _extra(*extra_conds)
+            return conn.execute(f"SELECT COUNT(*) FROM cve {where}", year_param).fetchone()[0]
+
+        cve_count = _cve_count()
         poc_count = conn.execute("SELECT COUNT(*) FROM poc").fetchone()[0]
-        kev_count = conn.execute("SELECT COUNT(*) FROM cve WHERE kev = 1").fetchone()[0]
-        with_epss = conn.execute(
-            "SELECT COUNT(*) FROM cve WHERE epss_score IS NOT NULL"
-        ).fetchone()[0]
+        kev_count = _cve_count("kev = 1")
+        with_epss = _cve_count("epss_score IS NOT NULL")
         linked_pocs = conn.execute("SELECT COUNT(DISTINCT poc_url) FROM poc_cve").fetchone()[0]
         cves_with_pocs = conn.execute("SELECT COUNT(DISTINCT cve_id) FROM poc_cve").fetchone()[0]
 
         avg_epss = conn.execute(
-            "SELECT AVG(epss_score) FROM cve WHERE epss_score IS NOT NULL"
+            f"SELECT AVG(epss_score) FROM cve {_extra('epss_score IS NOT NULL')}",
+            year_param,
         ).fetchone()[0]
         avg_reputation = conn.execute(
-            "SELECT AVG(reputation_score) FROM cve WHERE reputation_score IS NOT NULL"
+            f"SELECT AVG(reputation_score) FROM cve {_extra('reputation_score IS NOT NULL')}",
+            year_param,
         ).fetchone()[0]
 
-        social_heat = conn.execute("SELECT COUNT(*) FROM cve WHERE social_mentions > 0").fetchone()[
-            0
-        ]
+        social_heat = conn.execute(
+            f"SELECT COUNT(*) FROM cve {_extra('social_mentions > 0')}",
+            year_param,
+        ).fetchone()[0]
         social_mentions_total = conn.execute(
-            "SELECT COALESCE(SUM(social_mentions), 0) FROM cve"
+            f"SELECT COALESCE(SUM(social_mentions), 0) FROM cve {_extra()}",
+            year_param,
         ).fetchone()[0]
 
         try:
@@ -89,22 +114,27 @@ def get_stats() -> dict:
 
         severity_breakdown = _rows_to_dicts(
             conn.execute(
-                "SELECT cvss_severity, COUNT(*) as cnt FROM cve WHERE cvss_severity IS NOT NULL"
-                " GROUP BY cvss_severity ORDER BY cnt DESC"
+                f"SELECT cvss_severity, COUNT(*) as cnt FROM cve"
+                f" {_extra('cvss_severity IS NOT NULL')}"
+                f" GROUP BY cvss_severity ORDER BY cnt DESC",
+                year_param,
             ).fetchall()
         )
 
         epss_buckets = _rows_to_dicts(
-            conn.execute("""
+            conn.execute(
+                f"""
             SELECT CASE
                 WHEN epss_score >= 0.5 THEN 'Very High (≥0.5)'
                 WHEN epss_score >= 0.1 THEN 'High (0.1-0.5)'
                 WHEN epss_score >= 0.01 THEN 'Medium (0.01-0.1)'
                 WHEN epss_score IS NOT NULL THEN 'Low (<0.01)'
             END as bucket, COUNT(*) as cnt
-            FROM cve WHERE epss_score IS NOT NULL
+            FROM cve {_extra("epss_score IS NOT NULL")}
             GROUP BY bucket ORDER BY cnt DESC
-        """).fetchall()
+        """,
+                year_param,
+            ).fetchall()
         )
 
         sources = _rows_to_dicts(
@@ -129,8 +159,10 @@ def get_stats() -> dict:
 
         recent_cves = _rows_to_dicts(
             conn.execute(
-                "SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
-                " FROM cve ORDER BY published_at DESC NULLS LAST LIMIT 10"
+                f"SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
+                f" FROM cve {_extra()}"
+                f" ORDER BY published_at DESC NULLS LAST LIMIT 10",
+                year_param,
             ).fetchall()
         )
 
@@ -142,40 +174,57 @@ def get_stats() -> dict:
         )
 
         highest_epss = _rows_to_dicts(
-            conn.execute("""
+            conn.execute(
+                f"""
             SELECT id, cvss_score, cvss_severity, epss_score, kev FROM cve
-            WHERE epss_score IS NOT NULL ORDER BY epss_score DESC LIMIT 10
-        """).fetchall()
+            {_extra("epss_score IS NOT NULL")} ORDER BY epss_score DESC LIMIT 10
+        """,
+                year_param,
+            ).fetchall()
         )
 
         kev_cves = _rows_to_dicts(
-            conn.execute("""
+            conn.execute(
+                f"""
             SELECT id, cvss_score, cvss_severity, epss_score, description FROM cve
-            WHERE kev = 1 ORDER BY cvss_score DESC NULLS LAST LIMIT 10
-        """).fetchall()
+            {_extra("kev = 1")} ORDER BY cvss_score DESC NULLS LAST LIMIT 10
+        """,
+                year_param,
+            ).fetchall()
         )
 
         monthly_cves = _rows_to_dicts(
-            conn.execute("""
+            conn.execute(
+                f"""
             SELECT strftime('%Y-%m', published_at) as month, COUNT(*) as cnt
-            FROM cve WHERE published_at IS NOT NULL
+            FROM cve {_extra("published_at IS NOT NULL")}
               AND published_at >= date('now', '-6 months')
             GROUP BY month ORDER BY month
-        """).fetchall()
+        """,
+                year_param,
+            ).fetchall()
         )
 
-        weaponized = conn.execute("""
+        weaponized = conn.execute(
+            f"""
             SELECT COUNT(DISTINCT c.id) FROM cve c
             JOIN poc_cve pc ON pc.cve_id = c.id
-            WHERE c.cvss_score >= 9
-        """).fetchone()[0]
-        imminent = conn.execute("SELECT COUNT(*) FROM cve WHERE epss_score >= 0.5").fetchone()[0]
-        actionable = conn.execute("""
+            {_extra("c.cvss_score >= 9")}
+        """,
+            year_param,
+        ).fetchone()[0]
+        imminent = _cve_count("epss_score >= 0.5")
+        actionable = conn.execute(
+            f"""
             SELECT COUNT(DISTINCT c.id) FROM cve c
             LEFT JOIN poc_cve pc ON pc.cve_id = c.id
-            WHERE c.kev = 1 OR (c.epss_score >= 0.5 AND pc.cve_id IS NOT NULL)
-        """).fetchone()[0]
-        latest_update = conn.execute("SELECT MAX(first_seen) FROM cve").fetchone()[0]
+            {_extra("c.kev = 1 OR (c.epss_score >= 0.5 AND pc.cve_id IS NOT NULL)")}
+        """,
+            year_param,
+        ).fetchone()[0]
+        latest_update = conn.execute(
+            f"SELECT MAX(first_seen) FROM cve {_extra()}", year_param
+        ).fetchone()[0]
 
     return {
         "cve_count": cve_count,

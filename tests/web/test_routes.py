@@ -89,6 +89,26 @@ def test_api_stats_contract_keys_present(auth_client):
     assert must_have.issubset(data.keys())
 
 
+def test_api_stats_with_year(auth_client):
+    """GET /api/stats?year=2026 returns 200 with cve_count."""
+    r = auth_client.get("/api/stats?year=2026")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "cve_count" in data
+    assert isinstance(data["cve_count"], int)
+
+
+def test_api_cves_with_year(auth_client):
+    """GET /api/cves?year=2026 returns 200."""
+    r = auth_client.get("/api/cves?year=2026")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "results" in data
+    assert "total" in data
+    assert "page" in data
+    assert "per_page" in data
+
+
 def test_triage_kev_lens(auth_client):
     """KEV lens returns 200 and filters to KEV-only CVEs."""
     r = auth_client.get("/triage?lens=kev")
