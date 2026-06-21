@@ -42,3 +42,93 @@ def classify_product_category(*texts: str) -> str:
         if needle in haystack:
             return category
     return "unknown"
+
+
+def classify_exploit_type(text: str) -> str:
+    """Return an exploit type label from text.
+
+    Keyword-based classifier that inspects the combined description / repo
+    text for known exploit-type signals.  Priority order matters — the first
+    match wins — so more specific patterns should appear before generic ones.
+
+    Returns one of: RCE, LPE, Inject, DoS, Bypass, PoC, or "Exploit" as
+    the default fallback.
+    """
+    hay = f" {text.lower()} "
+
+    # Ordered so the most specific / highest-signal patterns match first.
+    rules: list[tuple[list[str], str]] = [
+        # RCE
+        (
+            [
+                "rce",
+                "remote code execution",
+                "code execution",
+                "command injection",
+                "cmd injection",
+            ],
+            "RCE",
+        ),
+        # LPE
+        (
+            [
+                "lpe",
+                "privilege escalation",
+                "privesc",
+                "local privilege",
+                "root exploit",
+            ],
+            "LPE",
+        ),
+        # Injection
+        (
+            [
+                "sqli",
+                "sql injection",
+                "xss",
+                "cross-site",
+                "ssti",
+                "template injection",
+                "xxe",
+                "xml injection",
+            ],
+            "Inject",
+        ),
+        # DoS
+        (
+            [
+                " dos ",
+                "denial of service",
+                "flood",
+                "crash",
+                "blue screen",
+                "bsod",
+            ],
+            "DoS",
+        ),
+        # Bypass
+        (
+            [
+                "bypass",
+                "auth bypass",
+                "authentication bypass",
+                "waf bypass",
+            ],
+            "Bypass",
+        ),
+        # PoC (generic — keep last before default)
+        (
+            [
+                "proof of concept",
+                "writeup",
+            ],
+            "PoC",
+        ),
+    ]
+
+    for needles, label in rules:
+        for needle in needles:
+            if needle in hay:
+                return label
+
+    return "Exploit"

@@ -302,7 +302,7 @@ def get_cve_detail(cve_id: str) -> dict | None:
         linked_pocs = _rows_to_dicts(
             conn.execute(
                 """
-            SELECT p.url, p.source, p.stars, p.age_days, p.description
+            SELECT p.url, p.source, p.stars, p.age_days, p.description, p.exploit_type
             FROM poc_cve pc JOIN poc p ON p.url = pc.poc_url
             WHERE pc.cve_id = ? ORDER BY p.stars DESC NULLS LAST
         """,
@@ -413,7 +413,7 @@ def fetch_pocs(
             order_by = f"{age_expr} ASC, p.first_seen DESC"
         rows = conn.execute(
             f"""SELECT p.url, p.source, p.stars, p.description, p.first_seen,
-                       p.repo_created_at,
+                       p.repo_created_at, p.exploit_type,
                        {age_expr} AS age_days,
                        GROUP_CONCAT(pc.cve_id) AS cve_ids
                 FROM poc p

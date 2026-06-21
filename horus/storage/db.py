@@ -237,6 +237,19 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
     # Keep only the CVE that matches the URL path.
     _cleanup_wrong_poc_cve_links(conn)
 
+    # poc table — additions from v0.11.
+    poc_exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='poc'"
+    ).fetchone()
+    if poc_exists:
+        existing_poc = {row[1] for row in conn.execute("PRAGMA table_info(poc)")}
+        poc_additions = [
+            ("exploit_type", "TEXT"),
+        ]
+        for col, decl in poc_additions:
+            if col not in existing_poc:
+                conn.execute(f"ALTER TABLE poc ADD COLUMN {col} {decl}")
+
 
 def _cleanup_wrong_poc_cve_links(conn: sqlite3.Connection) -> None:
     """Fix poc_cve rows where a CVE-specific URL was linked to unrelated CVEs.
@@ -463,16 +476,27 @@ def persist_poc(conn: sqlite3.Connection, poc: PoC) -> None:
     age_days = _compute_age_days(poc.repo_created_at)
     conn.execute(
         """INSERT INTO poc
-              (url, source, stars, age_days, description, first_seen, last_seen, repo_created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              (url, source, stars, age_days, description, first_seen, last_seen, repo_created_at, exploit_type)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(url) DO UPDATE SET
              stars           = excluded.stars,
              age_days        = excluded.age_days,
              description     = excluded.description,
              last_seen       = excluded.last_seen,
-             repo_created_at = COALESCE(excluded.repo_created_at, poc.repo_created_at)
+             repo_created_at = COALESCE(excluded.repo_created_at, poc.repo_created_at),
+             exploit_type    = COALESCE(excluded.exploit_type, poc.exploit_type)
         """,
-        (poc.url, poc.source, poc.stars, age_days, poc.description, now, now, poc.repo_created_at),
+        (
+            poc.url,
+            poc.source,
+            poc.stars,
+            age_days,
+            poc.description,
+            now,
+            now,
+            poc.repo_created_at,
+            poc.exploit_type,
+        ),
     )
 
 

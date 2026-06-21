@@ -81,11 +81,12 @@ def list_pocs():
         url = "/pocs" + (("?" + "&".join(params)) if params else "")
         return {"url": url, "active": False, "dir": "desc"}
 
-    columns = ["CVE", "URL", "Source", "Stars", "Age (d)", "Description"]
+    columns = ["CVE", "URL", "Source", "Type", "Stars", "Age (d)", "Description"]
     cells = [
         {"type": "cve_links", "key": "cve_ids"},
         {"type": "poc_link", "key": "url"},
         {"type": "badge", "key": "source"},
+        {"type": "exploit_type", "key": "exploit_type"},
         {"type": "stars", "key": "stars"},
         {"type": "plain", "key": "age_days"},
         {"type": "truncate", "key": "description"},
@@ -94,6 +95,7 @@ def list_pocs():
         None,
         None,
         _col_sort("source"),
+        None,
         _col_sort("stars"),
         _col_sort("newest"),
         None,

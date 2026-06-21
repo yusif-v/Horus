@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS poc (
     fetched_date    TEXT,                       -- when PoC was fetched from external source
     first_seen      TEXT NOT NULL,
     last_seen       TEXT NOT NULL,
-    repo_created_at TEXT                        -- ISO 8601: when the repo/resource was created at source
+    repo_created_at TEXT,                       -- ISO 8601: when the repo/resource was created at source
+    exploit_type    TEXT                        -- RCE | LPE | Inject | DoS | Bypass | PoC | Exploit
 );
 
 CREATE TABLE IF NOT EXISTS product (

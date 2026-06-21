@@ -116,6 +116,7 @@
         <a href="{{ poc.url }}" target="_blank" rel="noopener noreferrer" class="poc-url">{{ poc.url }}</a>
         <div class="poc-meta">
           <span class="badge badge-source">{{ poc.source }}</span>
+          {% if poc.exploit_type %}<span class="badge badge-exploit-{{ poc.exploit_type|lower }}">{{ poc.exploit_type }}</span>{% endif %}
           {% if poc.age_days is not none %}<span>{{ poc.age_days }}d old</span>{% endif %}
         </div>
         {% if poc.description %}<div class="poc-desc">{{ poc.description[:240] }}</div>{% endif %}

@@ -27,6 +27,7 @@ class PoC:
     description: str | None = None
     cve_refs: list[str] = field(default_factory=list)
     repo_created_at: str | None = None  # ISO 8601 timestamp from source (e.g. GitHub created_at)
+    exploit_type: str | None = None  # RCE, LPE, Inject, DoS, Bypass, PoC, Exploit
 
 
 @dataclass

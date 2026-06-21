@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from .classify import classify_attack_tags, classify_product_category
+from .classify import classify_attack_tags, classify_exploit_type, classify_product_category
 from .filters import extract_cves
 from .model import CVE, AffectedProduct, PoC
 
@@ -318,6 +318,7 @@ def poc_from_github(raw: dict[str, Any]) -> PoC:
         description=raw.get("description"),
         cve_refs=raw.get("cves") or extract_cves(text),
         repo_created_at=raw.get("repo_created_at"),
+        exploit_type=classify_exploit_type(text),
     )
 
 
@@ -330,10 +331,12 @@ def poc_from_twitter(raw: dict[str, Any]) -> PoC:
         age_days=raw.get("age_days"),
         description=text[:300],
         cve_refs=raw.get("cves") or extract_cves(text),
+        exploit_type=classify_exploit_type(text),
     )
 
 
 def poc_from_nitter(raw: dict[str, Any]) -> PoC:
+    text = raw.get("description", "") or ""
     return PoC(
         url=raw.get("url", ""),
         source="nitter",
@@ -341,10 +344,12 @@ def poc_from_nitter(raw: dict[str, Any]) -> PoC:
         age_days=raw.get("age_days"),
         description=raw.get("description"),
         cve_refs=raw.get("cves", []),
+        exploit_type=classify_exploit_type(text),
     )
 
 
 def poc_from_exploitdb(raw: dict[str, Any]) -> PoC:
+    text = raw.get("description", "") or ""
     return PoC(
         url=raw.get("url", ""),
         source="exploit-db",
@@ -352,6 +357,7 @@ def poc_from_exploitdb(raw: dict[str, Any]) -> PoC:
         age_days=None,
         description=raw.get("description"),
         cve_refs=raw.get("cves", []),
+        exploit_type=classify_exploit_type(text),
     )
 
 
@@ -364,6 +370,7 @@ def poc_from_gitlab(raw: dict[str, Any]) -> PoC:
         age_days=raw.get("age_days"),
         description=raw.get("description"),
         cve_refs=raw.get("cves") or extract_cves(text),
+        exploit_type=classify_exploit_type(text),
     )
 
 
@@ -377,10 +384,12 @@ def poc_from_codeberg(raw: dict[str, Any]) -> PoC:
         description=raw.get("description"),
         cve_refs=raw.get("cves") or extract_cves(text),
         repo_created_at=raw.get("repo_created_at"),
+        exploit_type=classify_exploit_type(text),
     )
 
 
 def poc_from_pastebin(raw: dict[str, Any]) -> PoC:
+    text = raw.get("description", "") or ""
     return PoC(
         url=raw.get("url", ""),
         source="pastebin",
@@ -388,12 +397,14 @@ def poc_from_pastebin(raw: dict[str, Any]) -> PoC:
         age_days=None,
         description=raw.get("description", "")[:300],
         cve_refs=raw.get("cves", []),
+        exploit_type=classify_exploit_type(text),
     )
 
 
 def poc_from_web(raw: dict[str, Any]) -> PoC:
     """Generic PoC from any web URL (HackerOne, Bugcrowd, etc.)."""
     source = raw.get("source", "web")
+    text = raw.get("description", "") or ""
     return PoC(
         url=raw.get("url", ""),
         source=source,
@@ -401,6 +412,7 @@ def poc_from_web(raw: dict[str, Any]) -> PoC:
         age_days=None,
         description=raw.get("description", "")[:300],
         cve_refs=raw.get("cves", []),
+        exploit_type=classify_exploit_type(text),
     )
 
 
