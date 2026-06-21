@@ -319,6 +319,28 @@ a.section-link:hover { color: var(--accent); }
 }
 .section-head .actions a:hover { color: var(--accent); }
 
+/* ── Chart grid ─────────────────────────────────────────── */
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+.chart-cell {
+  min-height: 260px;
+  position: relative;
+}
+.chart-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: .75rem;
+}
+@media (max-width: 860px) {
+  .chart-grid { grid-template-columns: 1fr; }
+}
+
 /* ── Card / Panel ─────────────────────────────────────── */
 .panel {
   background: var(--surface);

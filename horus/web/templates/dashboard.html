@@ -45,6 +45,43 @@
   </div>
 </div>
 
+<script>
+window.__DASHBOARD_DATA__ = {
+  severity: {{ stats.severity_breakdown | tojson }},
+  epss:     {{ stats.epss_buckets | tojson }},
+  trend:    {{ stats.monthly_cves | tojson }},
+  attacks:  {{ stats.top_tags | tojson }}
+};
+</script>
+<script src="{{ url_for('static', filename='dashboard-charts.js') }}" defer></script>
+
+<div class="section">
+  <div class="section-head">
+    <h2>Analytics <em style="font-family:var(--serif);font-style:italic;color:var(--accent);">/ charts</em></h2>
+    <span class="count">visual breakdown</span>
+  </div>
+  <div class="panel"><div class="panel-body">
+    <div class="chart-grid">
+      <div class="chart-cell">
+        <div class="chart-title">Severity distribution</div>
+        <canvas id="severityChart"></canvas>
+      </div>
+      <div class="chart-cell">
+        <div class="chart-title">Exploit probability (EPSS)</div>
+        <canvas id="epssChart"></canvas>
+      </div>
+      <div class="chart-cell">
+        <div class="chart-title">Publication trend</div>
+        <canvas id="trendChart"></canvas>
+      </div>
+      <div class="chart-cell">
+        <div class="chart-title">Top attack vectors</div>
+        <canvas id="attackChart"></canvas>
+      </div>
+    </div>
+  </div></div>
+</div>
+
 {% if stats.kev_cves %}
 <div class="section">
   <div class="section-head">
