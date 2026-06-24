@@ -13,6 +13,8 @@ import gzip
 import sys
 import urllib.request
 
+from ..storage.db import append_epss_history
+
 NAME = "EPSS Scores"
 DEFAULT_ENABLED = True
 
@@ -93,26 +95,20 @@ def enrich(ctx) -> None:
 
 
 def _backfill_db(conn, scores: dict[str, float]) -> int:
-    """Backfill EPSS scores for all unscored CVEs in the database.
-
-    Returns the number of CVEs updated.
-    """
-    unscored = conn.execute("SELECT id FROM cve WHERE epss_score IS NULL").fetchall()
-    if not unscored:
-        return 0
-
+    """Backfill EPSS scores + append history for all known CVEs."""
+    all_cves = conn.execute("SELECT id, epss_score FROM cve").fetchall()
     updated = 0
-    for (cve_id,) in unscored:
+    for cve_id, current in all_cves:
         cve_upper = cve_id.upper()
-        if cve_upper in scores:
-            conn.execute(
-                "UPDATE cve SET epss_score = ? WHERE id = ?",
-                (scores[cve_upper], cve_id),
-            )
+        if cve_upper not in scores:
+            continue
+        new_score = scores[cve_upper]
+        if current is None:
+            conn.execute("UPDATE cve SET epss_score = ? WHERE id = ?", (new_score, cve_id))
             updated += 1
-
+        append_epss_history(conn, cve_id, new_score)
     if updated:
-        print(f"  EPSS backfill: {updated}/{len(unscored)} unscored CVEs updated", file=sys.stderr)
+        print(f"  EPSS backfill: {updated} unscored CVEs updated", file=sys.stderr)
     return updated
 
 
