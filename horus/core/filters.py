@@ -6,7 +6,9 @@ import re
 
 from ..config import FRESH_POC_KEYWORDS, LOW_VALUE_KEYWORDS
 
-_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
+# Accept hyphen OR underscore separators — many GitHub repos name PoCs
+# like `cve_2026_31431` instead of the canonical `CVE-2026-31431`.
+_CVE_RE = re.compile(r"CVE[-_]\d{4}[-_]\d{4,}", re.IGNORECASE)
 
 
 def is_fresh_poc(text: str) -> bool:
@@ -27,4 +29,5 @@ def is_fresh_poc(text: str) -> bool:
 
 
 def extract_cves(text: str) -> list[str]:
-    return sorted({m.upper() for m in _CVE_RE.findall(text)})
+    # Normalize separators so `cve_2026_31431` → `CVE-2026-31431`.
+    return sorted({m.upper().replace("_", "-") for m in _CVE_RE.findall(text)})

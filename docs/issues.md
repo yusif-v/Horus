@@ -1,8 +1,8 @@
 # Horus — Known Issues & Technical Debt
 
-*Last updated: 2026-06-12*
-*Current version: v0.9.0-dev*
-*Health score: 64/100 (CVEs grew 1062 → 1231 after pipeline run)*
+*Last updated: 2026-06-24*
+*Current version: v0.10.0*
+*Health score: 86/100*
 
 ---
 
@@ -10,103 +10,81 @@
 
 | Category | Score | Max | Notes |
 |----------|-------|-----|-------|
-| Core pipeline | 85 | 100 | Solid architecture, plugin-based sources, clean merge layer |
-| Data quality | 50 | 100 | New CVEs use improved aliases; existing rows not backfilled |
-| Web UI | 75 | 100 | Functional, fast, good design. Missing filters, news feed |
-| Test coverage | 27 | 100 | 34 tests pass, 27% coverage. Gate at 25%, target 70% |
-| Code quality | 80 | 100 | Ruff clean, mypy strict on core. Needs expansion to sources/web |
-| Documentation | 75 | 100 | Plan docs, README, consolidated roadmap. Missing API docs |
-| Security | 55 | 100 | No auth on server, no input validation on search, open localhost |
-| Ops/Deploy | 40 | 100 | No CI/CD, no release workflow, no SBOM, no dependabot |
-| **Overall** | **64** | **100** | Functional prototype; data quality + test coverage remain the bottleneck |
+| Core pipeline | 90 | 100 | Plugin sources, source-purity model, clean merge layer, lifecycle hooks |
+| Data quality | 80 | 100 | Products backfilled (1 unknown of 163), EPSS on 1081/1090, PoC→CVE relinked |
+| Web UI | 88 | 100 | Auth/RBAC, Chart.js dashboard, news feed, vendor exposure, triage, themes |
+| Test coverage | 74 | 100 | 610 tests, 74.5% coverage. Gate at 70% |
+| Code quality | 82 | 100 | Ruff clean; mypy strict on core+pipeline only (expansion pending) |
+| Documentation | 80 | 100 | Plan docs per version, README, roadmap. API docs still thin |
+| Security | 80 | 100 | Auth + RBAC + CSRF + audit log; bot token via env; search length-capped |
+| Ops/Deploy | 75 | 100 | CI, pip-audit, CycloneDX SBOM, Dependabot, GH Actions security workflow |
+| **Overall** | **86** | **100** | Mature internal tool; remaining gaps are mypy breadth + intel depth |
 
 ---
 
-## Critical Issues
+## Open Issues
 
-### CRIT-01: Product data quality — partial backfill
-**Severity:** High | **Status:** Code fixed, backfill pending
-**Impact:** Existing CVE rows still show "unknown" vendors
+### OPEN-01: mypy --strict not expanded beyond core
+**Severity:** Low | **Status:** Tracked (was v0.9.2)
+Strict scope is still `horus/core/*` + `pipeline.py`. `storage/`, `sources/`,
+`enrichers/`, `net/`, `web/` remain untyped under strict. Expand layer by
+layer per `docs/plans/v0.9.x.md`.
 
-- 8 unique products in DB after fresh run; new CVEs benefit from 600+ vendor / 400+ product aliases
-- Existing 1062 CVE rows were persisted before the alias expansion and aren't reprocessed
-- **Next step:** Either (a) write a one-shot backfill script to re-parse CPE strings for existing rows, or (b) accept the gradual improvement as old CVEs roll off the active window
+### OPEN-02: PoC→CVE linkage limited to published CVEs
+**Severity:** Low | **Status:** By design, candidate feature
+17 of 43 PoCs link to a CVE. The remaining ~26 reference CVE IDs not yet in
+NVD (signal-only). Today these PoCs are stored but neither linked nor pushed
+to `cve_watchlist`. A future enhancement could create watchlist entries from
+PoC-discovered CVE IDs so pre-NVD PoCs surface.
 
-### CRIT-02: PoC → CVE linking — awaiting new PoCs
-**Severity:** High | **Status:** Code fixed, awaiting new PoC discoveries
-**Impact:** `poc_cve` table empty for the 3 existing PoCs (URLs not rescanned)
+### OPEN-03: X/Twitter social intel thin
+**Severity:** Low | **Status:** Runtime/config
+Only 7 CVEs have `social_mentions > 0`. Depends on the X source running with
+Chrome-cookie auth and query breadth. Consider widening X queries and/or
+adding Mastodon/Reddit signal sources.
 
-- `poc_from_github()` and `poc_from_gitlab()` now scan URL for CVE IDs
-- 3 PoCs persisted before fix — they won't be relinked unless we add a backfill pass
-- **Next step:** Add a backfill that re-runs `extract_cves(url + description)` over existing `poc` rows and writes to `poc_cve`
-
-### CRIT-03: No test coverage for sources/web/storage
-**Severity:** High | **Status:** Tracked in v0.9.1
-**Impact:** Regressions go undetected, refactoring is risky
-
-- 27% overall coverage (34 tests)
-- See `docs/plans/v0.9.x.md` for the coverage-lift plan
-
----
-
-## High Priority
-
-### HIGH-01: No authentication on web server (v0.10)
-- Server binds to 127.0.0.1:8080, no auth, no API keys, no rate limiting
-
-### HIGH-02: News feed not implemented (v0.9)
-- Spec in `docs/plans/web-v0.9.md`; no `news_item` table, no RSS sources yet
-
-### HIGH-03: Severity filter doesn't work on /cves
-- Route accepts `?severity=`, template doesn't pass it to the API
-- Fix in `horus/web/routes/cves.py` + template
+### OPEN-04: API docs thin
+**Severity:** Low
+`/api/stats`, `/api/cves`, `/api/cve/<id>` (incl. `?year=`) are stable but
+undocumented. Add a short API reference.
 
 ---
 
-## Medium Priority
+## Recently Resolved (v0.10.0 + 2026-06-24 hygiene sweep)
 
-- **MED-01: Exploit-DB disabled by default** — `DEFAULT_ENABLED = False` in `exploitdb.py`. Decide: enable or document opt-in rationale.
-- **MED-02: Social posts thin** — 1 CVE has `social_mentions > 0`. Increase X queries; consider Mastodon/Reddit sources.
-- **MED-03: No input length limits on search** — params are parameterized but no bounds. Add length caps.
-- **MED-04: Dashboard tag filters not clickable** — tags render as static badges. Spec in `web-v0.9.md`.
-
----
-
-## Low Priority
-
-- **LOW-01: No CI/CD** — tracked v0.9.3
-- **LOW-02: No release workflow / SBOM** — tracked v0.9.3
-- **LOW-03: mypy strict not expanded** — tracked v0.9.2
-- **LOW-04: No API docs** — `/api/stats`, `/api/cve/<id>` undocumented
-
----
-
-## Recently Resolved
-
-| ID | Fix | Commit |
-|----|-----|--------|
-| RES-01 | Version strings rendered char-by-char | `4b91f45` |
-| RES-02 | Vendor names missing on CVE detail | `43838ca` |
-| RES-03 | PoC list missing CVE column | `666f984` |
-| RES-04 | Nested venv / stale files in git | `180d0ee` |
-| RES-05 | Duplicate vendor alias keys | `338c4f2` |
-| RES-06 | Social posts (X) on CVE pages | (v0.9 Tier 4) |
-| RES-07 | `persist_social_posts` scope bug | (v0.9 Tier 4) |
+| ID | Fix |
+|----|-----|
+| RES-10 | `feedparser` missing from venv broke test collection + `/news` — declared in extras, installed; news source now lazy-imports feedparser so a core-only install degrades gracefully |
+| RES-11 | `extract_cves` now normalizes underscore separators (`cve_2026_31431` → `CVE-2026-31431`) |
+| RES-12 | PoC→CVE backfill re-run: links 9 → 17 |
+| RES-13 | `/vendors` route test coverage 12% → 95% |
+| RES-14 | Stale `issues.md` / `roadmap.md` rewritten to v0.10.0 reality |
+| RES-01 | CRIT-01 product vendor backfill (`horus --backfill=products`) |
+| RES-02 | CRIT-02 PoC→CVE backfill (`horus --backfill=poc_cve`) |
+| RES-03 | Web auth + RBAC (admin/analyst/viewer), CSRF, audit log |
+| RES-04 | News feed (RSS, 4-tier classification, `/news`) |
+| RES-05 | Dashboard Chart.js (severity donut, EPSS bars, trend, attack tags) |
+| RES-06 | Telegram bot (link tokens, commands, notification dispatch) |
+| RES-07 | Supply chain: pip-audit, CycloneDX SBOM, Dependabot, GH security workflow |
+| RES-08 | Exploit-type auto-classification + badges; year-scoped API |
+| RES-09 | Search input length-capped (200 chars) |
 
 ---
 
-## Data Health Snapshot (post pipeline run 2026-06-12)
+## Data Health Snapshot (2026-06-24)
 
 ```
-CVEs:              1,231
-PoCs:                  3
-PoC→CVE links:         0   (backfill needed)
-Products:              8
-CVE-Product links:   616
-Attack tags:         951+
-CWE links:         1,180+
-Social posts:          1+
-Watchlist:             8
+CVEs:              1,090
+PoCs:                 43
+PoC→CVE links:        17
+Products:            163   (1 unknown vendor)
+CVEs w/ EPSS:      1,081
+News articles:       145
+Security resources:   12
+Social mentions:       7 CVEs
+Watchlist:            33
+Tests:               610   (74.5% coverage)
 ```
 
-See `docs/plans/v0.9.x.md` for the active workstream and `docs/roadmap.md` for longer-term ideas.
+See `docs/roadmap.md` for forward-looking work and `docs/plans/` for
+per-version detail.

@@ -2,17 +2,34 @@
 
 *Consolidates the former `IDEA.md` and `IDEA_EXTENDED.md`. Active version work lives in `docs/plans/`. Open issues live in `docs/issues.md`.*
 
-*Last updated: 2026-06-12*
+*Last updated: 2026-06-24*
 
 ---
 
-## What Horus is today (v0.9-dev)
+## What Horus is today (v0.10.0)
 
-Daily PoC research scanner with plugin architecture, 5 sources (NVD, GitHub, X/Twitter, Exploit-DB, GitLab), 2 enrichers (KEV, EPSS), SQLite persistence, reputation scoring, watchlist, 24/7 server mode, web dashboard, CVE query reports.
+Daily PoC research scanner + 24/7 server with plugin architecture. Sources:
+NVD (authoritative), GitHub, Codeberg, X/Twitter, Exploit-DB, GitLab, News/RSS.
+Enrichers: KEV, EPSS. SQLite persistence, reputation scoring, watchlist,
+per-team (red/blue) RBAC, audit log, Telegram bot + notification dispatch,
+web dashboard with Chart.js, news feed, vendor-exposure view, KEV triage,
+exploit-type classification, year-scoped API, static JSON export.
 
-**Strengths:** plugin sources, source-purity model (NVD authoritative, others signals), reputation scoring, watchlist for pre-NVD signals, server mode with per-source intervals, web UI, X auth via Chrome cookies, path-traversal hardening.
+**Strengths:** plugin sources, source-purity model (NVD authoritative, others
+signals), reputation scoring, watchlist for pre-NVD signals, server mode with
+per-source intervals, authenticated web UI with RBAC + CSRF + audit, Telegram
+delivery, X auth via Chrome cookies, supply-chain hardening (pip-audit, SBOM,
+Dependabot).
 
-**Gap:** it collects but doesn't correlate, prioritize, predict, or act. That's the differentiation opportunity.
+**Gap (still the differentiation opportunity):** it collects and delivers but
+doesn't yet *correlate, verify, predict, or map* — no correlation engine, no
+automated PoC verification, no exploitability forecasting, no ATT&CK mapping,
+no STIX/TAXII publishing. That is the v0.11+ frontier (see below).
+
+> Shipped since the v0.9 snapshot below: news feed, Chart.js dashboard, vendor
+> exposure, KEV triage, exploit-type classification, year API, JSON export,
+> Telegram bot, RBAC/audit, supply-chain CI, data backfills. The tables below
+> track the *remaining* unbuilt differentiators.
 
 ---
 

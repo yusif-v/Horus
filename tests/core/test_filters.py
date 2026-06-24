@@ -24,6 +24,12 @@ def test_extract_cves_requires_4plus_digits_in_id_suffix():
     assert "CVE-2026-12" not in extract_cves("CVE-2026-12 should not match")
 
 
+def test_extract_cves_normalizes_underscore_separators():
+    # GitHub repos often name PoCs with underscores, e.g. cve_2026_31431.
+    assert extract_cves("github.com/x/cve_2026_31431") == ["CVE-2026-31431"]
+    assert extract_cves("CVE_2026_12345 and cve-2026-12345") == ["CVE-2026-12345"]
+
+
 def test_is_fresh_poc_accepts_real_exploit_text():
     assert is_fresh_poc("Proof-of-concept exploit for RCE in nginx") is True
 

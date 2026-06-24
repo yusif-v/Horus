@@ -63,7 +63,7 @@ def test_run_persists_articles(monkeypatch, tmp_path):
             "feed": type("FeedInfo", (), {"title": "CISA Alerts"})(),
         },
     )()
-    monkeypatch.setattr("horus.sources.news.feedparser.parse", lambda url: fake_feed)
+    monkeypatch.setattr("feedparser.parse", lambda url: fake_feed)
 
     ctx = SourceContext()
     result = news.run(ctx)
@@ -102,7 +102,7 @@ def test_run_skips_duplicate_urls(monkeypatch, tmp_path):
             "feed": type("FeedInfo", (), {"title": "Test"})(),
         },
     )()
-    monkeypatch.setattr("horus.sources.news.feedparser.parse", lambda url: fake_feed)
+    monkeypatch.setattr("feedparser.parse", lambda url: fake_feed)
 
     # First run
     news.run(SourceContext())
@@ -121,9 +121,7 @@ def test_run_handles_feedparser_error(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "horus.db")
     db.initialize()
 
-    monkeypatch.setattr(
-        "horus.sources.news.feedparser.parse", lambda url: (_ for _ in ()).throw(Exception("boom"))
-    )
+    monkeypatch.setattr("feedparser.parse", lambda url: (_ for _ in ()).throw(Exception("boom")))
 
     result = news.run(SourceContext())
     assert result == {}

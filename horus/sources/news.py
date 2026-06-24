@@ -8,8 +8,6 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 
-import feedparser
-
 from ..storage import db
 
 NAME = "News/RSS Feed"
@@ -118,6 +116,14 @@ def run(ctx) -> dict:
     Returns {{}} (empty dict) — articles are persisted directly,
     not through the resource pipeline.
     """
+    try:
+        import feedparser
+    except ImportError:
+        # Optional dependency (declared in the `web`/`server` extras). Without
+        # it the news source is a no-op rather than a hard failure, so a
+        # core-only install can still run the rest of the pipeline.
+        return {}
+
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     with db.connect() as conn:
