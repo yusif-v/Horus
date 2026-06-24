@@ -44,7 +44,12 @@
               {{ deep_link }}
             </div>
           {% else %}
-            <span style="color:var(--text-dim);">Deep link unavailable — bot username not configured.</span>
+            <p style="color:var(--text-dim);font-size:12px;margin:0 0 .5rem;">
+              Deep link unavailable (bot username not configured). Send this command to the bot manually:
+            </p>
+            <div style="font-family:var(--mono);font-size:12px;word-break:break-all;user-select:all;">
+              /start {{ active_token.token }}
+            </div>
           {% endif %}
         </div>
         <form method="post" action="{{ url_for('profile.telegram_generate') }}" style="display:inline;">
