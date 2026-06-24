@@ -31,6 +31,8 @@ class CveRow(TypedDict, total=False):
     exploitability_score: float | None
     social_mentions: int
     poc_source_count: int
+    imminence_score: float | None
+    imminence_bucket: str | None
     reputation_score: float | None
     confidence: str
     first_seen: str
@@ -223,6 +225,8 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
         existing_cve = {row[1] for row in conn.execute("PRAGMA table_info(cve)")}
         cve_additions = [
             ("cvss_vector", "TEXT"),
+            ("imminence_score", "REAL"),
+            ("imminence_bucket", "TEXT"),
         ]
         for col, decl in cve_additions:
             if col not in existing_cve:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from horus.core import forecast
+from horus.core.model import CVE
 from horus.storage import db
 
 
@@ -33,3 +34,45 @@ def test_velocity_positive_when_rising():
         conn.commit()
         # (0.40 - 0.10) / 10 days = 0.03 / day
         assert abs(forecast.epss_velocity("CVE-2026-3002", conn) - 0.03) < 1e-6
+
+
+def test_imminence_kev_plus_high_epss_is_imminent():
+    cve = CVE(
+        id="CVE-2026-4000",
+        description="x",
+        cvss_score=9.8,
+        epss_score=0.9,
+        kev=1,
+        poc_source_count=2,
+    )
+    score, bucket = forecast.compute_imminence(cve, epss_velocity=0.05)
+    assert score >= 7.5
+    assert bucket == "imminent"
+
+
+def test_imminence_low_signal_is_unlikely():
+    cve = CVE(
+        id="CVE-2026-4001",
+        description="x",
+        cvss_score=2.0,
+        epss_score=0.0,
+        kev=0,
+        poc_source_count=0,
+    )
+    _, bucket = forecast.compute_imminence(cve, epss_velocity=0.0)
+    assert bucket == "unlikely"
+
+
+def test_imminence_bucket_boundaries():
+    # Deterministic: a mid CVE should not be 'imminent' or 'unlikely'.
+    cve = CVE(
+        id="CVE-2026-4002",
+        description="x",
+        cvss_score=7.0,
+        epss_score=0.35,
+        kev=0,
+        poc_source_count=1,
+    )
+    score, bucket = forecast.compute_imminence(cve, epss_velocity=0.0)
+    assert bucket in ("weeks", "months")
+    assert 2.5 <= score < 7.5

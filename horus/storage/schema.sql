@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS cve (
     exploitability_score REAL,                  -- legacy: kept for backward compat
     social_mentions INTEGER DEFAULT 0,          -- how many X posts mention this CVE
     poc_source_count INTEGER DEFAULT 0,         -- how many distinct signal sources have PoCs
+    imminence_score REAL,                       -- heuristic 0-10
+    imminence_bucket TEXT,                      -- imminent|weeks|months|unlikely
     reputation_score REAL,                      -- computed composite (0-10)
     confidence      TEXT DEFAULT 'high',        -- high | medium | low
     first_seen      TEXT NOT NULL,
