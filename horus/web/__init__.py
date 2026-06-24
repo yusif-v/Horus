@@ -17,10 +17,36 @@ from .queries import DB_PATH
 from .routes import ALL_BLUEPRINTS
 
 
+def _load_dotenv() -> None:
+    """Populate os.environ from a local `.env` file (stdlib, no dependency).
+
+    Looks for `.env` in the current working directory, then the repo root.
+    Existing environment variables always win, so explicit exports override
+    the file. Lines are `KEY=VALUE`; blanks and `#` comments are ignored.
+    Used to supply secrets like TELEGRAM_BOT_USERNAME / TELEGRAM_BOT_TOKEN
+    without exporting them on every launch.
+    """
+    candidates = [Path.cwd() / ".env", Path(__file__).resolve().parents[2] / ".env"]
+    for env_path in candidates:
+        if not env_path.is_file():
+            continue
+        for raw in env_path.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+        break
+
+
 def create_app() -> Flask:
     """Build a Flask app. Templates + static dir live alongside this package."""
     import secrets
 
+    _load_dotenv()
     here = Path(__file__).parent
     app = Flask(
         __name__,

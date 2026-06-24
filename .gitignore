@@ -68,3 +68,6 @@ graphify-out/
 horus.yaml
 .pre-commit-config.yaml
 ARCHITECTURE.md
+
+# Local secrets (never commit)
+.env
