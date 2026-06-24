@@ -290,3 +290,15 @@ CREATE INDEX IF NOT EXISTS idx_news_article_source ON news_article(source);
 CREATE INDEX IF NOT EXISTS idx_news_article_tier ON news_article(tier);
 CREATE INDEX IF NOT EXISTS idx_news_article_published ON news_article(published_at);
 CREATE INDEX IF NOT EXISTS idx_news_article_first_seen ON news_article(first_seen);
+
+-- ─── EPSS history (one row per CVE per day) ──────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS epss_history (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    cve_id          TEXT NOT NULL REFERENCES cve(id) ON DELETE CASCADE,
+    score           REAL NOT NULL,
+    recorded_at     TEXT NOT NULL,              -- ISO-8601 UTC
+    UNIQUE (cve_id, recorded_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_epss_history_cve ON epss_history(cve_id);

@@ -616,6 +616,16 @@ def resolve_watchlist(conn: sqlite3.Connection, cve_id: str) -> None:
     )
 
 
+def append_epss_history(conn: sqlite3.Connection, cve_id: str, score: float) -> bool:
+    """Record one EPSS data point per CVE per day. Returns True if inserted."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO epss_history (cve_id, score, recorded_at) VALUES (?, ?, ?)",
+        (cve_id, score, today),
+    )
+    return cur.rowcount > 0
+
+
 def list_known_resource_urls(conn: sqlite3.Connection) -> set[str]:
     return {row[0] for row in conn.execute("SELECT url FROM security_resource")}
 
