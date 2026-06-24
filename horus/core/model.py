@@ -48,6 +48,8 @@ class CVE:
     poc_source_count: int = 0  # how many distinct signal sources have PoCs
     reputation_score: float = 0.0  # computed composite (0-10)
     confidence: str = "high"  # high=NVD, medium=NVD+signal, low=signal-only
+    imminence_score: float = 0.0  # heuristic exploitability imminence (0-10)
+    imminence_bucket: str = "unlikely"  # imminent | weeks | months | unlikely
     first_seen: datetime = field(default_factory=_utc_now)
     last_seen: datetime = field(default_factory=_utc_now)
 

@@ -423,8 +423,9 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
               (id, description, cvss_score, cvss_severity, cvss_vector, published_at,
                epss_score, kev, reputation_score, confidence,
                social_mentions, poc_source_count,
+               imminence_score, imminence_bucket,
                first_seen, last_seen)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              description           = COALESCE(excluded.description, cve.description),
              cvss_score            = COALESCE(excluded.cvss_score, cve.cvss_score),
@@ -437,6 +438,8 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
              confidence            = COALESCE(excluded.confidence, cve.confidence),
              social_mentions       = COALESCE(excluded.social_mentions, cve.social_mentions),
              poc_source_count      = COALESCE(excluded.poc_source_count, cve.poc_source_count),
+             imminence_score       = excluded.imminence_score,
+             imminence_bucket      = excluded.imminence_bucket,
              last_seen             = excluded.last_seen
         """,
         (
@@ -452,6 +455,8 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
             cve.confidence,
             cve.social_mentions,
             cve.poc_source_count,
+            cve.imminence_score,
+            cve.imminence_bucket,
             now,
             now,
         ),

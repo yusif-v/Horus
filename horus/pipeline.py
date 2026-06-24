@@ -137,6 +137,20 @@ def _select(
     }
 
 
+# ── Post-enrich scoring ──────────────────────────────────────────────────────
+
+
+def _score_imminence(cves: list[CVE], conn) -> None:
+    """Compute imminence for each CVE after enrichment (needs EPSS/KEV/velocity)."""
+    from .core import forecast
+
+    for cve in cves:
+        vel = forecast.epss_velocity(cve.id, conn)
+        cve.imminence_score, cve.imminence_bucket = forecast.compute_imminence(
+            cve, epss_velocity=vel
+        )
+
+
 # ── The pipeline ─────────────────────────────────────────────────────────────
 
 
@@ -294,6 +308,7 @@ def run_pipeline(
     step += 1
     log(f"[{step}/{total_steps}] persisting to database...")
     with db.connect() as conn:
+        _score_imminence(cves, conn)
         for cve in cves:
             db.persist_cve(conn, cve)
         for poc in pocs:
