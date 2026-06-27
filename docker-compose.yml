@@ -1,0 +1,47 @@
+# ─── Horus Docker Compose ─────────────────────────────────────────────────────
+# Single-service deployment: Horus server (pipeline + web UI + Telegram bot).
+#
+# Usage:
+#   docker compose up -d          # start
+#   docker compose down           # stop
+#   docker compose logs -f        # tail logs
+#   docker compose exec horus python -m horus --health-check
+#
+# Configure data sources via .env (copy .env.sample → .env and edit).
+# Only sources listed in HORUS_SOURCES_ENABLED will run.
+
+services:
+  horus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: horus
+    restart: unless-stopped
+    ports:
+      - "${HORUS_WEB_PORT:-8080}:8080"
+    volumes:
+      - horus-state:/app/state
+      - horus-reports:/app/reports
+    env_file:
+      - .env
+    environment:
+      - HORUS_WEB_HOST=0.0.0.0
+      - HORUS_WEB_PORT=8080
+      - HORUS_LOG_LEVEL=${HORUS_LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  horus-state:
+    driver: local
+  horus-reports:
+    driver: local
