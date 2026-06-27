@@ -29,7 +29,7 @@ VOLUME ["/app/state", "/app/reports"]
 
 # Health check — verifies the web endpoint responds
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+    CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
 
 USER horus
 

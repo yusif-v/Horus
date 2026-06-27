@@ -116,7 +116,7 @@ do_deploy() {
 
 do_healthcheck() {
     local port="${HORUS_WEB_PORT:-8080}"
-    local url="http://localhost:${port}/health"
+    local url="http://localhost:${port}/api/health"
     local max_attempts=15
     local attempt=0
 
