@@ -63,8 +63,8 @@ ENRICHER_KEYS = {"epss", "kev"}
 @dataclass
 class WebConfig:
     enabled: bool = True
-    host: str = "127.0.0.1"
-    port: int = 8080
+    host: str = os.environ.get("HORUS_WEB_HOST", "127.0.0.1")
+    port: int = int(os.environ.get("HORUS_WEB_PORT", "8080"))
     workers: int = 2
     # If True and gunicorn isn't installed, fall back to Flask's dev server
     # with a loud warning. Set False in prod to fail-fast instead.
