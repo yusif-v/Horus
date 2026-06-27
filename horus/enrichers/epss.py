@@ -10,16 +10,26 @@ to ensure comprehensive coverage.
 from __future__ import annotations
 
 import gzip
-import sys
+import hashlib
+import logging
 import urllib.request
 
 from ..storage.db import append_epss_history
+
+logger = logging.getLogger(__name__)
 
 NAME = "EPSS Scores"
 DEFAULT_ENABLED = True
 
 # EPSS daily CSV dump (compressed, ~5MB)
 EPSS_CSV_URL = "https://epss.cyentia.com/epss_scores-current.csv.gz"
+EPSS_CHECKSUM_URL = EPSS_CSV_URL + ".sha256"
+
+
+def _verify_checksum(raw: bytes, expected_hex: str) -> bool:
+    """Verify SHA256 checksum of downloaded data. Returns True if valid."""
+    actual = hashlib.sha256(raw).hexdigest()
+    return actual == expected_hex.strip().lower()
 
 
 def _download_epss_scores() -> dict[str, float]:
@@ -34,8 +44,25 @@ def _download_epss_scores() -> dict[str, float]:
         with urllib.request.urlopen(req, timeout=60) as resp:
             raw = resp.read()
     except Exception as e:
-        print(f"  [WARN] EPSS: cannot download CSV: {e}", file=sys.stderr)
+        logger.warning("EPSS: cannot download CSV: %s", e)
         return {}
+
+    # Checksum verification (non-blocking)
+    try:
+        checksum_req = urllib.request.Request(
+            EPSS_CHECKSUM_URL,
+            headers={
+                "User-Agent": "Horus-PoC-Scanner/0.8",
+            },
+        )
+        with urllib.request.urlopen(checksum_req, timeout=10) as checksum_resp:
+            expected_hex = checksum_resp.read().decode("ascii").strip()
+        if _verify_checksum(raw, expected_hex):
+            logger.debug("EPSS: checksum verification passed")
+        else:
+            logger.warning("EPSS: checksum mismatch — data may be corrupted, proceeding anyway")
+    except Exception as e:
+        logger.debug("EPSS: checksum endpoint unreachable: %s", e)
 
     # Decompress and parse
     try:
@@ -82,7 +109,7 @@ def enrich(ctx) -> None:
             count += 1
 
     if count:
-        print(f"  EPSS: {count}/{len(cves)} CVEs enriched (current batch)", file=sys.stderr)
+        logger.info("EPSS: %d/%d CVEs enriched (current batch)", count, len(cves))
 
     # Backfill: score ALL previously-unscored CVEs already in the DB.
     from ..storage import db as _db
@@ -91,7 +118,7 @@ def enrich(ctx) -> None:
         with _db.connect() as conn:
             _backfill_db(conn, scores)
     except Exception as e:
-        print(f"  [WARN] EPSS backfill skipped: {e}", file=sys.stderr)
+        logger.warning("EPSS backfill skipped: %s", e)
 
 
 def _backfill_db(conn, scores: dict[str, float]) -> int:
@@ -108,7 +135,7 @@ def _backfill_db(conn, scores: dict[str, float]) -> int:
             updated += 1
         append_epss_history(conn, cve_id, new_score)
     if updated:
-        print(f"  EPSS backfill: {updated} unscored CVEs updated", file=sys.stderr)
+        logger.info("EPSS backfill: %d unscored CVEs updated", updated)
     return updated
 
 

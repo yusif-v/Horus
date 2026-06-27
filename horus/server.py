@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import signal
 import subprocess
@@ -36,9 +37,12 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .storage import db
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_POLL_INTERVALS: dict[str, int] = {
     "nvd": 3600,  # 1h    — NVD updates roughly every 2h
@@ -98,7 +102,7 @@ def load_config(path: str | None) -> Config:
         return cfg
     p = Path(path).expanduser()
     if not p.exists():
-        print(f"  [WARN] config not found at {p}, using defaults", file=sys.stderr)
+        logger.warning("config not found at %s, using defaults", p)
         return cfg
     raw = p.read_text()
     data: dict
@@ -142,8 +146,6 @@ def _last_run_epoch(conn, name: str) -> float:
         return 0.0
     # ISO 8601 'Z' suffix
     try:
-        from datetime import datetime, timezone
-
         # strptime can't handle 'Z' directly on older versions
         if ts.endswith("Z"):
             ts = ts[:-1] + "+00:00"
@@ -220,7 +222,7 @@ class Server:
                 try:
                     self.run_due()
                 except Exception as e:
-                    print(f"  [ERROR] cycle failed: {e}", file=sys.stderr)
+                    logger.error("cycle failed: %s", e)
                 # Supervise the web child: if it died, restart it once per cycle.
                 if self.cfg.web.enabled:
                     self._supervise_web()
@@ -421,10 +423,7 @@ class Server:
     # ── logging ──────────────────────────────────────────────────────────
 
     def _log(self, msg: str) -> None:
-        from datetime import datetime, timezone
-
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        print(f"[{ts}] horus.server: {msg}", file=sys.stderr)
+        logger.info(msg)
 
 
 def main(argv: list[str] | None = None) -> None:

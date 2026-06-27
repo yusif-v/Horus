@@ -37,3 +37,35 @@ jobs:
 
       - name: Run pip-audit
         run: pip-audit --strict
+
+  quality:
+    name: quality (ruff, mypy, pytest)
+    runs-on: ubuntu-latest
+    fail-fast: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install dev dependencies
+        run: pip install -e ".[dev,server]"
+
+      - name: Run ruff
+        run: ruff check horus/
+
+      - name: Run mypy
+        run: mypy horus/
+
+      - name: Run pytest
+        run: python -m pytest tests/ -q --no-cov
+
+      - name: Verify Dockerfile builds
+        run: docker build -t horus:ci .

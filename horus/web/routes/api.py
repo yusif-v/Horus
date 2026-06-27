@@ -4,10 +4,22 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from ...storage import db as _storage
 from ..queries import get_cve_detail, get_stats, search_cves
 from .auth import READ_ALL, role_required
 
 bp = Blueprint("api", __name__, url_prefix="/api")
+
+
+@bp.route("/health")
+def health():
+    """Public health check endpoint (no auth required)."""
+    try:
+        with _storage.connect() as conn:
+            conn.execute("SELECT 1")
+        return jsonify({"status": "ok", "db": True})
+    except Exception:
+        return jsonify({"status": "degraded", "db": False}), 503
 
 
 @bp.route("/stats")

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
-import sys
 from unittest.mock import MagicMock, patch
 
 from horus.cli import _build_parser, _cmd_list_sources, main
@@ -108,43 +108,51 @@ def test_list_sources_prints(capsys=None):
 
 
 def test_list_sources_prints_sources_and_enrichers():
+    import logging as _logging
+
     captured = io.StringIO()
-    old_stdout = sys.stdout
-    sys.stdout = captured
+    handler = _logging.StreamHandler(captured)
+    handler.setLevel(_logging.INFO)
+    cli_logger = _logging.getLogger("horus.cli")
+    cli_logger.addHandler(handler)
+    cli_logger.setLevel(_logging.INFO)
     try:
         _cmd_list_sources(MOCK_SOURCES, MOCK_ENRICHERS)
     finally:
-        sys.stdout = old_stdout
+        cli_logger.removeHandler(handler)
+        cli_logger.setLevel(_logging.WARNING)
     output = captured.getvalue()
     assert "Sources:" in output
     assert "Enrichers:" in output
 
 
 def test_main_list_sources_exits():
-    with patch("horus.cli._build_parser", return_value=_build_parser(MOCK_SOURCES, MOCK_ENRICHERS)):
-        try:
-            main(["--list-sources"])
-        except SystemExit:
-            pass  # Expected
+    with (
+        patch("horus.cli._build_parser", return_value=_build_parser(MOCK_SOURCES, MOCK_ENRICHERS)),
+        contextlib.suppress(SystemExit),
+    ):
+        main(["--list-sources"])
 
 
 def test_main_health_check():
     mock_run = MagicMock()
-    with patch("horus.cli.run_pipeline"), patch("horus.cli._cmd_health_check", mock_run):
-        try:
-            main(["--health-check"])
-        except SystemExit:
-            pass
+    with (
+        patch("horus.cli.run_pipeline"),
+        patch("horus.cli._cmd_health_check", mock_run),
+        contextlib.suppress(SystemExit),
+    ):
+        main(["--health-check"])
     mock_run.assert_called_once()
 
 
 def test_main_query():
     mock_run = MagicMock()
-    with patch("horus.cli.run_pipeline"), patch("horus.cli._cmd_query", mock_run):
-        try:
-            main(["--query", "CVE-2026-0001"])
-        except SystemExit:
-            pass
+    with (
+        patch("horus.cli.run_pipeline"),
+        patch("horus.cli._cmd_query", mock_run),
+        contextlib.suppress(SystemExit),
+    ):
+        main(["--query", "CVE-2026-0001"])
     mock_run.assert_called_once()
 
 

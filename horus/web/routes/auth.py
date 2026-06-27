@@ -5,12 +5,14 @@ from __future__ import annotations
 import functools
 import re
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Literal, get_args
 from urllib.parse import urljoin, urlparse
 
 from flask import (
     Blueprint,
     abort,
+    current_app,
     g,
     redirect,
     request,
@@ -23,6 +25,29 @@ from ...storage import db as _storage
 from .._render import page
 
 bp = Blueprint("auth", __name__)
+
+# ─── Simple per-IP rate limiter (no external dependencies) ───────────────────
+# Tracks login attempts per IP in-memory with a sliding window.
+# Disabled when TESTING=True (pytest) to avoid cross-test interference.
+_login_attempts: dict[str, list[datetime]] = {}
+_login_lock = Lock()
+_WINDOW_SECONDS = 300  # 5 minutes
+_MAX_ATTEMPTS = 5
+
+
+def _rate_limit_check(ip: str) -> bool:
+    """Return True if request is OK to proceed, False if rate-limited."""
+    now = datetime.now(timezone.utc)
+    cutoff = now.timestamp() - _WINDOW_SECONDS
+    with _login_lock:
+        attempts = _login_attempts.get(ip, [])
+        attempts = [t for t in attempts if t.timestamp() > cutoff]
+        _login_attempts[ip] = attempts
+        if len(attempts) >= _MAX_ATTEMPTS:
+            return False
+        attempts.append(now)
+        return True
+
 
 # Default roles seeded on first run
 DEFAULT_ROLES = [
@@ -188,6 +213,21 @@ def login():
         return redirect(url_for("dashboard.index"))
 
     if request.method == "POST":
+        # Rate limit login attempts (5 per 5 minutes per IP)
+        if not current_app.config.get("TESTING", False):
+            client_ip = (
+                request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
+                .split(",")[0]
+                .strip()
+            )
+            if not _rate_limit_check(client_ip):
+                return page(
+                    "login.html",
+                    title="Login",
+                    error="Too many login attempts. Please try again in 5 minutes.",
+                    username=request.form.get("username", "").strip(),
+                ), 429
+
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 

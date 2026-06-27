@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, jsonify, request
 
 from . import csrf as _csrf
 from .queries import DB_PATH
@@ -77,10 +77,39 @@ def create_app() -> Flask:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         TELEGRAM_BOT_USERNAME=os.environ.get("TELEGRAM_BOT_USERNAME", ""),
+        MAX_CONTENT_LENGTH=1 * 1024 * 1024,
     )
+
+    @app.errorhandler(413)
+    def _request_entity_too_large(error):
+        if request.path.startswith("/api"):
+            return jsonify({"error": "Request too large. Maximum size is 1MB."}), 413
+        from ._render import error_page
+
+        return error_page("Request too large. Maximum size is 1MB."), 413
+
     for bp in ALL_BLUEPRINTS:
         app.register_blueprint(bp)
     _csrf.init_app(app)
+
+    # Security headers on every response
+    @app.after_request
+    def _set_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+            "connect-src 'self'; font-src 'self' https://cdn.jsdelivr.net;",
+        )
+        if request.scheme == "https":
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
+
     return app
 
 

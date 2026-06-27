@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from horus.net.auth import github_token
 
@@ -36,9 +36,43 @@ def test_github_token_strips_whitespace():
 
 def test_github_token_returns_none_when_no_env_and_no_gh():
     _clear_cache()
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch("horus.net.auth.subprocess.run", side_effect=FileNotFoundError),
+    ):
+        assert github_token() is None
+
+
+def test_github_token_cli_fallback():
+    _clear_cache()
     with patch.dict(os.environ, {}, clear=True):
-        with patch("horus.net.auth.subprocess.run", side_effect=FileNotFoundError):
-            assert github_token() is None
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "ghp_cli_token\n"
+        with patch("horus.net.auth.subprocess.run", return_value=mock_proc) as mock_run:
+            token = github_token()
+            assert token == "ghp_cli_token"
+            mock_run.assert_called_once_with(
+                ["gh", "auth", "token"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+
+def test_github_token_cli_fallback_timeout():
+    """When gh CLI times out, fall through to None."""
+    _clear_cache()
+    import subprocess
+
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch(
+            "horus.net.auth.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="gh", timeout=5),
+        ),
+    ):
+        assert github_token() is None
 
 
 def test_github_token_caches_result():

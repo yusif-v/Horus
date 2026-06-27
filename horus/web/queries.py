@@ -259,6 +259,16 @@ def get_stats(year: int | None = None, window: str | None = None, recent_limit: 
         latest_update = conn.execute(
             f"SELECT MAX(first_seen) FROM cve {_extra()}", year_param
         ).fetchone()[0]
+        imminence_buckets = _rows_to_dicts(
+            conn.execute(
+                f"""
+            SELECT imminence_bucket as bucket, COUNT(*) as cnt
+            FROM cve {_extra("imminence_bucket IS NOT NULL")}
+            GROUP BY bucket ORDER BY cnt DESC
+        """,
+                year_param,
+            ).fetchall()
+        )
 
     return {
         "cve_count": cve_count,
@@ -284,6 +294,7 @@ def get_stats(year: int | None = None, window: str | None = None, recent_limit: 
         "monthly_cves": monthly_cves,
         "weaponized": weaponized,
         "imminent": imminent,
+        "imminence_buckets": imminence_buckets,
         "actionable": actionable,
         "latest_update": latest_update,
     }

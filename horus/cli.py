@@ -16,9 +16,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
+import os
 
 from . import __version__
+from .logger import setup_logging
 from .net.auth import github_token
 from .pipeline import (
     PipelineOptions,
@@ -26,6 +28,8 @@ from .pipeline import (
     discover_sources,
     run_pipeline,
 )
+
+logger = logging.getLogger(__name__)
 
 # ── Argument parser ─────────────────────────────────────────────────────────
 
@@ -140,21 +144,21 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
 
 def _log(quiet: bool, msg: str) -> None:
     if not quiet:
-        print(msg, file=sys.stderr)
+        logger.info(msg)
 
 
 # ── One-shot command handlers ───────────────────────────────────────────────
 
 
 def _cmd_list_sources(sources: dict, enrichers: dict) -> None:
-    print("Sources:")
+    logger.info("Sources:")
     for name, mod in sorted(sources.items()):
         on = "[on]" if getattr(mod, "DEFAULT_ENABLED", True) else "[off]"
-        print(f"  {name:20s} {getattr(mod, 'NAME', name):30s} {on}")
-    print("\nEnrichers:")
+        logger.info("  %-20s %-30s %s", name, getattr(mod, "NAME", name), on)
+    logger.info("\nEnrichers:")
     for name, mod in sorted(enrichers.items()):
         on = "[on]" if getattr(mod, "DEFAULT_ENABLED", True) else "[off]"
-        print(f"  {name:20s} {getattr(mod, 'NAME', name):30s} {on}")
+        logger.info("  %-20s %-30s %s", name, getattr(mod, "NAME", name), on)
 
 
 def _cmd_query(args) -> None:
@@ -176,13 +180,13 @@ def _cmd_backfill_epss() -> None:
     db.initialize()
     with db.connect() as conn:
         updated = backfill_all(conn)
-    print(f"EPSS backfill: {updated} CVEs updated")
+    logger.info("EPSS backfill: %d CVEs updated", updated)
 
 
 def _cmd_backfill(target: str) -> None:
     from .storage.backfills import run_backfill
 
-    print(run_backfill(target).summary())
+    logger.info("%s", run_backfill(target).summary())
 
 
 def _cmd_export_json(output_dir: str) -> None:
@@ -192,8 +196,8 @@ def _cmd_export_json(output_dir: str) -> None:
     db_path = str(_db_module.DB_PATH)
     written = export_all(db_path, output_dir)
     for path in written:
-        print(f"  {path}")
-    print(f"Exported {len(written)} files to {output_dir}")
+        logger.info("  %s", path)
+    logger.info("Exported %d files to %s", len(written), output_dir)
 
 
 def _cmd_server(args) -> None:
@@ -210,15 +214,17 @@ def _cmd_server(args) -> None:
 def _cmd_auth_status() -> None:
     tok = github_token()
     if tok:
-        print(f"GitHub auth: OK (token ...{tok[-4:]}, limit 5000/hr)")
+        logger.info("GitHub auth: OK (token ...%s, limit 5000/hr)", tok[-4:])
     else:
-        print("GitHub auth: none (unauthenticated, limit 60/hr)")
+        logger.info("GitHub auth: none (unauthenticated, limit 60/hr)")
 
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
 
 def main(argv: list[str] | None = None) -> None:
+    setup_logging()
+
     sources = discover_sources()
     enrichers = discover_enrichers()
     args = _build_parser(sources, enrichers).parse_args(argv)
@@ -241,11 +247,26 @@ def main(argv: list[str] | None = None) -> None:
     if args.auth_status:
         return _cmd_auth_status()
 
-    # Default flow: full scan via the shared pipeline.
+    # ── HORUS_SOURCES_ENABLED / HORUS_SOURCES_DISABLED ────────────────────
     source_filter = set(args.sources.split(",")) if args.sources else None
     enricher_filter = set(args.enrichers.split(",")) if args.enrichers else None
+
+    if source_filter is None:
+        env_enabled = os.environ.get("HORUS_SOURCES_ENABLED")
+        if env_enabled:
+            source_filter = {s.strip() for s in env_enabled.split(",") if s.strip()}
+            if source_filter:
+                logger.info("Sources enabled via HORUS_SOURCES_ENABLED: %s", source_filter)
+
     disabled_sources = {n for n in sources if getattr(args, f"no_{n}", False)}
     disabled_enrichers = {n for n in enrichers if getattr(args, f"skip_{n}", False)}
+
+    env_disabled = os.environ.get("HORUS_SOURCES_DISABLED")
+    if env_disabled:
+        extra_disabled = {s.strip() for s in env_disabled.split(",") if s.strip()}
+        if extra_disabled:
+            disabled_sources |= extra_disabled
+            logger.info("Sources disabled via HORUS_SOURCES_DISABLED: %s", extra_disabled)
 
     run_pipeline(
         PipelineOptions(

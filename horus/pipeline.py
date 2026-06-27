@@ -14,6 +14,7 @@ files.
 from __future__ import annotations
 
 import importlib
+import logging
 import pkgutil
 import sys
 from collections.abc import Callable, Iterable
@@ -28,6 +29,8 @@ from .render.graph import save_graph
 from .render.persist import save_report
 from .render.report import render_report
 from .storage import db
+
+logger = logging.getLogger(__name__)
 
 # Plugin attribute names — what the pipeline reads off each module.
 _KIND_CVE = "cve"
@@ -48,7 +51,7 @@ def _discover_plugins(package_name: str, required_export: str = "run") -> dict[s
         try:
             mod = importlib.import_module(f".{name}", f"horus.{package_name}")
         except ImportError as e:
-            print(f"  [WARN] could not load {package_name}/{name}: {e}", file=sys.stderr)
+            logging.warn("could not load %s/%s: %s", package_name, name, e)
             continue
         if hasattr(mod, required_export) and callable(getattr(mod, required_export)):
             plugins[name] = mod
@@ -232,7 +235,7 @@ def run_pipeline(
             log(f"  found {len(cves)} CVEs, {len(pocs)} PoCs")
             return result
         except Exception as e:
-            print(f"  [ERROR] {label} failed: {e}", file=sys.stderr)
+            logger.error("%s failed: %s", label, e)
             source_results[name] = {"cves": 0, "pocs": 0, "error": str(e)}
             return {}
 
@@ -302,7 +305,7 @@ def run_pipeline(
         try:
             mod.enrich(enricher_ctx)
         except Exception as e:
-            print(f"  [ERROR] {label} failed: {e}", file=sys.stderr)
+            logger.error("%s failed: %s", label, e)
 
     # 4 — persist
     step += 1
@@ -379,7 +382,7 @@ def run_pipeline(
         try:
             hook(result)
         except Exception as e:
-            print(f"  [WARN] end hook failed: {e}", file=sys.stderr)
+            logger.warning("end hook failed: %s", e)
 
     return result
 
