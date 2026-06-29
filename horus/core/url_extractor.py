@@ -108,7 +108,7 @@ _GENERIC_URL_RE = re.compile(
 )
 
 # Ordered list of (pattern, url_type) — first match wins
-_URL_PATTERNS: list[tuple[re.Pattern, UrlType]] = [
+_URL_PATTERNS: list[tuple[re.Pattern[str], UrlType]] = [
     (_GITHUB_GIST_RE, UrlType.GITHUB_GIST),
     (_GITHUB_RAW_RE, UrlType.GITHUB_RAW),
     (_GITHUB_REPO_RE, UrlType.GITHUB_REPO),

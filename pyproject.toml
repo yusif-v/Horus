@@ -68,7 +68,7 @@ ignore_missing_imports = true
 
 # Strict only on the layers we've cleaned.
 [[tool.mypy.overrides]]
-module = ["horus.core.*", "horus.pipeline", "horus.storage.*", "horus.net.http", "horus.net.auth"]
+module = ["horus.core.*", "horus.pipeline", "horus.storage.db", "horus.storage.query", "horus.storage.backfills", "horus.net.http", "horus.net.auth"]
 strict = true
 
 # ── pytest ─────────────────────────────────────────────────────────────

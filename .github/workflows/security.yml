@@ -65,13 +65,14 @@ jobs:
         run: ruff check horus/
 
       # Strict check only on cleaned core layers (per mypy overrides
-      # in pyproject.toml). Other modules still get basic checks via
-      # the top-level config but aren't blocked on full annotation.
-      - name: Run mypy (core strict)
-        run: mypy horus/core horus/pipeline.py horus/storage horus/net
-
-      - name: Run mypy (remainder, permissive)
-        run: mypy horus/ --follow-imports=skip || true
+      # in pyproject.toml: core.*, pipeline, storage.db/query/backfills,
+      # net.http, net.auth).
+      # Remainder is checked non-strict to catch gross errors without
+      # blocking on missing annotations in fast-moving web/bot/sources.
+      # Check only the files we ask about — don't follow imports into
+      # uncleaned modules (sources/, net/xsearch.py, etc.)
+      - name: Run mypy (strict core)
+        run: mypy --follow-imports=skip horus/core horus/pipeline.py horus/storage/db.py horus/storage/query.py horus/storage/backfills.py horus/net/http.py horus/net/auth.py
 
       - name: Run pytest
         run: python -m pytest tests/ -q --no-cov

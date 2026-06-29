@@ -107,7 +107,7 @@ class PipelineResult:
     source_results: dict[str, dict[str, Any]] = field(default_factory=dict)
     report_text: str = ""
     # Events extracted during the pipeline run for notification dispatch
-    events: dict[str, list[dict]] = field(
+    events: dict[str, list[dict[str, Any]]] = field(
         default_factory=lambda: {
             "kev_new": [],
             "epss_jump": [],
@@ -143,7 +143,7 @@ def _select(
 # ── Post-enrich scoring ──────────────────────────────────────────────────────
 
 
-def _score_imminence(cves: list[CVE], conn) -> None:
+def _score_imminence(cves: list[CVE], conn: Any) -> None:
     """Compute imminence for each CVE after enrichment (needs EPSS/KEV/velocity)."""
     from .core import forecast
 
@@ -224,16 +224,16 @@ def run_pipeline(
             provided=provided,
         )
         try:
-            result = mod.run(ctx) or {}
-            cves = result.get("cves", [])
-            pocs = result.get("pocs", [])
+            src_result: dict[str, Any] = mod.run(ctx) or {}
+            cves = src_result.get("cves", [])
+            pocs = src_result.get("pocs", [])
             all_cves.extend(cves)
             all_pocs.extend(pocs)
-            all_social_signals.extend(result.get("social_signals", []))
-            all_resources.extend(result.get("resources", []))
+            all_social_signals.extend(src_result.get("social_signals", []))
+            all_resources.extend(src_result.get("resources", []))
             source_results[name] = {"cves": len(cves), "pocs": len(pocs)}
             log(f"  found {len(cves)} CVEs, {len(pocs)} PoCs")
-            return result
+            return src_result
         except Exception as e:
             logger.error("%s failed: %s", label, e)
             source_results[name] = {"cves": 0, "pocs": 0, "error": str(e)}
@@ -251,9 +251,9 @@ def run_pipeline(
         key=lambda n: (n != "x_twitter", n),
     )
     for name in poc_source_names:
-        result = _run_source(name, selected_sources[name])
+        source_result = _run_source(name, selected_sources[name])
         if name == "x_twitter":
-            x_discovered_urls = result.get("x_discovered_urls", [])
+            x_discovered_urls = source_result.get("x_discovered_urls", [])
 
     # 1c — Fetch CVEs referenced by PoCs from NVD
     # Many PoCs have CVE IDs in their names/descriptions but the CVE might not
@@ -402,12 +402,12 @@ def register_end_hook(fn: Callable[[PipelineResult], None]) -> None:
 
 def _build_events(
     cves: list[CVE], pocs: list[PoC], enricher_ctx: EnricherContext
-) -> dict[str, list[dict]]:
+) -> dict[str, list[dict[str, Any]]]:
     """Extract notification events from the pipeline result.
 
     Returns a dict keyed by notification category.
     """
-    events: dict[str, list[dict]] = {
+    events: dict[str, list[dict[str, Any]]] = {
         "kev_new": [],
         "epss_jump": [],
         "critical_cve": [],

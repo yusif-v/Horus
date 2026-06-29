@@ -8,6 +8,7 @@ interface.
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 from .model import CVE
 
@@ -28,7 +29,7 @@ _UBIQUITY = (
 )
 
 
-def epss_velocity(cve_id: str, conn) -> float:
+def epss_velocity(cve_id: str, conn: Any) -> float:
     """Δscore per day over the two most recent distinct history points.
 
     Returns 0.0 when fewer than two points exist.
@@ -47,7 +48,7 @@ def epss_velocity(cve_id: str, conn) -> float:
         return 0.0
     if days <= 0:
         return 0.0
-    return (s_new - s_old) / days
+    return float((float(s_new) - float(s_old)) / days)
 
 
 def compute_imminence(cve: CVE, *, epss_velocity: float) -> tuple[float, str]:
