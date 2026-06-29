@@ -1,0 +1,12 @@
+# pip-audit vulnerability ignore list
+# Format: one vulnerability ID per line; optional comment after "#"
+
+# setuptool CVE — only affects setuptools dev usage, not runtime
+# PYSEC-2022-43012
+# PYSEC-2025-49
+# GHSA-cx63-2mw6-8hw5
+
+# pip self-vulnerability — tooling-only, not in production
+# PYSEC-2026-196
+# GHSA-58qw-9mgm-455v
+# GHSA-jp4c-xjxw-mgf9

@@ -1,6 +1,6 @@
 # Horus
 
-**Version:** 0.10.0
+**Version:** 0.12.0
 
 Daily PoC research scanner — or a 24/7 server. Treats NVD as the single source of truth for CVE data; treats GitHub, X/Twitter and Exploit-DB as signals that build a CVE *reputation score*. Enriches with CISA KEV and EPSS. Query any CVE from the local database, or run as a daemon that polls each source on its own interval. Requires Python 3.10+.
 
