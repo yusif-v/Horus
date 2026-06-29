@@ -103,8 +103,9 @@ do_deploy() {
     log "═══════════════════════════════════════════════════════════════"
     log "  Horus deployed successfully!"
     log ""
-    log "  Web UI:    http://localhost:${HORUS_WEB_PORT:-8080}"
-    log "  Health:    http://localhost:${HORUS_WEB_PORT:-8080}/health"
+    local _host_port="${HORUS_HOST_PORT:-${HORUS_WEB_PORT:-8080}}"
+    log "  Web UI:    http://localhost:${_host_port}"
+    log "  Health:    http://localhost:${_host_port}/api/health"
     log ""
     log "  Commands:"
     log "    ./scripts/deploy.sh --status     # check status"
@@ -115,7 +116,9 @@ do_deploy() {
 }
 
 do_healthcheck() {
-    local port="${HORUS_WEB_PORT:-8080}"
+    # HORUS_HOST_PORT overrides the host-mapped port (docker-compose maps
+    # 8081:8080 by default); falls back to HORUS_WEB_PORT then 8080.
+    local port="${HORUS_HOST_PORT:-${HORUS_WEB_PORT:-8080}}"
     local url="http://localhost:${port}/api/health"
     local max_attempts=15
     local attempt=0

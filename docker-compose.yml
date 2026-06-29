@@ -19,6 +19,9 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8080"
+    # Required for macOS/Windows Docker Desktop to reach host services.
+    # On Linux, harmless if host-gateway resolves; remove if it causes errors:
+    #   docker compose up may warn but still start. To suppress, comment out.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -29,6 +32,7 @@ services:
     environment:
       - HORUS_WEB_HOST=0.0.0.0
       - HORUS_WEB_PORT=8080
+      - HORUS_HOST_PORT=8081
       - HORUS_LOG_LEVEL=${HORUS_LOG_LEVEL:-INFO}
       - HORUS_SOURCES_ENABLED=${HORUS_SOURCES_ENABLED:-nvd,gitlab,exploitdb,news}
     healthcheck:
