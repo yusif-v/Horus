@@ -24,6 +24,7 @@ def client():
 
 def test_health_includes_sources_and_ok_when_healthy(client):
     with db.connect() as conn:
+        conn.execute("DELETE FROM source_health")
         db.upsert_source_health(conn, "nvd", status="ok", cve_count=3)
     body = json.loads(client.get("/api/health").data)
     assert body["status"] == "ok"
@@ -34,6 +35,7 @@ def test_health_includes_sources_and_ok_when_healthy(client):
 
 def test_health_degraded_when_enabled_source_failing(client):
     with db.connect() as conn:
+        conn.execute("DELETE FROM source_health")
         for _ in range(3):
             db.upsert_source_health(conn, "github", status="error", error="boom")
     body = json.loads(client.get("/api/health").data)
@@ -43,11 +45,8 @@ def test_health_degraded_when_enabled_source_failing(client):
 
 def test_skipped_source_does_not_degrade(client):
     with db.connect() as conn:
+        conn.execute("DELETE FROM source_health")
         db.upsert_source_health(conn, "news", status="skipped")
     body = json.loads(client.get("/api/health").data)
+    assert body["status"] == "ok"
     assert body["sources"]["news"]["status"] == "skipped"
-    # status stays ok purely from a skipped source
-    assert body["status"] in (
-        "ok",
-        "degraded",
-    )  # other sources may vary; news alone must not force degraded
