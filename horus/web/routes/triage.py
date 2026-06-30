@@ -19,6 +19,8 @@ WHERE_BY_LENS = {
     "kev": "c.kev = 1",
     "imminent": "c.epss_score >= 0.5",
     "weaponized": "c.cvss_score >= 9 AND pc.cve_id IS NOT NULL",
+    "kev_overdue": "c.kev = 1 AND date(c.kev_due_date) < date('now')",
+    "kev_due_soon": "c.kev = 1 AND date(c.kev_due_date) >= date('now') AND date(c.kev_due_date) <= date('now', '+30 days')",
 }
 
 STATUSES = ("new", "acknowledged", "working", "dismissed", "done")

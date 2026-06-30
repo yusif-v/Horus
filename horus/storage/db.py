@@ -37,6 +37,13 @@ class CveRow(TypedDict, total=False):
     confidence: str
     first_seen: str
     last_seen: str
+    trust_score: float | None
+    trust_nvd: float | None
+    trust_threatfox: float | None
+    trust_hudsonrock: float | None
+    threatfox_ioc_count: int | None
+    stealer_hits: int | None
+    kev_due_date: str | None
 
 
 class PocRow(TypedDict, total=False):
@@ -227,6 +234,13 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
             ("cvss_vector", "TEXT"),
             ("imminence_score", "REAL"),
             ("imminence_bucket", "TEXT"),
+            ("trust_score", "REAL DEFAULT 0.0"),
+            ("trust_nvd", "REAL DEFAULT 1.0"),
+            ("trust_threatfox", "REAL DEFAULT 0.0"),
+            ("trust_hudsonrock", "REAL DEFAULT 0.0"),
+            ("threatfox_ioc_count", "INTEGER DEFAULT 0"),
+            ("stealer_hits", "INTEGER DEFAULT 0"),
+            ("kev_due_date", "TEXT"),
         ]
         for col, decl in cve_additions:
             if col not in existing_cve:
@@ -471,11 +485,13 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
     conn.execute(
         """INSERT INTO cve
               (id, description, cvss_score, cvss_severity, cvss_vector, published_at,
-               epss_score, kev, reputation_score, confidence,
+               epss_score, kev, kev_due_date, reputation_score, confidence,
                social_mentions, poc_source_count,
                imminence_score, imminence_bucket,
+               trust_score, trust_nvd, trust_threatfox, trust_hudsonrock,
+               threatfox_ioc_count, stealer_hits,
                first_seen, last_seen)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              description           = COALESCE(excluded.description, cve.description),
              cvss_score            = COALESCE(excluded.cvss_score, cve.cvss_score),
@@ -484,12 +500,19 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
              published_at          = COALESCE(excluded.published_at, cve.published_at),
              epss_score            = COALESCE(excluded.epss_score, cve.epss_score),
              kev                   = MAX(excluded.kev, cve.kev),
+             kev_due_date          = excluded.kev_due_date,
              reputation_score      = COALESCE(excluded.reputation_score, cve.reputation_score),
              confidence            = COALESCE(excluded.confidence, cve.confidence),
              social_mentions       = COALESCE(excluded.social_mentions, cve.social_mentions),
              poc_source_count      = COALESCE(excluded.poc_source_count, cve.poc_source_count),
              imminence_score       = excluded.imminence_score,
              imminence_bucket      = excluded.imminence_bucket,
+             trust_score           = excluded.trust_score,
+             trust_nvd             = excluded.trust_nvd,
+             trust_threatfox       = excluded.trust_threatfox,
+             trust_hudsonrock      = excluded.trust_hudsonrock,
+             threatfox_ioc_count   = excluded.threatfox_ioc_count,
+             stealer_hits          = excluded.stealer_hits,
              last_seen             = excluded.last_seen
         """,
         (
@@ -501,12 +524,19 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
             cve.published_at.isoformat() if cve.published_at else None,
             cve.epss_score,
             cve.kev,
+            cve.kev_due_date,
             reputation,
             cve.confidence,
             cve.social_mentions,
             cve.poc_source_count,
             cve.imminence_score,
             cve.imminence_bucket,
+            cve.trust_score,
+            cve.trust_nvd,
+            cve.trust_threatfox,
+            cve.trust_hudsonrock,
+            cve.threatfox_ioc_count,
+            cve.stealer_hits,
             now,
             now,
         ),

@@ -38,7 +38,7 @@
   </div>
 </div>
 
-<!-- KPI Cards -->
+<!-- KPI Cards (v0.12: added Trust Intel) -->
 <div class="posture">
   <div class="cell">
     <a href="/triage" class="cell-link" aria-label="Actionable now"></a>
@@ -62,11 +62,11 @@
     <div class="tick">03</div>
   </div>
   <div class="cell">
-    <a href="/pocs" class="cell-link" aria-label="PoCs linked"></a>
-    <div class="k">PoCs linked</div>
-    <div class="v info">{{ stats.linked_pocs or 0 }}</div>
-    <div class="meta">across <a href="/cves?has_poc=1" class="meta-link"><strong>{{ stats.cves_with_pocs or 0 }}</strong> CVEs</a></div>
-    <div class="tick">04</div>
+    <a href="/cves?trust_min=50" class="cell-link" aria-label="Trust Intel"></a>
+    <div class="k">Trust Intel</div>
+    <div class="v info">{{ stats.high_trust_count or 0 }}</div>
+    <div class="meta"><a href="/cves?threatfox=1" class="meta-link">ThreatFox <strong>{{ stats.threatfox_hits or 0 }}</strong></a> · <a href="/cves?stealer=1" class="meta-link">Stealer <strong>{{ stats.stealer_compromised_count or 0 }}</strong></a></div>
+    <div class="tick">05</div>
   </div>
 </div>
 
@@ -168,7 +168,7 @@ window.__DASHBOARD_DATA__ = {
   {% if stats.recent_cves %}
   <div class="panel"><div class="panel-body flush">
     <table id="dashboard-cve-table">
-      <thead><tr><th>CVE</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>KEV</th><th>Published</th></tr></thead>
+      <thead><tr><th>CVE</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>Trust</th><th>ThreatFox</th><th>Stealer</th><th>KEV</th><th>Published</th></tr></thead>
       <tbody>
       {% for cve in stats.recent_cves %}
       <tr class="cve-row {% if cve.cvss_severity %}sev-{{ cve.cvss_severity }}{% endif %}{% if cve.kev %} kev-row{% endif %}" data-cve-id="{{ cve.id }}" onclick="openCvePanel('{{ cve.id }}')">
@@ -176,6 +176,9 @@ window.__DASHBOARD_DATA__ = {
         <td><span class="num strong" style="color:{% if cve.cvss_score and cve.cvss_score >= 9 %}var(--critical){% elif cve.cvss_score and cve.cvss_score >= 7 %}var(--high){% elif cve.cvss_score and cve.cvss_score >= 4 %}var(--medium){% else %}var(--low){% endif %};">{{ cve.cvss_score or '—' }}</span></td>
         <td>{% if cve.cvss_severity %}<span class="badge badge-{{ cve.cvss_severity|lower }}">{{ cve.cvss_severity }}</span>{% else %}—{% endif %}</td>
         <td>{% if cve.epss_score is not none %}<span class="epss-text">{{ "%.1f%%"|format(cve.epss_score * 100) }}</span>{% else %}<span style="color:var(--text-dim);">—</span>{% endif %}</td>
+        <td>{% if cve.trust_score and cve.trust_score >= 50 %}<span class="badge badge-trust">{{ "%.0f"|format(cve.trust_score) }}</span>{% elif cve.trust_score and cve.trust_score > 0 %}<span style="color:var(--text-dim);">{{ "%.0f"|format(cve.trust_score) }}</span>{% else %}—{% endif %}</td>
+        <td>{% if cve.threatfox_ioc_count and cve.threatfox_ioc_count > 0 %}<span class="badge badge-ioc">{{ cve.threatfox_ioc_count }} IOCs</span>{% else %}—{% endif %}</td>
+        <td>{% if cve.stealer_hits and cve.stealer_hits > 0 %}<span class="badge badge-stealer">{{ cve.stealer_hits }} hits</span>{% else %}—{% endif %}</td>
         <td>{% if cve.kev %}<span class="badge badge-kev badge-kev-animated">KEV</span>{% else %}—{% endif %}</td>
         <td><span class="num">{{ cve.published_at[:10] if cve.published_at else '—' }}</span></td>
       </tr>
