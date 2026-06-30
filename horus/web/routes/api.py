@@ -17,9 +17,21 @@ def health():
     try:
         with _storage.connect() as conn:
             conn.execute("SELECT 1")
-        return jsonify({"status": "ok", "db": True})
+            rows = _storage.get_source_health(conn)
     except Exception:
         return jsonify({"status": "degraded", "db": False}), 503
+
+    sources = {
+        r["source_name"]: {
+            "status": r["last_status"],
+            "last_run": r["last_run_at"],
+            "consecutive_failures": r["consecutive_failures"],
+        }
+        for r in rows
+    }
+    degraded = any(r["last_status"] != "skipped" and r["consecutive_failures"] >= 3 for r in rows)
+    status = "degraded" if degraded else "ok"
+    return jsonify({"status": status, "db": True, "sources": sources})
 
 
 @bp.route("/stats")
