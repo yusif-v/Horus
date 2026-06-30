@@ -93,6 +93,17 @@ CREATE TABLE IF NOT EXISTS meta (
     value           TEXT NOT NULL
 );
 
+-- ─── Source health (observability; updated every cycle) ──────────────────
+CREATE TABLE IF NOT EXISTS source_health (
+    source_name          TEXT PRIMARY KEY,
+    last_run_at          TEXT,
+    last_status          TEXT NOT NULL,          -- ok | error | skipped
+    last_error           TEXT,
+    cve_count            INTEGER DEFAULT 0,
+    poc_count            INTEGER DEFAULT 0,
+    consecutive_failures INTEGER DEFAULT 0
+);
+
 -- ─── Indexes ─────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_cve_published_at        ON cve(published_at);

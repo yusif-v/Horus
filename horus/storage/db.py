@@ -353,6 +353,56 @@ def mark_run(conn: sqlite3.Connection, source: str) -> None:
     )
 
 
+def upsert_source_health(
+    conn: sqlite3.Connection,
+    source_name: str,
+    *,
+    status: str,
+    error: str | None = None,
+    cve_count: int = 0,
+    poc_count: int = 0,
+) -> None:
+    """Record the outcome of a source's last run. Observability only."""
+    prior = conn.execute(
+        "SELECT consecutive_failures FROM source_health WHERE source_name = ?",
+        (source_name,),
+    ).fetchone()
+    prior_failures = prior[0] if prior else 0
+    failures = prior_failures + 1 if status == "error" else 0
+    # ok/error stamp now; skipped preserves the prior last_run_at via COALESCE.
+    new_run_at = _now() if status in ("ok", "error") else None
+    conn.execute(
+        """
+        INSERT INTO source_health
+            (source_name, last_run_at, last_status, last_error,
+             cve_count, poc_count, consecutive_failures)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(source_name) DO UPDATE SET
+            last_run_at          = COALESCE(excluded.last_run_at, source_health.last_run_at),
+            last_status          = excluded.last_status,
+            last_error           = excluded.last_error,
+            cve_count            = excluded.cve_count,
+            poc_count            = excluded.poc_count,
+            consecutive_failures = excluded.consecutive_failures
+        """,
+        (source_name, new_run_at, status, error, cve_count, poc_count, failures),
+    )
+
+
+def get_source_health(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """All source-health rows, ordered by name."""
+    cur = conn.execute(
+        """
+        SELECT source_name, last_run_at, last_status, last_error,
+               cve_count, poc_count, consecutive_failures
+        FROM source_health
+        ORDER BY source_name
+        """
+    )
+    cols = [c[0] for c in cur.description]
+    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
+
+
 # ─── Persistence ─────────────────────────────────────────────────────────
 
 
