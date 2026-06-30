@@ -67,8 +67,30 @@ do_logs() {
     docker compose logs -f horus
 }
 
+# Snapshot the SQLite DB before an update so a bad deploy never loses data.
+# Non-fatal: if the container isn't running or has no DB yet, warn and continue.
+do_backup() {
+    cd "$PROJECT_DIR"
+    local backup_dir="$PROJECT_DIR/backups"
+    mkdir -p "$backup_dir"
+    local stamp
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    local dest="$backup_dir/horus.db.${stamp}.bak"
+
+    log "Backing up database → backups/horus.db.${stamp}.bak"
+    if docker compose cp horus:/app/state/horus.db "$dest" 2>/dev/null; then
+        log "Backup saved ($(du -h "$dest" | cut -f1))"
+        # Retain the 10 most recent backups; prune older ones.
+        ls -1t "$backup_dir"/horus.db.*.bak 2>/dev/null | tail -n +11 | xargs -r rm -f
+    else
+        rm -f "$dest"
+        warn "Could not back up DB (container not running or no DB yet) — continuing."
+    fi
+}
+
 do_update() {
     cd "$PROJECT_DIR"
+    do_backup
     log "Rebuilding Horus..."
     docker compose build --no-cache horus
     docker compose up -d

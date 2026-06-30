@@ -12,6 +12,9 @@ state/*.migrated
 # Generated reports
 reports/
 
+# DB backups created by deploy.sh --update
+backups/
+
 # Python
 __pycache__/
 */__pycache__/
