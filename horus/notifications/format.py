@@ -13,6 +13,10 @@ def format_event_message(kind: str, item: dict, username: str | None = None) -> 
     """
     if kind == "kev_new":
         return _format_kev(item)
+    elif kind == "kev_overdue":
+        return _format_kev_overdue(item)
+    elif kind == "kev_due_soon":
+        return _format_kev_due_soon(item)
     elif kind == "epss_jump":
         return _format_epss(item)
     elif kind == "critical_cve":
@@ -32,6 +36,36 @@ def _format_kev(item: dict) -> str:
     return (
         f"🔴 *NEW KEV ADDITION*\n"
         f"*{cve_id}* — {score_str}\n"
+        f"https://nvd.nist.gov/vuln/detail/{cve_id}"
+    )
+
+
+def _format_kev_overdue(item: dict) -> str:
+    """Format a KEV CVE that has passed its remediation deadline."""
+    cve_id = item.get("cve_id", "Unknown")
+    due_date = item.get("due_date", "Unknown")
+    score = item.get("cvss_score")
+    severity = item.get("cvss_severity", "")
+    score_str = f"CVSS {score} {severity}" if score else "no CVSS"
+    return (
+        f"🔴 *KEV OVERDUE*\n"
+        f"*{cve_id}* — {score_str}\n"
+        f"Deadline: {due_date} (passed)\n"
+        f"https://nvd.nist.gov/vuln/detail/{cve_id}"
+    )
+
+
+def _format_kev_due_soon(item: dict) -> str:
+    """Format a KEV CVE with deadline within 30 days."""
+    cve_id = item.get("cve_id", "Unknown")
+    due_date = item.get("due_date", "Unknown")
+    score = item.get("cvss_score")
+    severity = item.get("cvss_severity", "")
+    score_str = f"CVSS {score} {severity}" if score else "no CVSS"
+    return (
+        f"🟡 *KEV DUE SOON*\n"
+        f"*{cve_id}* — {score_str}\n"
+        f"Deadline: {due_date}\n"
         f"https://nvd.nist.gov/vuln/detail/{cve_id}"
     )
 

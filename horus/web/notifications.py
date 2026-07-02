@@ -19,13 +19,23 @@ CATEGORIES: dict[str, tuple[str, str, bool]] = {
         "CISA added a CVE you can be reached for to the Known Exploited Vulnerabilities catalog.",
         True,
     ),
+    "kev_overdue": (
+        "KEV overdue",
+        "A KEV-listed CVE has passed its federal remediation deadline.",
+        True,
+    ),
+    "kev_due_soon": (
+        "KEV due soon",
+        "A KEV-listed CVE deadline is within 30 days.",
+        True,
+    ),
     "epss_jump": (
         "EPSS jumped above 0.5",
         "A CVE's exploit-prediction score crossed 0.5 — imminent exploitation likely.",
         False,
     ),
     "critical_cve": (
-        "New CVSS≥9 CVE with PoC",
+        "New CVSS>=9 CVE with PoC",
         "Critical-severity CVE published and a public proof-of-concept already exists.",
         True,
     ),
