@@ -5,8 +5,10 @@ Called at the end of each pipeline run via the on_run_end hook.
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 from datetime import datetime, timezone
+from typing import Any
 
 from ..bot.api import TelegramAPI, TelegramError
 from ..storage import db as _storage
@@ -18,7 +20,7 @@ def _now_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _user_prefs(conn, user_id: int) -> dict[str, bool]:
+def _user_prefs(conn: sqlite3.Connection, user_id: int) -> dict[str, bool]:
     rows = conn.execute(
         "SELECT kind, enabled FROM notification_pref WHERE user_id = ?",
         (user_id,),
@@ -27,7 +29,7 @@ def _user_prefs(conn, user_id: int) -> dict[str, bool]:
     return {k: stored.get(k, default) for k, default in DEFAULT_PREFS.items()}
 
 
-def dispatch(events: dict[str, list[dict]], token: str | None = None) -> None:
+def dispatch(events: dict[str, list[dict[str, Any]]], token: str | None = None) -> None:
     """Send Telegram notifications to users based on events from the current pipeline run.
 
     Events dict keys match CATEGORIES:
@@ -59,7 +61,7 @@ def dispatch(events: dict[str, list[dict]], token: str | None = None) -> None:
             chat_id = user_row[2]
 
             prefs = _user_prefs(conn, user_id)
-            messages = []
+            messages: list[str] = []
 
             for kind, items in events.items():
                 if not items:
@@ -84,7 +86,7 @@ def dispatch(events: dict[str, list[dict]], token: str | None = None) -> None:
 
 def _batch_messages(messages: list[str], max_len: int = 4000) -> list[str]:
     """Split messages into batches that fit Telegram's char limit."""
-    batches = []
+    batches: list[str] = []
     current = ""
     for msg in messages:
         if len(current) + len(msg) + 2 > max_len:

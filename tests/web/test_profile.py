@@ -271,3 +271,95 @@ class TestAuditTrail:
         # In the latest event, kev was previously enabled and is now disabled.
         assert before.get("kev_new") is True
         assert after.get("kev_new") is False
+
+
+class TestSettings:
+    def test_settings_get_renders(self, client):
+        _register(client, "alice")
+        _login(client, "alice")
+        r = client.get("/profile/settings")
+        assert r.status_code == 200
+        assert b"Email" in r.data
+
+    def test_settings_post_updates_email(self, client):
+        _register(client, "alice")
+        _login(client, "alice")
+        client.post(
+            "/profile/settings",
+            data={"email": "new@example.com", "team": "none", "theme": "system"},
+        )
+        with db.connect() as conn:
+            row = conn.execute("SELECT email FROM user WHERE username = 'alice'").fetchone()
+        assert row[0] == "new@example.com"
+
+    def test_settings_post_invalid_email(self, client):
+        _register(client, "alice")
+        _login(client, "alice")
+        r = client.post(
+            "/profile/settings",
+            data={"email": "bad-email", "team": "none", "theme": "system"},
+            follow_redirects=True,
+        )
+        assert b"valid email" in r.data
+
+    def test_theme_post_sets_valid(self, client):
+        _register(client, "alice")
+        _login(client, "alice")
+        r = client.post("/profile/theme", data={"theme": "dark"})
+        assert r.status_code == 204
+
+    def test_theme_post_invalid(self, client):
+        _register(client, "alice")
+        _login(client, "alice")
+        r = client.post("/profile/theme", data={"theme": "invalid"})
+        assert r.status_code == 400
+
+    def test_settings_password_change_short_password(self, client):
+        _register(client, "alice")
+        _login(client, "alice")
+        r = client.post(
+            "/profile/settings",
+            data={
+                "email": "alice@example.com",
+                "team": "none",
+                "theme": "system",
+                "new_password": "short",
+                "new_password_confirm": "short",
+                "current_password": "password123",
+            },
+            follow_redirects=True,
+        )
+        assert b"8 characters" in r.data
+
+    def test_settings_password_change_mismatch(self, client):
+        _register(client, "alice")
+        _login(client, "alice")
+        r = client.post(
+            "/profile/settings",
+            data={
+                "email": "alice@example.com",
+                "team": "none",
+                "theme": "system",
+                "new_password": "verylongpassword",
+                "new_password_confirm": "differentpassword",
+                "current_password": "password123",
+            },
+            follow_redirects=True,
+        )
+        assert b"do not match" in r.data
+
+    def test_settings_password_change_no_current(self, client):
+        _register(client, "alice")
+        _login(client, "alice")
+        r = client.post(
+            "/profile/settings",
+            data={
+                "email": "alice@example.com",
+                "team": "none",
+                "theme": "system",
+                "new_password": "verylongpassword",
+                "new_password_confirm": "verylongpassword",
+            },
+            follow_redirects=True,
+        )
+        assert b"Current password" in r.data

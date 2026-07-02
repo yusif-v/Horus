@@ -19,6 +19,7 @@ import pkgutil
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -110,6 +111,8 @@ class PipelineResult:
     events: dict[str, list[dict[str, Any]]] = field(
         default_factory=lambda: {
             "kev_new": [],
+            "kev_overdue": [],
+            "kev_due_soon": [],
             "epss_jump": [],
             "critical_cve": [],
             "watchlist_match": [],
@@ -421,6 +424,8 @@ def _build_events(
     """
     events: dict[str, list[dict[str, Any]]] = {
         "kev_new": [],
+        "kev_overdue": [],
+        "kev_due_soon": [],
         "epss_jump": [],
         "critical_cve": [],
         "watchlist_match": [],
@@ -437,6 +442,27 @@ def _build_events(
                     "cvss_severity": cve.cvss_severity,
                 }
             )
+
+        # KEV overdue/due-soon (based on kev_due_date)
+        if cve.kev and cve.kev_due_date:
+            try:
+                due = datetime.strptime(cve.kev_due_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                now = datetime.now(timezone.utc)
+                days_diff = (due - now).days
+
+                event_item = {
+                    "cve_id": cve.id,
+                    "cvss_score": cve.cvss_score,
+                    "cvss_severity": cve.cvss_severity,
+                    "due_date": cve.kev_due_date,
+                }
+
+                if days_diff < 0:
+                    events["kev_overdue"].append(event_item)
+                elif 0 <= days_diff <= 30:
+                    events["kev_due_soon"].append(event_item)
+            except (ValueError, TypeError):
+                pass  # bad date format, skip
 
         # Critical CVE with PoC
         if cve.cvss_score is not None and cve.cvss_score >= 9:

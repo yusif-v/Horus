@@ -5,8 +5,12 @@ Matches the existing Markdown report style.
 
 from __future__ import annotations
 
+from typing import Any
 
-def format_event_message(kind: str, item: dict, username: str | None = None) -> str | None:
+
+def format_event_message(
+    kind: str, item: dict[str, Any], username: str | None = None
+) -> str | None:
     """Format a single event into a Telegram Markdown message.
 
     Returns None if the event can't be formatted.
@@ -28,7 +32,7 @@ def format_event_message(kind: str, item: dict, username: str | None = None) -> 
     return None
 
 
-def _format_kev(item: dict) -> str:
+def _format_kev(item: dict[str, Any]) -> str:
     cve_id = item.get("cve_id", "Unknown")
     score = item.get("cvss_score")
     severity = item.get("cvss_severity", "")
@@ -40,7 +44,7 @@ def _format_kev(item: dict) -> str:
     )
 
 
-def _format_kev_overdue(item: dict) -> str:
+def _format_kev_overdue(item: dict[str, Any]) -> str:
     """Format a KEV CVE that has passed its remediation deadline."""
     cve_id = item.get("cve_id", "Unknown")
     due_date = item.get("due_date", "Unknown")
@@ -55,7 +59,7 @@ def _format_kev_overdue(item: dict) -> str:
     )
 
 
-def _format_kev_due_soon(item: dict) -> str:
+def _format_kev_due_soon(item: dict[str, Any]) -> str:
     """Format a KEV CVE with deadline within 30 days."""
     cve_id = item.get("cve_id", "Unknown")
     due_date = item.get("due_date", "Unknown")
@@ -70,14 +74,14 @@ def _format_kev_due_soon(item: dict) -> str:
     )
 
 
-def _format_epss(item: dict) -> str:
+def _format_epss(item: dict[str, Any]) -> str:
     cve_id = item.get("cve_id", "Unknown")
     score = item.get("epss_score", 0)
     pct = f"{score * 100:.1f}%" if score else "N/A"
     return f"📊 *EPSS JUMP*\n*{cve_id}* — EPSS now {pct}\nhttps://nvd.nist.gov/vuln/detail/{cve_id}"
 
 
-def _format_critical(item: dict) -> str:
+def _format_critical(item: dict[str, Any]) -> str:
     cve_id = item.get("cve_id", "Unknown")
     score = item.get("cvss_score")
     severity = item.get("cvss_severity", "")
@@ -91,7 +95,7 @@ def _format_critical(item: dict) -> str:
     )
 
 
-def _format_watchlist(item: dict) -> str:
+def _format_watchlist(item: dict[str, Any]) -> str:
     cve_id = item.get("cve_id", "Unknown")
     vendor = item.get("vendor", "Unknown")
     product = item.get("product", "")
@@ -105,7 +109,7 @@ def _format_watchlist(item: dict) -> str:
     )
 
 
-def _format_poc(item: dict) -> str:
+def _format_poc(item: dict[str, Any]) -> str:
     cve_id = item.get("cve_id", "Unknown")
     url = item.get("url", "")
     source = item.get("source", "")
