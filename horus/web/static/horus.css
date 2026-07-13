@@ -161,7 +161,7 @@ a:hover { color: var(--accent); }
   color: var(--text);
   font-family: var(--mono);
   padding: .55rem .85rem .55rem 2rem;
-  width: 180px; font-size: 12px; min-width: 0;
+  width: 210px; font-size: 12px; min-width: 0;
   border-radius: 2px;
   letter-spacing: .02em;
 }
@@ -183,7 +183,7 @@ a:hover { color: var(--accent); }
 .theme-toggle button {
   background: transparent;
   border: none;
-  color: var(--text-dim);
+  color: var(--text-mid);
   cursor: pointer;
   font-size: 13px;
   line-height: 1;

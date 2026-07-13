@@ -38,7 +38,7 @@
   <span class="sep">│</span>
   <span>DB · {{ rail.cve_n|default('—') }} CVE / {{ rail.poc_n|default('—') }} POC</span>
   <span class="sep">│</span>
-  <span>LAST INGEST · {{ rail.last[:16] if rail.last else '—' }}</span>
+  <span>LAST INGEST · {{ rail.last[:16].replace('T', ' ') if rail.last else '—' }}</span>
   <div class="right">
     <span>BUILD · HORUS v{{ version }}</span>
     <span class="sep">│</span>

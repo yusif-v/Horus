@@ -27,7 +27,7 @@
         <tr>
           <td><strong>{{ s.source_name }}</strong></td>
           <td>{{ s.last_status }}</td>
-          <td>{{ s.last_run_at or "—" }}</td>
+          <td>{{ s.last_run_at[:16].replace('T', ' ') if s.last_run_at else "—" }}</td>
           <td>{{ s.cve_count }}</td>
           <td>{{ s.poc_count }}</td>
           <td>{{ s.consecutive_failures }}</td>
