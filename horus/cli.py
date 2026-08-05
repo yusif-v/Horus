@@ -109,6 +109,42 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
         metavar="DIR",
         help="Export the database to CVE-Intel-compatible JSON files in DIR, then exit.",
     )
+    p.add_argument(
+        "--weekly-report",
+        action="store_true",
+        help="Generate a weekly threat intelligence report (text/md/html).",
+    )
+    p.add_argument(
+        "--weekly-format",
+        choices=("text", "md", "html"),
+        default="md",
+        help="Weekly report output format (default: md).",
+    )
+    p.add_argument(
+        "--weeks-back",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Weekly report: how many weeks back (default: 1).",
+    )
+    p.add_argument(
+        "--weekly-output",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Save weekly report to file instead of stdout.",
+    )
+    p.add_argument(
+        "--ai",
+        action="store_true",
+        help="Augment weekly report with AI-generated analysis and QA.",
+    )
+    p.add_argument(
+        "--ai-provider",
+        choices=("openai", "anthropic", "ollama"),
+        default=None,
+        help="AI provider override (default: from HORUS_AI_PROVIDER env var).",
+    )
 
     # Server mode
     p.add_argument(
@@ -200,6 +236,48 @@ def _cmd_export_json(output_dir: str) -> None:
     logger.info("Exported %d files to %s", len(written), output_dir)
 
 
+def _cmd_weekly_report(args) -> None:
+    from pathlib import Path
+
+    from .config import STATE_DIR
+    from .render.weekly import render_weekly_report
+    from .storage import db as _db_module
+    from .storage.weekly import gather_weekly_data
+
+    db_path = STATE_DIR / "horus.db"
+    if not db_path.exists():
+        logger.error("Database not found at %s", db_path)
+        return
+
+    with _db_module.connect() as conn:
+        weekly_data = gather_weekly_data(conn, weeks_back=args.weeks_back)
+
+    report = render_weekly_report(weekly_data, fmt=args.weekly_format)
+
+    if args.ai:
+        from horus.ai import analyze_weekly_report
+
+        ai_result = analyze_weekly_report(weekly_data, report, provider=args.ai_provider)
+        if ai_result:
+            report = f"## AI Threat Analysis\n\n{ai_result.narrative}\n\n---\n\n{report}"
+            if ai_result.has_qa_findings():
+                qa_section = "\n".join(f"- {issue}" for issue in ai_result.qa_issues)
+                report += (
+                    f"\n\n## AI Quality Assurance\n\n"
+                    f"The following issues were identified:\n\n{qa_section}\n"
+                )
+        else:
+            logger.warning("AI analysis unavailable — rendering template only")
+
+    if args.weekly_output:
+        out = Path(args.weekly_output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(report)
+        logger.info("Weekly report saved to %s", out)
+    else:
+        print(report)
+
+
 def _cmd_server(args) -> None:
     from .server import Server, load_config
 
@@ -242,6 +320,8 @@ def main(argv: list[str] | None = None) -> None:
         return _cmd_backfill(args.backfill)
     if args.export_json:
         return _cmd_export_json(args.export_json)
+    if args.weekly_report:
+        return _cmd_weekly_report(args)
     if args.server or args.server_once:
         return _cmd_server(args)
     if args.auth_status:
