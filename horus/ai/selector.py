@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 import os
 
-from .base import AIUnavailableError
+from .base import AbstractAIProvider, AIUnavailableError
 
 logger = logging.getLogger(__name__)
 
 
-def select_provider(provider: str | None = None) -> object:
+def select_provider(provider: str | None = None) -> AbstractAIProvider:
     """Select AI provider based on env vars or explicit override.
 
     Args:
