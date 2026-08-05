@@ -116,3 +116,48 @@ class TestParseAiResponse:
         )
         result = parse_ai_response(raw)
         assert "Summary." in result.narrative
+
+    def test_json_with_markdown_code_fence(self):
+        """LLMs often wrap JSON in ```json ... ``` fences."""
+        raw = '```json\n{"narrative": {"executive_summary": "Summary."}, "qa_issues": []}\n```'
+        result = parse_ai_response(raw)
+        assert "Summary." in result.narrative
+        assert result.qa_issues == []
+
+    def test_json_with_code_fence_no_language(self):
+        """Code fence without 'json' language specifier."""
+        raw = '```\n{"narrative": "Flat text.", "qa_issues": []}\n```'
+        result = parse_ai_response(raw)
+        assert result.narrative == "Flat text."
+
+    def test_empty_input_raises(self):
+        """Empty or whitespace-only input should raise AIMalformedResponseError."""
+        with pytest.raises(AIMalformedResponseError):
+            parse_ai_response("")
+
+    def test_whitespace_only_input_raises(self):
+        """Whitespace-only input should raise AIMalformedResponseError."""
+        with pytest.raises(AIMalformedResponseError):
+            parse_ai_response("   \n\t  ")
+
+    def test_qa_issues_string_defensive_guard(self):
+        """If LLM returns qa_issues as a string instead of list, default to empty list."""
+        raw = json.dumps(
+            {
+                "narrative": {"executive_summary": "Summary."},
+                "qa_issues": "This should be a list but is a string",
+            }
+        )
+        result = parse_ai_response(raw)
+        assert result.qa_issues == []
+
+    def test_qa_issues_dict_defensive_guard(self):
+        """If LLM returns qa_issues as a dict instead of list, default to empty list."""
+        raw = json.dumps(
+            {
+                "narrative": {"executive_summary": "Summary."},
+                "qa_issues": {"issue": "not a list"},
+            }
+        )
+        result = parse_ai_response(raw)
+        assert result.qa_issues == []
