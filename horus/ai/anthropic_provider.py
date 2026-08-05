@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 try:
     from anthropic import Anthropic
 except ImportError:
-    Anthropic = None  # type: ignore[assignment,misc]
+    Anthropic = None
 
 
 class AnthropicProvider:
@@ -31,9 +31,9 @@ class AnthropicProvider:
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
-        self._client = None
+        self._client: Anthropic | None = None
 
-    def _get_client(self):
+    def _get_client(self) -> Anthropic:
         if self._client is None:
             if Anthropic is None:
                 raise AIUnavailableError(

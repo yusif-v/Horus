@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 try:
     from openai import OpenAI
 except ImportError:
-    OpenAI = None  # type: ignore[assignment,misc]
+    OpenAI = None
 
 
 class OpenAIProvider:
@@ -31,9 +31,9 @@ class OpenAIProvider:
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
-        self._client = None
+        self._client: OpenAI | None = None
 
-    def _get_client(self):
+    def _get_client(self) -> OpenAI:
         if self._client is None:
             if OpenAI is None:
                 raise AIUnavailableError("openai package not installed. Run: pip install horus[ai]")

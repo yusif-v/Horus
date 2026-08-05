@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from .base import AIAnalysisResult, AIError
 from .prompts import build_analysis_prompt
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def analyze_weekly_report(
-    weekly_data,
+    weekly_data: Any,
     rendered_report: str,
     provider: str | None = None,
 ) -> AIAnalysisResult | None:
