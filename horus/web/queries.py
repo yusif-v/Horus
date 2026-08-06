@@ -837,3 +837,37 @@ def cluster_members(cluster_id: int) -> list[dict]:
             (cluster_id,),
         ).fetchall()
         return _rows_to_dicts(rows)
+
+
+# ── ATT&CK techniques ────────────────────────────────────────────────────
+
+
+def cve_attack_techniques(cve_id: str) -> list[dict]:
+    """Return ATT&CK techniques mapped to a CVE."""
+    cve_id = cve_id.upper()
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT technique_id, technique_name, source_tag
+            FROM cve_attack_technique
+            WHERE cve_id = ?
+            ORDER BY technique_id
+            """,
+            (cve_id,),
+        ).fetchall()
+        return _rows_to_dicts(rows)
+
+
+def attack_technique_summary() -> list[dict]:
+    """Return all techniques with CVE counts, ordered by count desc."""
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT technique_id, technique_name,
+                   COUNT(DISTINCT cve_id) AS cve_count
+            FROM cve_attack_technique
+            GROUP BY technique_id, technique_name
+            ORDER BY cve_count DESC
+            """
+        ).fetchall()
+        return _rows_to_dicts(rows)

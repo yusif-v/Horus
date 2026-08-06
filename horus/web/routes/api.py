@@ -6,8 +6,10 @@ from flask import Blueprint, jsonify, request
 
 from ...storage import db as _storage
 from ..queries import (
+    attack_technique_summary,
     cluster_members,
     correlation_clusters,
+    cve_attack_techniques,
     epss_movers,
     epss_threshold_alerts,
     epss_trend,
@@ -207,5 +209,32 @@ def cluster_detail(cluster_id):
     try:
         members = cluster_members(cluster_id)
         return jsonify({"cluster_id": cluster_id, "members": members})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/cve/<cve_id>/attack-techniques")
+@role_required(*READ_ALL)
+def cve_attack_techniques_route(cve_id):
+    """Return ATT&CK techniques for a specific CVE."""
+    try:
+        techniques = cve_attack_techniques(cve_id)
+        return jsonify(
+            {
+                "cve_id": cve_id.upper(),
+                "techniques": techniques,
+                "total": len(techniques),
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/attack-techniques")
+@role_required(*READ_ALL)
+def attack_techniques_summary():
+    """Return all ATT&CK techniques with CVE counts."""
+    try:
+        return jsonify({"techniques": attack_technique_summary()})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

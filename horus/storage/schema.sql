@@ -121,6 +121,19 @@ CREATE INDEX IF NOT EXISTS idx_cve_kev                ON cve(kev);
 CREATE INDEX IF NOT EXISTS idx_cve_product_product_id  ON cve_product(product_id);
 CREATE INDEX IF NOT EXISTS idx_cve_attack_tag_tag      ON cve_attack_tag(tag);
 CREATE INDEX IF NOT EXISTS idx_poc_cve_cve_id          ON poc_cve(cve_id);
+
+-- ─── ATT&CK technique mapping ─────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS cve_attack_technique (
+    cve_id      TEXT NOT NULL REFERENCES cve(id) ON DELETE CASCADE,
+    technique_id TEXT NOT NULL,
+    technique_name TEXT NOT NULL,
+    source_tag  TEXT NOT NULL,
+    PRIMARY KEY (cve_id, technique_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cve_attack_technique_cve ON cve_attack_technique(cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_attack_technique_tech ON cve_attack_technique(technique_id);
 CREATE INDEX IF NOT EXISTS idx_poc_source              ON poc(source);
 
 CREATE INDEX IF NOT EXISTS idx_cve_reputation_score     ON cve(reputation_score);

@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from .attack_mapping import get_attck_for_cve
 from .classify import classify_attack_tags, classify_exploit_type, classify_product_category
 from .filters import extract_cves
 from .model import CVE, AffectedProduct, PoC
@@ -683,3 +684,18 @@ def link_pocs_to_cves(cves: list[CVE], pocs: list[PoC]) -> dict[str, list[PoC]]:
             if ref_upper in known_ids:
                 links[ref_upper].append(poc)
     return links
+
+
+def persist_attack_techniques(conn, cve_id: str, tags: list[str]) -> None:
+    """Compute ATT&CK techniques from attack tags and store them for a CVE.
+
+    Replaces any existing technique rows for the CVE so re-classification
+    on updated tags stays consistent.
+    """
+    conn.execute("DELETE FROM cve_attack_technique WHERE cve_id = ?", (cve_id,))
+    for technique in get_attck_for_cve(tags):
+        conn.execute(
+            "INSERT OR IGNORE INTO cve_attack_technique"
+            " (cve_id, technique_id, technique_name, source_tag) VALUES (?, ?, ?, ?)",
+            (cve_id, technique["id"], technique["name"], ""),
+        )
