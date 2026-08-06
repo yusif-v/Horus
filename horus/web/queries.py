@@ -11,6 +11,8 @@ from datetime import date, timedelta
 from typing import Any
 
 from ..core.forecast import epss_velocity
+from ..core.model import PoC
+from ..core.poc_verification import verify_poc
 from ..storage import db as _storage
 
 # Re-export for tests that monkey-patch DB_PATH on the web module.
@@ -554,6 +556,41 @@ def fetch_pocs(
             d["cve_ids"] = d["cve_ids"].split(",") if d["cve_ids"] else []
             results.append(d)
         return results, total
+
+
+def poc_verification(url: str) -> dict | None:
+    """Return verification result for a PoC by URL, or None if not found.
+
+    Recomputes the score on demand using the current DB state (so NVD
+    cross-reference reflects all known CVEs, not just a snapshot).
+    """
+    with db_connect() as conn:
+        row = conn.execute(
+            """
+            SELECT url, source, stars, description, repo_created_at, exploit_type
+            FROM poc WHERE url = ?
+            """,
+            (url,),
+        ).fetchone()
+        if not row:
+            return None
+
+        cve_refs = [
+            r[0] for r in conn.execute("SELECT cve_id FROM poc_cve WHERE poc_url = ?", (url,))
+        ]
+        poc = PoC(
+            url=row["url"],
+            source=row["source"],
+            stars=row["stars"],
+            description=row["description"],
+            cve_refs=cve_refs,
+            repo_created_at=row["repo_created_at"],
+            exploit_type=row["exploit_type"],
+        )
+        known_cves = {r[0] for r in conn.execute("SELECT id FROM cve")}
+        result = verify_poc(poc, known_cves)
+        result["url"] = url
+        return result
 
 
 def safe_int(value: str, default: int = 1, min_val: int = 1, max_val: int = 10000) -> int:

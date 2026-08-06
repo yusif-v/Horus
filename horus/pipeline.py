@@ -14,6 +14,7 @@ files.
 from __future__ import annotations
 
 import importlib
+import json
 import logging
 import pkgutil
 import sys
@@ -26,6 +27,7 @@ from typing import Any
 from .core.context import EnricherContext, SourceContext
 from .core.merge import link_pocs_to_cves, merge_findings
 from .core.model import CVE, PoC
+from .core.poc_verification import verify_pocs
 from .render.graph import save_graph
 from .render.persist import save_report
 from .render.report import render_report
@@ -325,6 +327,25 @@ def run_pipeline(
             db.persist_poc(conn, poc)
             for ref in poc.cve_refs:
                 db.link_poc_to_cve(conn, poc.url, ref)
+
+        # Score all PoCs and persist verification results
+        if pocs:
+            verifications = verify_pocs(pocs, conn)
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            for poc, v in zip(pocs, verifications, strict=True):
+                conn.execute(
+                    """
+                    INSERT INTO poc_verification
+                        (poc_url, score, grade, factors, computed_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(poc_url) DO UPDATE SET
+                        score       = excluded.score,
+                        grade       = excluded.grade,
+                        factors     = excluded.factors,
+                        computed_at = excluded.computed_at
+                    """,
+                    (poc.url, v["score"], v["grade"], json.dumps(v["factors"]), now),
+                )
         for cve_id, source, mentions in watchlist_counts:
             db.persist_watchlist(conn, cve_id, source=source, social_mentions=mentions)
         for cve in cves:

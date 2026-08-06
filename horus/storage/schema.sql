@@ -328,6 +328,20 @@ CREATE TABLE IF NOT EXISTS news_article_cve (
 CREATE INDEX IF NOT EXISTS idx_news_article_cve_cve ON news_article_cve(cve_id);
 CREATE INDEX IF NOT EXISTS idx_news_article_cve_linked ON news_article_cve(linked_at);
 
+-- ─── PoC verification (automated confidence scoring) ─────────────────────
+
+CREATE TABLE IF NOT EXISTS poc_verification (
+    poc_url     TEXT NOT NULL REFERENCES poc(url) ON DELETE CASCADE,
+    score       INTEGER NOT NULL,
+    grade       TEXT NOT NULL,
+    factors     TEXT NOT NULL,
+    computed_at TEXT NOT NULL,
+    PRIMARY KEY (poc_url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_poc_verification_grade ON poc_verification(grade);
+CREATE INDEX IF NOT EXISTS idx_poc_verification_score ON poc_verification(score DESC);
+
 -- ─── EPSS history (one row per CVE per day) ──────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS epss_history (

@@ -13,6 +13,7 @@ from ..queries import (
     epss_trend,
     get_cve_detail,
     get_stats,
+    poc_verification,
     related_cves,
     search_cves,
 )
@@ -184,6 +185,19 @@ def clusters():
         return jsonify({"clusters": correlation_clusters(limit=limit)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/poc/<path:url>/verify")
+@role_required(*READ_ALL)
+def poc_verify(url):
+    """Return PoC verification result for a given URL."""
+    try:
+        result = poc_verification(url)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    if not result:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(result)
 
 
 @bp.route("/clusters/<int:cluster_id>")
