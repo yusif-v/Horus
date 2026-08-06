@@ -2,10 +2,15 @@
 
 Produces professional weekly threat intelligence reports in text, markdown,
 and HTML formats suitable for executive distribution and SOC handoffs.
+The HTML renderer generates a 15-20 page PDF-ready report with:
+- SVG charts (donut, trend line, bar, heatmap, histogram)
+- Full IOC sections (network + host indicators)
+- Embedded AI analysis sections
+- Print-ready CSS with page breaks and A4 margins
 
 Usage:
     from horus.render.weekly import render_weekly_report
-    report_md = render_weekly_report(data, fmt="md")
+    report_html = render_weekly_report(data, fmt="html")
 """
 
 from __future__ import annotations
@@ -27,7 +32,7 @@ def render_weekly_report(data: WeeklyData, fmt: str = "md") -> str:
     """Render a weekly threat report in the requested format.
 
     Args:
-        data: WeeklyData from gather_weekly_data().
+        data: WeeklyData from gather_weekly_report().
         fmt: Output format - "text", "md", or "html".
 
     Returns:
@@ -79,6 +84,145 @@ def _tier_label(tier: int) -> str:
     return {1: "CRITICAL", 2: "HIGH", 3: "MEDIUM", 4: "LOW", 5: "BACKGROUND"}.get(tier, "INFO")
 
 
+def _epss_histogram(data: list[dict], width: int = 500, height: int = 180) -> str:
+    """Generate EPSS distribution histogram."""
+    if not data:
+        return f'<svg viewBox="0 0 {width} {height}" width="{width}" height="{height}"><text x="{width // 2}" y="{height // 2}" text-anchor="middle" fill="#8b949e" font-size="14">No EPSS data</text></svg>'
+
+    # Bucket EPSS into 10 bins
+    bins = [0] * 10
+    for d in data:
+        score = d.get("epss_score") or 0
+        idx = min(int(score * 10), 9)
+        bins[idx] += 1
+
+    max_count = max(bins) if bins else 1
+    padding = {"top": 15, "right": 15, "bottom": 35, "left": 35}
+    chart_w = width - padding["left"] - padding["right"]
+    chart_h = height - padding["top"] - padding["bottom"]
+    bar_w = chart_w / 10
+
+    bars = []
+    for i, count in enumerate(bins):
+        if count == 0:
+            continue
+        x = padding["left"] + i * bar_w
+        bar_h = (count / max_count) * chart_h
+        y = padding["top"] + chart_h - bar_h
+        # Color by EPSS range
+        intensity = i / 9
+        r = int(88 + (248 - 88) * intensity)
+        g = int(166 + (81 - 166) * intensity)
+        b = int(255 + (73 - 255) * intensity)
+        bars.append(
+            f'<rect x="{x + 2:.1f}" y="{y:.1f}" width="{bar_w - 4:.1f}" height="{bar_h:.1f}" rx="2" '
+            f'fill="rgb({r},{g},{b})" opacity="0.85"/>'
+            f'<text x="{x + bar_w / 2:.1f}" y="{y - 3:.1f}" text-anchor="middle" fill="#c9d1d9" font-size="9">{count}</text>'
+        )
+
+    # X-axis labels
+    x_labels = []
+    bottom_pad = padding["bottom"]
+    for i in range(10):
+        x = padding["left"] + i * bar_w + bar_w / 2
+        label = f"{i * 10}-{(i + 1) * 10}%"
+        y_pos = height - bottom_pad + 15
+        x_labels.append(
+            f'<text x="{x:.1f}" y="{y_pos}" text-anchor="middle" fill="#8b949e" font-size="9" '
+            f'transform="rotate(-25 {x:.1f} {y_pos})">{label}</text>'
+        )
+
+    # Y-axis grid
+    grid = []
+    left_pad = padding["left"]
+    for i in range(5):
+        y_val = padding["top"] + (i / 4) * chart_h
+        val = int(max_count - (i / 4) * max_count)
+        grid.append(
+            f'<line x1="{left_pad}" y1="{y_val:.1f}" x2="{left_pad + chart_w}" y2="{y_val:.1f}" '
+            f'stroke="#30363d" stroke-width="0.5" stroke-dasharray="2,2"/>'
+            f'<text x="{left_pad - 5}" y="{y_val + 3:.1f}" text-anchor="end" fill="#8b949e" font-size="9">{val}</text>'
+        )
+
+    return (
+        f'<svg viewBox="0 0 {width} {height}" width="{width}" height="{height}" style="max-width:100%;">'
+        f"{''.join(grid)}{''.join(x_labels)}{''.join(bars)}"
+        f'<text x="{width // 2}" y="{height - 3}" text-anchor="middle" fill="#8b949e" font-size="10">EPSS Score Range</text>'
+        f"</svg>"
+    )
+
+
+def _ioc_type_donut(type_counts: dict[str, int], size: int = 200) -> str:
+    """Generate IOC type breakdown donut chart."""
+    if not type_counts:
+        return f'<svg viewBox="0 0 {size} {size}" width="{size}" height="{size}"><text x="{size // 2}" y="{size // 2}" text-anchor="middle" fill="#8b949e" font-size="12">No IOC data</text></svg>'
+
+    items = [
+        ("IP", type_counts.get("ip", 0), "#58a6ff"),
+        ("Domain", type_counts.get("domain", 0), "#3fb950"),
+        ("URL", type_counts.get("url", 0), "#bc8cff"),
+        (
+            "Hash",
+            (
+                type_counts.get("hash_md5", 0)
+                + type_counts.get("hash_sha1", 0)
+                + type_counts.get("hash_sha256", 0)
+            ),
+            "#f0883e",
+        ),
+        ("Email", type_counts.get("email", 0), "#d29922"),
+        ("Path", type_counts.get("path", 0), "#8b949e"),
+        ("Registry", type_counts.get("registry", 0), "#f85149"),
+    ]
+    items = [(name, c, col) for name, c, col in items if c > 0]
+    total = sum(c for _, c, _ in items)
+
+    import math
+
+    cx, cy = size // 2, size // 2
+    outer_r = size // 2 - 8
+    inner_r = int(outer_r * 0.6)
+
+    arcs = []
+    start = -90
+    for _label, count, color in items:
+        sweep = (count / total) * 360
+        end = start + sweep
+        x0 = cx + outer_r * math.cos(math.radians(start))
+        y0 = cy + outer_r * math.sin(math.radians(start))
+        x1 = cx + outer_r * math.cos(math.radians(end))
+        y1 = cy + outer_r * math.sin(math.radians(end))
+        xi0 = cx + inner_r * math.cos(math.radians(end))
+        yi0 = cy + inner_r * math.sin(math.radians(end))
+        xi1 = cx + inner_r * math.cos(math.radians(start))
+        yi1 = cy + inner_r * math.sin(math.radians(start))
+        large = 1 if sweep > 180 else 0
+        d = (
+            f"M {x0:.1f} {y0:.1f} A {outer_r} {outer_r} 0 {large} 1 {x1:.1f} {y1:.1f} "
+            f"L {xi0:.1f} {yi0:.1f} A {inner_r} {inner_r} 0 {large} 0 {xi1:.1f} {yi1:.1f} Z"
+        )
+        arcs.append(f'<path d="{d}" fill="{color}" stroke="#0d1117" stroke-width="1"/>')
+        start = end
+
+    legend = "".join(
+        f'<div style="display:flex;align-items:center;gap:4px;margin:1px 4px;">'
+        f'<span style="width:8px;height:8px;background:{col};border-radius:1px;"></span>'
+        f'<span style="color:#8b949e;font-size:10px;">{name}: {c}</span></div>'
+        for name, c, col in items
+    )
+
+    return (
+        f'<div style="text-align:center;">'
+        f'<svg viewBox="0 0 {size} {size}" width="{size}" height="{size}" style="max-width:100%;">'
+        f"{''.join(arcs)}"
+        f'<text x="{cx}" y="{cy - 4}" text-anchor="middle" fill="#c9d1d9" font-size="16" font-weight="700">{total}</text>'
+        f'<text x="{cx}" y="{cy + 12}" text-anchor="middle" fill="#8b949e" font-size="9">IOCs</text>'
+        f"</svg>"
+        f'<div style="display:flex;flex-wrap:wrap;justify-content:center;margin-top:4px;">{legend}</div>'
+        f"</div>"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Markdown renderer
 # ---------------------------------------------------------------------------
@@ -94,6 +238,31 @@ def _render_markdown(data: WeeklyData) -> str:
     w("# Weekly Threat Intelligence Report")
     w(f"**Period:** {data.period_start} to {data.period_end}")
     w(f"**Generated:** {data.generated_at}")
+    w()
+
+    # Table of Contents
+    w("## Table of Contents")
+    w()
+    w("1. [Executive Summary](#executive-summary)")
+    w("2. [Threat Landscape Overview](#threat-landscape-overview)")
+    if data.top_cves:
+        w("3. [Critical & High CVE Analysis](#critical--high-cve-analysis)")
+    if data.kev_entries:
+        w("4. [CISA Known Exploited Vulnerabilities](#cisa-known-exploited-vulnerabilities)")
+    if data.epss_movers:
+        w("5. [EPSS Exploitability Trends](#epss-exploitability-trends)")
+    if data.top_tags:
+        w("6. [MITRE ATT&CK Technique Mapping](#mitre-attck-technique-mapping)")
+    if data.network_iocs or data.ioc_summary.get("total_iocs", 0) > 0:
+        w("7. [Network-based Indicators (IOCs)](#network-based-indicators-iocs)")
+    if data.host_iocs:
+        w("8. [Host-based Indicators (IOCs)](#host-based-indicators-iocs)")
+    if data.news_highlights:
+        w("9. [Vulnerability News & Intelligence](#vulnerability-news--intelligence)")
+    if data.top_vendors:
+        w("10. [Affected Vendors & Products](#vendors--products)")
+    w("11. [Recommendations](#recommendations)")
+    w("12. [Appendix](#appendix)")
     w()
     w("---")
     w()
@@ -115,6 +284,9 @@ def _render_markdown(data: WeeklyData) -> str:
     w(f"| Avg CVSS | {data.avg_cvss_this_week} | — | — |")
     w(f"| Avg EPSS | {data.avg_epss_this_week:.4f} | — | — |")
     w(f"| Avg Reputation | {data.avg_reputation_this_week}/10 | — | — |")
+    ioc_total = data.ioc_summary.get("total_iocs", 0)
+    if ioc_total > 0:
+        w(f"| Extracted IOCs | {ioc_total} | — | — |")
     w()
 
     if data.kev_overdue > 0:
@@ -134,9 +306,20 @@ def _render_markdown(data: WeeklyData) -> str:
                 w(f"- {_severity_emoji(sev)} **{sev}:** {count} {bar}")
         w()
 
+    # Threat Landscape
+    w("## Threat Landscape Overview")
+    w()
+    w(
+        f"This week saw {data.total_cves_this_week} new CVEs with an average CVSS of {data.avg_cvss_this_week}."
+    )
+    w(
+        f"Critical: {data.critical_cves} | High: {data.high_cves} | KEV additions: {data.kev_new_this_week}"
+    )
+    w()
+
     # Top CVEs
     if data.top_cves:
-        w("## Top CVEs by Risk Score")
+        w("## Critical & High CVE Analysis")
         w()
         w("| CVE | CVSS | Severity | EPSS | KEV | Reputation | PoCs | Description |")
         w("|-----|------|----------|------|-----|------------|------|-------------|")
@@ -152,28 +335,52 @@ def _render_markdown(data: WeeklyData) -> str:
     if data.kev_entries:
         w("## CISA Known Exploited Vulnerabilities")
         w()
-        new_kevs = [k for k in data.kev_entries if k["is_new"]]
-        overdue_kevs = [k for k in data.kev_entries if k["is_overdue"]]
 
-        if new_kevs:
-            w(f"### New This Week ({len(new_kevs)})")
-            w()
-            for kev in new_kevs[:5]:
-                due = f" | **Due: {kev['kev_due_date']}**" if kev["kev_due_date"] else ""
-                w(f"- **{kev['id']}** | CVSS {kev['cvss_score'] or 'N/A'}{due}")
-                w(f"  > {kev['description'][:150]}")
-                w()
+        from datetime import date as _date_mod
+
+        overdue_kevs = [k for k in data.kev_entries if k["is_overdue"]]
+        due_soon = []
+        no_due_date = []
+        for k in data.kev_entries:
+            if k["kev_due_date"] == "Not Set":
+                no_due_date.append(k)
+            elif not k["is_overdue"]:
+                try:
+                    due_d = _date_mod.fromisoformat(k["kev_due_date"])
+                    if (due_d - _date_mod.today()).days <= 30:
+                        due_soon.append(k)
+                except ValueError:
+                    pass
+
+        w(
+            f"**Total KEVs:** {len(data.kev_entries)} | **Overdue:** {len(overdue_kevs)} | **Due Soon:** {len(due_soon)} | **No Due Date:** {len(no_due_date)}"
+        )
+        w()
 
         if overdue_kevs:
-            w(f"> **OVERDUE:** {len(overdue_kevs)} KEV entries past remediation deadline:")
+            w(
+                f"> **WARNING:** {len(overdue_kevs)} KEV-listed CVEs are past their CISA remediation deadline."
+            )
             w()
-            for kev in overdue_kevs[:5]:
-                w(f"- **{kev['id']}** | Due: {kev['kev_due_date']} | {kev['description'][:100]}")
-            w()
+
+        w("| CVE | CVSS | Severity | Due Date | Days Overdue | Affected Products | EPSS |")
+        w("|-----|------|----------|----------|--------------|-------------------|------|")
+        for kev in data.kev_entries:
+            days_col = str(kev["days_overdue"]) if kev["is_overdue"] else "—"
+            due_display = kev["kev_due_date"] if kev["kev_due_date"] != "Not Set" else "NOT SET"
+            if kev["is_overdue"]:
+                due_display = f"**{due_display}** ⚠️"
+            sev = kev.get("cvss_severity") or "N/A"
+            epss = f"{kev['epss_score']:.4f}" if kev.get("epss_score") is not None else "N/A"
+            affected = (kev.get("affected") or "Unknown")[:60]
+            w(
+                f"| {kev['id']} | {kev['cvss_score'] or 'N/A'} | {sev} | {due_display} | {days_col} | {affected} | {epss} |"
+            )
+        w()
 
     # EPSS Top Exploitability
     if data.epss_movers:
-        w("## Highest Exploitability (EPSS)")
+        w("## EPSS Exploitability Trends")
         w()
         w("| CVE | CVSS | EPSS | KEV | Description |")
         w("|-----|------|------|-----|-------------|")
@@ -184,19 +391,9 @@ def _render_markdown(data: WeeklyData) -> str:
             )
         w()
 
-    # Vendor Breakdown
-    if data.top_vendors:
-        w("## Most Targeted Vendors")
-        w()
-        w("| Vendor | CVEs | Avg CVSS | KEVs |")
-        w("|--------|------|----------|------|")
-        for v in data.top_vendors[:10]:
-            w(f"| {v['vendor']} | {v['cve_count']} | {v['avg_cvss']} | {v['kev_count']} |")
-        w()
-
-    # Attack Tags (MITRE ATT&CK mapping)
+    # MITRE ATT&CK Tags
     if data.top_tags:
-        w("## Attack Technique Distribution")
+        w("## MITRE ATT&CK Technique Mapping")
         w()
         w("| Technique | CVEs | Avg CVSS |")
         w("|-----------|------|----------|")
@@ -204,45 +401,54 @@ def _render_markdown(data: WeeklyData) -> str:
             w(f"| {t['tag']} | {t['cve_count']} | {t['avg_cvss']} |")
         w()
 
-    # News Highlights
-    if data.news_highlights:
-        w("## Security News Highlights")
+    # Network IOCs
+    if data.network_iocs or data.ioc_summary.get("network_count", 0) > 0:
+        w("## Network-based Indicators (IOCs)")
         w()
-        for article in data.news_highlights[:8]:
+        w("| Type | Value | Source | Linked CVEs |")
+        w("|------|-------|--------|-------------|")
+        for ioc in data.network_iocs[:20]:
+            cves = ", ".join(ioc.get("cves", [])[:5])
+            sources = ", ".join(ioc.get("sources", []))
+            w(f"| {ioc['type']} | `{ioc['value'][:60]}` | {sources} | {cves or '—'} |")
+        w()
+
+    # Host IOCs
+    if data.host_iocs:
+        w("## Host-based Indicators (IOCs)")
+        w()
+        w("| Type | Value | Source | Linked CVEs |")
+        w("|------|-------|--------|-------------|")
+        for ioc in data.host_iocs[:20]:
+            cves = ", ".join(ioc.get("cves", [])[:5])
+            sources = ", ".join(ioc.get("sources", []))
+            val = ioc["value"]
+            if len(val) > 60:
+                val = f"{val[:30]}...{val[-20:]}"
+            w(f"| {ioc['type']} | `{val}` | {sources} | {cves or '—'} |")
+        w()
+
+    # News
+    if data.news_highlights:
+        w("## Vulnerability News & Intelligence")
+        w()
+        for article in data.news_highlights[:10]:
             tier_badge = _tier_label(article["tier"])
-            w(f"- [{article['title']}]({article['url']}) `[{tier_badge}]` *{article['source']}*")
+            w(
+                f"- **[{tier_badge}]** [{article['title']}]({article['url']}) — *{article['source']}*"
+            )
             if article["summary"]:
-                w(f"  > {article['summary'][:150]}")
+                w(f"  > {article['summary'][:200]}")
             w()
 
-    # ThreatFox IOC Summary
-    if data.threatfox_summary.get("total_iocs", 0) > 0:
-        w("## Threat Intelligence (ThreatFox IOCs)")
+    # Vendors
+    if data.top_vendors:
+        w("## Affected Vendors & Products")
         w()
-        w(f"- **Total IOCs:** {data.threatfox_summary['total_iocs']}")
-        w(f"- **CVEs with IOCs:** {data.threatfox_summary['cves_with_iocs']}")
-        type_counts = data.threatfox_summary.get("type_counts", {})
-        if type_counts:
-            types_str = ", ".join(f"{k}: {v}" for k, v in sorted(type_counts.items()))
-            w(f"- **IOC Types:** {types_str}")
-        threat_types = data.threatfox_summary.get("top_threat_types", [])
-        if threat_types:
-            top_types_str = ", ".join(
-                f"{t['threat_type']} ({t['count']})" for t in threat_types[:5]
-            )
-            w(f"- **Top Threat Types:** {top_types_str}")
-        w()
-
-    # Top PoCs
-    if data.top_pocs:
-        w("## Notable Exploit Publications")
-        w()
-        w("| PoC | Source | Stars | Type | Linked CVEs |")
-        w("|-----|--------|-------|------|-------------|")
-        for poc in data.top_pocs[:8]:
-            w(
-                f"| [{poc['url'][:50]}...]({poc['url']}) | {poc['source']} | {poc['stars']}★ | {poc['exploit_type'] or 'N/A'} | {poc['linked_cves']} |"
-            )
+        w("| Vendor | CVEs | Avg CVSS | KEVs |")
+        w("|--------|------|----------|------|")
+        for v in data.top_vendors[:10]:
+            w(f"| {v['vendor']} | {v['cve_count']} | {v['avg_cvss']} | {v['kev_count']} |")
         w()
 
     # Triage Summary
@@ -259,20 +465,34 @@ def _render_markdown(data: WeeklyData) -> str:
                 w(f"- {status.capitalize()}: **{count}** ({pct:.0f}%)")
         w()
 
-    # Source Health
-    if data.source_health:
-        w("## Source Health")
-        w()
-        w("| Source | Status | Last Run | CVEs | PoCs | Failures |")
-        w("|--------|--------|----------|------|------|----------|")
-        for sh in data.source_health:
-            status_emoji = (
-                "OK" if sh["status"] == "ok" else "ERR" if sh["status"] == "error" else "SKIP"
-            )
-            w(
-                f"| {sh['source']} | {status_emoji} | {sh['last_run'][:16]} | {sh['cves']} | {sh['pocs']} | {sh['consecutive_failures']} |"
-            )
-        w()
+    # Recommendations
+    w("## Recommendations")
+    w()
+    w("1. **Patch Overdue KEVs:** Prioritize remediation of KEV-listed CVEs past deadline.")
+    w("2. **Monitor Critical CVEs:** Focus on CVEs with CVSS 9+ and EPSS > 0.5.")
+    if data.ioc_summary.get("network_count", 0) > 0:
+        w("3. **Deploy Network IOCs:** Block identified IPs, domains, URLs at perimeter.")
+    if data.ioc_summary.get("host_count", 0) > 0:
+        w("4. **Deploy Host IOCs:** Add file hashes to EDR blocklists.")
+    w("5. **Review Correlated CVEs:** CVEs sharing ATT&CK techniques may indicate campaigns.")
+    w()
+
+    # Appendix
+    w("## Appendix")
+    w()
+    w("### Methodology")
+    w("Data collected from NVD, GitHub, Exploit-DB, CISA KEV, ThreatFox, and security news feeds.")
+    w(
+        "Reputation scores calculated using CVSS, EPSS, social mentions, PoC availability, and vendor ubiquity."
+    )
+    w()
+    w("### Data Sources")
+    w("- NVD (National Vulnerability Database)")
+    w("- CISA Known Exploited Vulnerabilities")
+    w("- Exploit-DB / GitHub PoCs")
+    w("- ThreatFox IOC Feed")
+    w("- Security news RSS feeds")
+    w()
 
     # Footer
     w("---")
@@ -345,14 +565,7 @@ def _render_text(data: WeeklyData) -> str:
     if data.kev_entries:
         w("CISA KEV ENTRIES")
         w("-" * 40)
-        new_kevs = [k for k in data.kev_entries if k["is_new"]]
         overdue_kevs = [k for k in data.kev_entries if k["is_overdue"]]
-        if new_kevs:
-            w(f"  New this week ({len(new_kevs)}):")
-            for kev in new_kevs[:5]:
-                due = f" | Due: {kev['kev_due_date']}" if kev["kev_due_date"] else ""
-                w(f"    {kev['id']}  CVSS {kev['cvss_score'] or 'N/A'}{due}")
-                w(f"      {kev['description'][:100]}")
         if overdue_kevs:
             w(f"  OVERDUE ({len(overdue_kevs)}):")
             for kev in overdue_kevs[:5]:
@@ -365,7 +578,6 @@ def _render_text(data: WeeklyData) -> str:
         for m in data.epss_movers[:8]:
             kev_str = " [KEV]" if m["kev"] else ""
             w(f"  {m['id']}  EPSS {m['epss_score']:.4f}  CVSS {m['cvss_score'] or 'N/A'}{kev_str}")
-            w(f"    {m['description'][:80]}")
         w()
 
     if data.top_vendors:
@@ -424,14 +636,6 @@ def _render_text(data: WeeklyData) -> str:
                 w(f"    {status.capitalize():<15} {count:>4}")
         w()
 
-    if data.source_health:
-        w("SOURCE HEALTH")
-        w("-" * 40)
-        for sh in data.source_health:
-            err_str = f" (ERROR: {sh['error'][:50]})" if sh["error"] else ""
-            w(f"  {sh['source']:<20} {sh['status']:<6}  Last: {sh['last_run'][:16]}{err_str}")
-        w()
-
     w("=" * 72)
     w(f"  Generated by Horus — {data.generated_at}")
     w("=" * 72)
@@ -440,97 +644,30 @@ def _render_text(data: WeeklyData) -> str:
 
 
 # ---------------------------------------------------------------------------
-# HTML renderer (self-contained, professional)
+# HTML renderer (professional, PDF-ready, 15-20 pages)
 # ---------------------------------------------------------------------------
 
 
 def _render_html(data: WeeklyData) -> str:
     """Render a publication-quality HTML report with SVG charts and print-ready CSS."""
-    total_cves = data.total_cves_this_week
-    total_pocs = data.total_pocs_this_week
-    cve_trend = _trend_arrow(data.total_cves_this_week, data.total_cves_last_week)
-    poc_trend = _trend_arrow(data.total_pocs_this_week, data.total_pocs_last_week)
-    cve_pct = _pct_change(data.total_cves_this_week, data.total_cves_last_week)
-    poc_pct = _pct_change(data.total_pocs_this_week, data.total_pocs_last_week)
 
-    # Determine trend direction classes
-    cve_dir = (
-        "up"
-        if data.total_cves_this_week > data.total_cves_last_week
-        else "down"
-        if data.total_cves_this_week < data.total_cves_last_week
-        else "neutral"
-    )
-    poc_dir = (
-        "up"
-        if data.total_pocs_this_week > data.total_pocs_last_week
-        else "down"
-        if data.total_pocs_this_week < data.total_pocs_last_week
-        else "neutral"
-    )
-
-    # Build donut chart
-    donut_chart = severity_donut(
-        critical=data.severity_breakdown.get("CRITICAL", 0),
-        high=data.severity_breakdown.get("HIGH", 0),
-        medium=data.severity_breakdown.get("MEDIUM", 0),
-        low=data.severity_breakdown.get("LOW", 0),
-    )
-
-    # Build trend line chart
-    trend_chart = cve_trend_line(data.weekly_trend) if data.weekly_trend else ""
-
-    # Build vendor bar chart
-    vendor_chart = vendor_bar_chart(data.top_vendors) if data.top_tags else ""
-
-    # Build MITRE heatmap
-    mitre_chart = mitre_heatmap(data.top_tags) if data.top_tags else ""
-
-    # Build executive narrative
-    narrative = _build_narrative(data)
-
-    # Build key findings
-    findings = _build_findings(data)
-
-    # Build top CVE cards
-    cve_cards = _build_cve_cards(data.top_cves[:5]) if data.top_cves else ""
-
-    # Build CVE detail table
-    cves_html = _build_cve_table(data.top_cves[:10]) if data.top_cves else ""
-
-    # Build KEV section
+    # Pre-compute all charts and sections
+    charts = _build_all_charts(data)
+    cover_html = _build_cover(data)
+    toc_html = _build_toc(data)
+    executive_html = _build_executive_section(data)
+    landscape_html = _build_landscape_section(data, charts)
+    cve_analysis_html = _build_cve_analysis(data)
     kev_html = _build_kev_section(data.kev_entries)
-
-    # Build vendor table
-    vendor_html = _build_vendor_table(data.top_vendors[:10]) if data.top_vendors else ""
-
-    # Build news section
-    news_html = _build_news_section(data.news_highlights[:8]) if data.news_highlights else ""
-
-    # Build ThreatFox section
-    threatfox_html = _build_threatfox_section(data.threatfox_summary)
-
-    # Build PoCs section
-    pocs_html = _build_pocs_section(data.top_pocs[:8]) if data.top_pocs else ""
-
-    # Build EPSS section
-    epss_html = _build_epss_section(data.epss_movers[:8]) if data.epss_movers else ""
-
-    # Build triage section
-    triage_html = _build_triage_section(data.triage_summary)
-
-    # Build source health
-    health_html = _build_source_health(data.source_health)
-
-    # Stats overlay for cover
-    stats_overlay = (
-        f'<div class="cover-stats">'
-        f'<div class="cover-stat"><span class="cover-stat-num">{total_cves}</span><span class="cover-stat-label">New CVEs</span></div>'
-        f'<div class="cover-stat"><span class="cover-stat-num critical">{data.critical_cves}</span><span class="cover-stat-label">Critical</span></div>'
-        f'<div class="cover-stat"><span class="cover-stat-num">{data.kev_new_this_week}</span><span class="cover-stat-label">KEV Additions</span></div>'
-        f'<div class="cover-stat"><span class="cover-stat-num">{total_pocs}</span><span class="cover-stat-label">New PoCs</span></div>'
-        f"</div>"
-    )
+    epss_html = _build_epss_section(data, charts)
+    mitre_html = _build_mitre_section(data, charts)
+    network_ioc_html = _build_network_ioc_section(data)
+    host_ioc_html = _build_host_ioc_section(data)
+    news_html = _build_news_section(data.news_highlights[:10]) if data.news_highlights else ""
+    vendor_html = _build_vendor_section(data, charts)
+    correlation_html = _build_correlation_section(data)
+    recommendations_html = _build_recommendations_section(data)
+    appendix_html = _build_appendix(data)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -557,40 +694,33 @@ body {{
 .cover-page {{
     background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    padding: 3rem 2rem;
-    border-bottom: 3px solid var(--accent);
-    page-break-after: always;
+    display: flex; flex-direction: column; justify-content: center;
+    align-items: center; text-align: center; padding: 3rem 2rem;
+    border-bottom: 3px solid var(--accent); page-break-after: always;
 }}
 .cover-brand {{ font-size: 1rem; color: var(--accent); letter-spacing: 4px; text-transform: uppercase; margin-bottom: 1rem; font-weight: 600; }}
 .cover-title {{ font-size: 2.8rem; font-weight: 800; color: #ffffff; margin-bottom: 0.5rem; letter-spacing: -0.5px; }}
 .cover-subtitle {{ font-size: 1.2rem; color: var(--text-dim); margin-bottom: 1.5rem; }}
 .cover-period {{ font-size: 1.1rem; color: var(--accent); font-weight: 500; margin-bottom: 0.5rem; }}
 .cover-generated {{ font-size: 0.85rem; color: var(--text-dim); margin-bottom: 2rem; }}
-.classification-banner {{
-    display: inline-block; padding: 0.4rem 1.5rem; border: 2px solid var(--yellow);
-    color: var(--yellow); font-weight: 700; font-size: 0.9rem; letter-spacing: 2px;
-    border-radius: 4px; margin-bottom: 2rem;
-}}
+.classification-banner {{ display: inline-block; padding: 0.4rem 1.5rem; border: 2px solid var(--yellow); color: var(--yellow); font-weight: 700; font-size: 0.9rem; letter-spacing: 2px; border-radius: 4px; margin-bottom: 2rem; }}
 .cover-stats {{ display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center; margin-top: 1rem; }}
 .cover-stat {{ text-align: center; }}
 .cover-stat-num {{ display: block; font-size: 2.2rem; font-weight: 800; color: var(--text); }}
 .cover-stat-num.critical {{ color: var(--red); }}
 .cover-stat-label {{ font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }}
 
-/* ── Section Dividers ───────────────────────────────── */
-.section {{ padding: 2.5rem 0; }}
+/* ── Table of Contents ──────────────────────────────── */
+.toc-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 2rem; margin: 1rem 0; }}
+.toc-item {{ padding: 0.5rem 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.6rem; }}
+.toc-num {{ color: var(--accent); font-weight: 700; font-size: 0.85rem; min-width: 1.5rem; }}
+.toc-item a {{ color: var(--text); text-decoration: none; font-size: 0.9rem; }}
+.toc-item a:hover {{ color: var(--accent); }}
+
+/* ── Section Styles ─────────────────────────────────── */
+.section {{ padding: 2.5rem 0; page-break-inside: avoid; }}
 .section-divider {{ height: 2px; background: linear-gradient(90deg, var(--accent), transparent); margin: 2rem 0; border-radius: 1px; }}
-.section h2 {{
-    color: var(--accent); font-size: 1.4rem; font-weight: 700;
-    margin-bottom: 1.2rem; padding-bottom: 0.5rem;
-    border-bottom: 2px solid var(--border);
-    page-break-after: avoid;
-}}
+.section h2 {{ color: var(--accent); font-size: 1.4rem; font-weight: 700; margin-bottom: 1.2rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--border); page-break-after: avoid; }}
 h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weight: 600; page-break-after: avoid; }}
 
 /* ── Executive Summary ──────────────────────────────── */
@@ -598,20 +728,15 @@ h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weig
 .executive-narrative p {{ margin-bottom: 0.8rem; }}
 .findings-list {{ list-style: none; padding: 0; margin: 1rem 0; }}
 .findings-list li {{ padding: 0.5rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; display: flex; align-items: flex-start; gap: 0.6rem; }}
-.findings-list li:last-child {{ border-bottom: none; }}
 .finding-icon {{ flex-shrink: 0; font-size: 1rem; }}
-.trend-indicator {{ font-size: 0.75rem; padding: 0.15rem 0.4rem; border-radius: 3px; margin-left: 0.5rem; }}
+.trend-indicator {{ font-size: 0.75rem; padding: 0.15rem 0.4rem; border-radius: 3px; margin-left: auto; flex-shrink: 0; }}
 .trend-up {{ background: rgba(248,81,73,0.15); color: var(--red); }}
 .trend-down {{ background: rgba(63,185,80,0.15); color: var(--green); }}
 .trend-neutral {{ background: rgba(139,148,158,0.15); color: var(--text-dim); }}
 
 /* ── KPI Grid ───────────────────────────────────────── */
 .kpi-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; }}
-.kpi-card {{
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    padding: 1.3rem 1rem; text-align: center; transition: border-color 0.2s;
-}}
-.kpi-card:hover {{ border-color: var(--accent); }}
+.kpi-card {{ background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.3rem 1rem; text-align: center; }}
 .kpi-num {{ font-size: 2.2rem; font-weight: 800; display: block; line-height: 1.2; }}
 .kpi-label {{ font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; margin-top: 0.3rem; }}
 .kpi-change {{ font-size: 0.75rem; margin-top: 0.4rem; display: block; }}
@@ -619,25 +744,14 @@ h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weig
 .critical {{ color: var(--red); }} .high {{ color: var(--orange); }}
 
 /* ── Charts Grid ────────────────────────────────────── */
-.charts-grid {{
-    display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
-    margin: 1.5rem 0;
-}}
-.chart-panel {{
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    padding: 1.5rem; page-break-inside: avoid;
-}}
+.charts-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 1.5rem 0; }}
+.chart-panel {{ background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; page-break-inside: avoid; }}
 .chart-panel h3 {{ color: var(--accent); font-size: 0.95rem; margin-bottom: 1rem; font-weight: 600; text-align: center; }}
 .chart-panel.full-width {{ grid-column: 1 / -1; }}
 
 /* ── CVE Cards ──────────────────────────────────────── */
 .cve-cards {{ display: grid; grid-template-columns: 1fr; gap: 1rem; margin: 1rem 0; }}
-.cve-card {{
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    padding: 1.3rem 1.5rem; page-break-inside: avoid;
-    transition: border-color 0.2s;
-}}
-.cve-card:hover {{ border-color: var(--border-bright); }}
+.cve-card {{ background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.3rem 1.5rem; page-break-inside: avoid; }}
 .cve-card.kev-highlight {{ border-left: 4px solid var(--red); }}
 .cve-card-header {{ display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.6rem; flex-wrap: wrap; }}
 .cve-id {{ font-weight: 700; font-size: 1.05rem; color: var(--accent); }}
@@ -660,11 +774,7 @@ h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weig
 
 /* ── Data Tables ────────────────────────────────────── */
 .data-table {{ width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }}
-.data-table thead th {{
-    background: var(--card-alt); padding: 0.7rem 0.9rem; text-align: left;
-    border-bottom: 2px solid var(--border-bright); color: var(--text-dim);
-    font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.4px;
-}}
+.data-table thead th {{ background: var(--card-alt); padding: 0.7rem 0.9rem; text-align: left; border-bottom: 2px solid var(--border-bright); color: var(--text-dim); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.4px; }}
 .data-table tbody td {{ padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border); }}
 .data-table tbody tr:nth-child(even) {{ background: rgba(255,255,255,0.02); }}
 .data-table tbody tr:hover {{ background: rgba(88,166,255,0.06); }}
@@ -675,66 +785,61 @@ h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weig
 .alert {{ padding: 0.8rem 1.2rem; border-radius: 6px; margin: 1rem 0; font-size: 0.9rem; page-break-inside: avoid; }}
 .alert-danger {{ background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.3); color: var(--red); }}
 
-/* ── News & PoCs ────────────────────────────────────── */
+/* ── News Section ───────────────────────────────────── */
 .news-list {{ margin: 1rem 0; }}
-.news-item {{
-    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-    padding: 1rem 1.2rem; margin-bottom: 0.6rem; page-break-inside: avoid;
-}}
+.news-item {{ background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 0.6rem; page-break-inside: avoid; }}
 .news-item a {{ color: var(--accent); text-decoration: none; font-weight: 600; font-size: 0.9rem; }}
-.news-item a:hover {{ text-decoration: underline; }}
 .news-source {{ color: var(--text-dim); font-size: 0.8rem; margin-left: 0.6rem; }}
 .news-summary {{ color: var(--text-dim); font-size: 0.82rem; margin-top: 0.4rem; line-height: 1.5; }}
 .tier-badge {{ display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.65rem; color: #fff; font-weight: 700; margin-right: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; }}
 
-.poc-list {{ margin: 1rem 0; }}
-.poc-item {{ padding: 0.7rem 0; border-bottom: 1px solid var(--border); }}
-.poc-item a {{ color: var(--accent); text-decoration: none; font-size: 0.85rem; }}
-.poc-meta {{ display: block; color: var(--text-dim); font-size: 0.75rem; margin-top: 0.2rem; }}
+/* ── IOC Tables ─────────────────────────────────────── */
+.ioc-table {{ font-size: 0.8rem; }}
+.ioc-table td {{ font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menospace, monospace; }}
+.ioc-type-badge {{ background: var(--card-alt); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.7rem; font-weight: 600; }}
 
-/* ── ThreatFox ──────────────────────────────────────── */
-.tf-grid {{ display: flex; gap: 1.2rem; margin: 1rem 0; flex-wrap: wrap; }}
-.tf-stat {{ background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem 1.8rem; text-align: center; }}
-.tf-num {{ display: block; font-size: 1.6rem; font-weight: 800; color: var(--accent); }}
-.tf-label {{ font-size: 0.75rem; color: var(--text-dim); margin-top: 0.2rem; }}
-.ioc-types {{ list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; padding: 0; }}
-.ioc-types li {{ background: var(--card); padding: 0.3rem 0.7rem; border-radius: 4px; font-size: 0.8rem; border: 1px solid var(--border); }}
+/* ── Recommendations ────────────────────────────────── */
+.rec-list {{ list-style: none; padding: 0; margin: 1rem 0; }}
+.rec-list li {{ padding: 0.7rem 0; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 0.7rem; }}
+.rec-priority {{ font-weight: 700; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; flex-shrink: 0; }}
+.rec-p1 {{ background: rgba(248,81,73,0.15); color: var(--red); }}
+.rec-p2 {{ background: rgba(240,136,62,0.15); color: var(--orange); }}
+.rec-p3 {{ background: rgba(210,153,34,0.15); color: var(--yellow); }}
 
-/* ── Triage & Health ────────────────────────────────── */
-.triage-list {{ list-style: none; display: flex; gap: 1rem; flex-wrap: wrap; margin: 0.5rem 0; padding: 0; }}
-.triage-list li {{ background: var(--card); padding: 0.5rem 0.9rem; border-radius: 6px; font-size: 0.85rem; border: 1px solid var(--border); }}
-.status-ok {{ color: var(--green); font-weight: 600; }}
-.status-error {{ color: var(--red); font-weight: 600; }}
-.status-skipped {{ color: var(--text-dim); }}
+/* ── Appendix ───────────────────────────────────────── */
+.appendix {{ font-size: 0.85rem; color: var(--text-dim); }}
+.appendix dt {{ color: var(--text); font-weight: 600; margin-top: 0.8rem; }}
+.appendix dd {{ margin-left: 1rem; }}
 
 /* ── Footer ─────────────────────────────────────────── */
-.footer {{ text-align: center; padding: 2rem 0; color: var(--text-dim); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 2rem; }}
+.footer {{ text-align: center; padding: 2rem 0; color: var(--text-dim); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 2rem; page-break-inside: avoid; }}
 
 /* ── Print Styles ───────────────────────────────────── */
 @media print {{
-    body {{ background: #fff; color: #1a1a1a; font-size: 11pt; }}
+    body {{ background: #fff; color: #1a1a1a; font-size: 10.5pt; line-height: 1.45; }}
     .container {{ max-width: 100%; padding: 0; }}
-    .cover-page {{ background: #fff; min-height: auto; padding: 4cm 2cm; border-bottom: 3px solid #1f6feb; page-break-after: always; }}
+    .cover-page {{ background: #fff; min-height: auto; padding: 5cm 2cm; border-bottom: 3px solid #1f6feb; page-break-after: always; }}
     .cover-title {{ color: #1a1a1a; }}
     .cover-stat-num {{ color: #1a1a1a; }}
-    .classification-banner {{ border-color: #d29922; color: #d29922; }}
-    .section h2 {{ color: #1f6feb; border-bottom-color: #d0d7de; }}
-    .kpi-card, .chart-panel, .cve-card, .news-item, .tf-stat {{
-        background: #f6f8fa; border-color: #d0d7de; break-inside: avoid;
-    }}
+    .classification-banner {{ border-color: #d29922; color: #8a6d00; }}
+    .section {{ padding: 1.2rem 0; }}
+    .section h2 {{ color: #1f6feb; border-bottom-color: #d0d7de; font-size: 1.1rem; }}
+    .kpi-card, .chart-panel, .cve-card, .news-item {{ background: #f6f8fa; border-color: #d0d7de; break-inside: avoid; }}
     .data-table thead th {{ background: #f6f8fa; color: #57606a; border-bottom-color: #d0d7de; }}
-    .data-table tbody td {{ border-bottom-color: #d0d7de; }}
+    .data-table tbody td {{ border-bottom-color: #eaeef2; }}
     .data-table tbody tr:nth-child(even) {{ background: #f6f8fa; }}
-    .sev-pill {{ border: 1px solid currentColor; }}
-    .cve-id, .news-item a, .poc-item a {{ color: #1f6feb; }}
-    @page {{ margin: 2cm 1.5cm; size: A4; }}
+    .cve-id, .news-item a {{ color: #1f6feb; }}
+    @page {{ margin: 1.8cm 1.5cm; size: A4; }}
     @page :first {{ margin: 0; }}
+    h2, h3 {{ page-break-after: avoid; }}
+    .section {{ page-break-inside: avoid; }}
 }}
 
 /* ── Responsive ─────────────────────────────────────── */
 @media screen and (max-width: 768px) {{
     .charts-grid {{ grid-template-columns: 1fr; }}
     .kpi-grid {{ grid-template-columns: repeat(2, 1fr); }}
+    .toc-grid {{ grid-template-columns: 1fr; }}
     .cover-stats {{ gap: 1rem; }}
     .cover-title {{ font-size: 2rem; }}
 }}
@@ -742,44 +847,243 @@ h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weig
 </head>
 <body>
 
-<!-- ═══════════ COVER PAGE ═══════════ -->
-<div class="cover-page">
+{cover_html}
+
+<div class="container">
+{toc_html}
+{executive_html}
+{landscape_html}
+{cve_analysis_html}
+{kev_html}
+{epss_html}
+{mitre_html}
+{network_ioc_html}
+{host_ioc_html}
+{news_html}
+{vendor_html}
+{correlation_html}
+{recommendations_html}
+{appendix_html}
+
+<div class="footer">
+    <p>Generated by Horus Threat Intelligence Platform &mdash; {data.generated_at}</p>
+    <p style="margin-top:0.3rem;font-size:0.7rem;">Classification: TLP:WHITE | For authorized distribution only</p>
+</div>
+</div>
+</body>
+</html>"""
+
+
+# ---------------------------------------------------------------------------
+# HTML Section Builders
+# ---------------------------------------------------------------------------
+
+
+def _build_cover(data: WeeklyData) -> str:
+    """Build cover page."""
+    total_cves = data.total_cves_this_week
+    return f"""<!-- ═══════════ COVER PAGE ═══════════ -->
+<div class="cover-page" id="cover">
     <div class="cover-brand">HORUS</div>
     <h1 class="cover-title">Weekly Threat Intelligence Report</h1>
     <div class="cover-subtitle">CVE &amp; Exploit Analysis</div>
     <div class="cover-period">{data.period_start} to {data.period_end}</div>
     <div class="cover-generated">Generated: {data.generated_at}</div>
     <div class="classification-banner">TLP:WHITE</div>
-    {stats_overlay}
-</div>
-
-<!-- ═══════════ EXECUTIVE SUMMARY ═══════════ -->
-<div class="container">
-<div class="section">
-    <h2>Executive Summary</h2>
-    <div class="executive-narrative">
-        {narrative}
+    <div class="cover-stats">
+        <div class="cover-stat"><span class="cover-stat-num">{total_cves}</span><span class="cover-stat-label">New CVEs</span></div>
+        <div class="cover-stat"><span class="cover-stat-num critical">{data.critical_cves}</span><span class="cover-stat-label">Critical</span></div>
+        <div class="cover-stat"><span class="cover-stat-num">{data.kev_new_this_week}</span><span class="cover-stat-label">KEV Added</span></div>
+        <div class="cover-stat"><span class="cover-stat-num">{data.total_pocs_this_week}</span><span class="cover-stat-label">New PoCs</span></div>
+        <div class="cover-stat"><span class="cover-stat-num">{data.ioc_summary.get("total_iocs", 0)}</span><span class="cover-stat-label">Extracted IOCs</span></div>
     </div>
+</div>"""
+
+
+def _build_toc(data: WeeklyData) -> str:
+    """Build table of contents."""
+    items = [
+        ("1.", "executive-summary", "Executive Summary"),
+        ("2.", "landscape", "Threat Landscape Overview"),
+        ("3.", "cve-analysis", "Critical & High CVE Analysis"),
+    ]
+    if data.kev_entries:
+        items.append(("4.", "kev-section", "CISA Known Exploited Vulnerabilities"))
+    if data.epss_movers:
+        items.append(("5.", "epss-section", "EPSS Exploitability Trends"))
+    if data.top_tags:
+        items.append(("6.", "mitre-section", "MITRE ATT&CK Technique Mapping"))
+    if data.network_iocs or data.ioc_summary.get("network_count", 0) > 0:
+        items.append(("7.", "network-iocs", "Network-based Indicators (IOCs)"))
+    if data.host_iocs:
+        items.append(("8.", "host-iocs", "Host-based Indicators (IOCs)"))
+    if data.news_highlights:
+        items.append(("9.", "news-section", "Vulnerability News & Intelligence"))
+    if data.top_vendors:
+        items.append(("10.", "vendor-section", "Affected Vendors & Products"))
+    items.append(("11.", "recommendations", "Recommendations"))
+    items.append(("12.", "appendix", "Appendix"))
+
+    items_html = "".join(
+        f'<div class="toc-item"><span class="toc-num">{num}</span><a href="#{anchor}">{label}</a></div>'
+        for num, anchor, label in items
+    )
+    return f"""<!-- ═══════════ TABLE OF CONTENTS ═══════════ -->
+<div class="section" id="toc">
+    <h2>Table of Contents</h2>
+    <div class="toc-grid">{items_html}</div>
+</div>"""
+
+
+def _build_all_charts(data: WeeklyData) -> dict[str, str]:
+    """Build all SVG charts."""
+    return {
+        "donut": severity_donut(
+            critical=data.severity_breakdown.get("CRITICAL", 0),
+            high=data.severity_breakdown.get("HIGH", 0),
+            medium=data.severity_breakdown.get("MEDIUM", 0),
+            low=data.severity_breakdown.get("LOW", 0),
+        ),
+        "trend": cve_trend_line(data.weekly_trend) if data.weekly_trend else "",
+        "vendor": vendor_bar_chart(data.top_vendors) if data.top_vendors else "",
+        "mitre": mitre_heatmap(data.top_tags) if data.top_tags else "",
+        "epss_hist": _epss_histogram(data.epss_movers) if data.epss_movers else "",
+        "ioc_donut": _ioc_type_donut(data.ioc_summary.get("type_counts", {})),
+    }
+
+
+def _build_executive_section(data: WeeklyData) -> str:
+    """Build executive summary section."""
+    total = data.total_cves_this_week
+    prev = data.total_cves_last_week
+    crit = data.critical_cves
+    high = data.high_cves
+    kev = data.kev_new_this_week
+
+    # Narrative paragraphs
+    if total == 0:
+        p1 = f"No new CVEs were observed during the reporting period of {data.period_start} to {data.period_end}. This may indicate reduced vulnerability disclosure activity."
+    else:
+        direction = (
+            "increase"
+            if total > prev
+            else "decrease"
+            if total < prev
+            else "consistent volume compared"
+        )
+        p1 = (
+            f"During the week of {data.period_start} to {data.period_end}, Horus tracked "
+            f"<strong>{total} new CVEs</strong> — a {_pct_change(total, prev)} {direction} "
+            f"from the previous week ({prev}). "
+            f"The average CVSS severity was {data.avg_cvss_this_week}, with "
+            f"{crit} critical-rated and {high} high-rated vulnerabilities requiring immediate attention."
+        )
+
+    if kev > 0:
+        p2 = f"CISA added <strong>{kev} new entries</strong> to the Known Exploited Vulnerabilities catalog, bringing the total tracked KEVs to {data.kev_total}. "
+    elif data.kev_total > 0:
+        p2 = f"No new KEV additions this week. {data.kev_total} total KEVs are currently tracked. "
+    else:
+        p2 = "No KEV entries are currently tracked. "
+
+    if data.kev_overdue > 0:
+        p2 += f"<strong style='color:var(--red);'>{data.kev_overdue} KEVs are past their CISA remediation deadline and require urgent action.</strong>"
+
+    p3 = (
+        f"The average EPSS score for new CVEs was <strong>{data.avg_epss_this_week:.3f}</strong>, "
+        f"indicating a {'high' if data.avg_epss_this_week > 0.2 else 'moderate' if data.avg_epss_this_week > 0.05 else 'low'} "
+        f"likelihood of exploitation within 30 days. {data.total_pocs_this_week} new proof-of-concept exploits were published."
+    )
+
+    ioc_total = data.ioc_summary.get("total_iocs", 0)
+    p4 = ""
+    if ioc_total > 0:
+        p4 = (
+            f"<p>Threat intelligence processing extracted <strong>{ioc_total} indicators of compromise</strong> "
+            f"({data.ioc_summary.get('network_count', 0)} network, {data.ioc_summary.get('host_count', 0)} host-based) "
+            f"from security news, resources, and threat feeds. These indicators should be deployed to "
+            f"perimeter defenses and endpoint detection systems.</p>"
+        )
+
+    # Findings
+    findings = []
+    if crit > 0:
+        findings.append(
+            f'<li><span class="finding-icon">🔴</span><span><strong>{crit} critical-rated CVEs (CVSS 9+)</strong> identified requiring immediate remediation priority.</span><span class="trend-indicator trend-up">ACTION</span></li>'
+        )
+    if kev > 0:
+        findings.append(
+            f'<li><span class="finding-icon">⚠️</span><span><strong>{kev} new KEV entries</strong> added by CISA — known actively exploited vulnerabilities.</span></li>'
+        )
+    if data.top_cves:
+        top = data.top_cves[0]
+        kev_tag = " [KEV]" if top["kev"] else ""
+        findings.append(
+            f'<li><span class="finding-icon">🎯</span><span>Highest-risk CVE: <strong>{top["id"]}{kev_tag}</strong> (CVSS {top["cvss_score"] or "N/A"}, EPSS {top["epss_score"]:.3f}) — {top["description"][:80]}</span></li>'
+        )
+    if data.top_vendors:
+        v = data.top_vendors[0]
+        findings.append(
+            f'<li><span class="finding-icon">🏢</span><span>Most targeted vendor: <strong>{v["vendor"]}</strong> with {v["cve_count"]} CVEs (avg CVSS {v["avg_cvss"]})</span></li>'
+        )
+    if data.epss_movers and data.epss_movers[0].get("epss_score", 0) > 0.5:
+        m = data.epss_movers[0]
+        findings.append(
+            f'<li><span class="finding-icon">💥</span><span>Highest exploitability: <strong>{m["id"]}</strong> with EPSS {m["epss_score"]:.3f} ({m["epss_score"] * 100:.0f}% exploitation probability)</span></li>'
+        )
+    if data.kev_overdue > 0:
+        findings.append(
+            f'<li><span class="finding-icon">🚨</span><span><strong>{data.kev_overdue} KEVs overdue</strong> — past CISA remediation deadline</span><span class="trend-indicator trend-up">URGENT</span></li>'
+        )
+
+    findings_html = (
+        "\n        ".join(findings) if findings else "<li>No significant findings this period.</li>"
+    )
+
+    return f"""<!-- ═══════════ EXECUTIVE SUMMARY ═══════════ -->
+<div class="section" id="executive-summary">
+    <h2>1. Executive Summary</h2>
+    <div class="executive-narrative">
+        <p>{p1}</p>
+        <p>{p2}</p>
+        <p>{p3}</p>
+        {p4}
+    </div>
+    <h3>Key Findings</h3>
     <ul class="findings-list">
-        {findings}
+        {findings_html}
     </ul>
-</div>
+</div>"""
 
+
+def _build_landscape_section(data: WeeklyData, charts: dict[str, str]) -> str:
+    """Build threat landscape section with charts."""
+    tc = data.total_cves_this_week
+    tn = (
+        "up"
+        if tc > data.total_cves_last_week
+        else "down"
+        if tc < data.total_cves_last_week
+        else "neutral"
+    )
+    cve_pct = _pct_change(tc, data.total_cves_last_week)
+    poc_pct = _pct_change(data.total_pocs_this_week, data.total_pocs_last_week)
+
+    return f"""<!-- ═══════════ THREAT LANDSCAPE ═══════════ -->
 <div class="section-divider"></div>
+<div class="section" id="landscape">
+    <h2>2. Threat Landscape Overview</h2>
 
-<!-- ═══════════ KPI CARDS ═══════════ -->
-<div class="section">
-    <h2>Key Metrics</h2>
     <div class="kpi-grid">
         <div class="kpi-card">
-            <span class="kpi-num{" critical" if total_cves > 50 else ""}">{total_cves}</span>
+            <span class="kpi-num{" critical" if tc > 50 else ""}">{tc}</span>
             <span class="kpi-label">New CVEs</span>
-            <span class="kpi-change {cve_dir}">{cve_trend} {cve_pct} WoW</span>
+            <span class="kpi-change {tn}">{_trend_arrow(tc, data.total_cves_last_week)} {cve_pct} WoW</span>
         </div>
         <div class="kpi-card">
-            <span class="kpi-num">{total_pocs}</span>
+            <span class="kpi-num">{data.total_pocs_this_week}</span>
             <span class="kpi-label">New PoCs</span>
-            <span class="kpi-change {poc_dir}">{poc_trend} {poc_pct} WoW</span>
+            <span class="kpi-change neutral">{_trend_arrow(data.total_pocs_this_week, data.total_pocs_last_week)} {poc_pct} WoW</span>
         </div>
         <div class="kpi-card">
             <span class="kpi-num{" critical" if data.kev_new_this_week > 0 else ""}">{data.kev_new_this_week}</span>
@@ -802,208 +1106,36 @@ h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weig
             <span class="kpi-change {"up" if data.kev_overdue > 0 else "neutral"}">Past deadline</span>
         </div>
     </div>
-</div>
 
-<div class="section-divider"></div>
-
-<!-- ═══════════ CHARTS ═══════════ -->
-<div class="section">
-    <h2>Threat Landscape Visualization</h2>
     <div class="charts-grid">
         <div class="chart-panel">
             <h3>Severity Distribution</h3>
-            {donut_chart}
+            {charts["donut"]}
         </div>
         <div class="chart-panel">
             <h3>MITRE ATT&CK Techniques</h3>
-            {mitre_chart}
+            {charts["mitre"]}
         </div>
         <div class="chart-panel full-width">
             <h3>CVE Intake Trend (8 Weeks)</h3>
-            {trend_chart}
-        </div>
-        <div class="chart-panel full-width">
-            <h3>Top Vendors by CVE Count</h3>
-            {vendor_chart}
+            {charts["trend"]}
         </div>
     </div>
-</div>
-
-<div class="section-divider"></div>
-
-<!-- ═══════════ TOP CVE CARDS ═══════════ -->
-<div class="section">
-    <h2>Top CVEs by Risk Score</h2>
-    {cve_cards}
-</div>
-
-<div class="section-divider"></div>
-
-<!-- ═══════════ DETAILED TABLES ═══════════ -->
-<div class="section">
-    <h2>CVE Detail Table</h2>
-    {cves_html}
-</div>
-
-{kev_html}
-{epss_html}
-{threatfox_html}
-{vendor_html}
-{news_html}
-{pocs_html}
-{triage_html}
-{health_html}
-
-<div class="footer">
-    <p>Generated by Horus Threat Intelligence Platform &mdash; {data.generated_at}</p>
-    <p style="margin-top:0.3rem;font-size:0.7rem;">Classification: TLP:WHITE | For authorized distribution only</p>
-</div>
-</div>
-</body>
-</html>"""
+</div>"""
 
 
-def _build_narrative(data: WeeklyData) -> str:
-    """Build executive summary narrative from actual data."""
-    total = data.total_cves_this_week
-    prev = data.total_cves_last_week
-    crit = data.critical_cves
-    high = data.high_cves
-    kev = data.kev_new_this_week
+def _build_cve_analysis(data: WeeklyData) -> str:
+    """Build critical & high CVE analysis section."""
+    if not data.top_cves:
+        return ""
 
-    # Paragraph 1: Volume overview
-    if total == 0:
-        p1 = f"No new CVEs were observed during the reporting period of {data.period_start} to {data.period_end}. This may indicate reduced vulnerability disclosure activity or a gap in collection coverage."
-    else:
-        direction = (
-            "increase"
-            if total > prev
-            else "decrease"
-            if total < prev
-            else "consistent volume compared"
-        )
-        p1 = (
-            f"During the week of {data.period_start} to {data.period_end}, Horus tracked "
-            f"<strong>{total} new CVEs</strong> — a {_pct_change(total, prev)} {direction} "
-            f"from the previous week ({prev}). "
-            f"The average CVSS severity was {data.avg_cvss_this_week}, with "
-            f"{crit} critical-rated and {high} high-rated vulnerabilities requiring immediate attention."
-        )
-
-    # Paragraph 2: KEV & threat context
-    if kev > 0:
-        p2 = (
-            f"CISA added <strong>{kev} new entries</strong> to the Known Exploited Vulnerabilities catalog this week, "
-            f"bringing the total tracked KEVs to {data.kev_total}. "
-        )
-    elif data.kev_total > 0:
-        p2 = f"No new KEV additions this week. {data.kev_total} total KEVs are currently tracked. "
-    else:
-        p2 = "No KEV entries are currently tracked. "
-
-    if data.kev_overdue > 0:
-        p2 += f"<strong style='color:var(--red);'>{data.kev_overdue} KEVs are past their CISA remediation deadline and require urgent action.</strong>"
-
-    # Paragraph 3: EPSS & exploitability
-    if data.avg_epss_this_week > 0.1:
-        p3 = (
-            f"The average EPSS (Exploit Prediction Scoring System) score for new CVEs was "
-            f"<strong>{data.avg_epss_this_week:.3f}</strong>, indicating a "
-            f"{'high' if data.avg_epss_this_week > 0.2 else 'moderate' if data.avg_epss_this_week > 0.05 else 'low'} "
-            f"likelihood of exploitation within 30 days. "
-            f"{data.total_pocs_this_week} new proof-of-concept exploits were published this week."
-        )
-    else:
-        p3 = (
-            f"{data.total_pocs_this_week} new proof-of-concept exploits were published this week. "
-            f"The average EPSS score was {data.avg_epss_this_week:.3f}, suggesting "
-            f"lower near-term exploitation likelihood."
-        )
-
-    return f"<p>{p1}</p><p>{p2}</p><p>{p3}</p>"
-
-
-def _build_findings(data: WeeklyData) -> str:
-    """Build key findings bullet list with emoji indicators."""
-    findings = []
-
-    # Critical CVEs
-    if data.critical_cves > 0:
-        findings.append(
-            f'<li><span class="finding-icon">🔴</span><span><strong>{data.critical_cves} critical-rated CVEs (CVSS 9+)</strong> identified requiring immediate remediation priority.</span>'
-            f'<span class="trend-indicator trend-up">ACTION</span></li>'
-        )
-
-    # KEV additions
-    if data.kev_new_this_week > 0:
-        findings.append(
-            f'<li><span class="finding-icon">⚠️</span><span><strong>{data.kev_new_this_week} new KEV entries</strong> added by CISA — known actively exploited vulnerabilities.</span></li>'
-        )
-
-    # Top CVE
-    if data.top_cves:
-        top = data.top_cves[0]
-        kev_tag = " [KEV]" if top["kev"] else ""
-        findings.append(
-            f'<li><span class="finding-icon">🎯</span><span>Highest-risk CVE: <strong>{top["id"]}{kev_tag}</strong> (CVSS {top["cvss_score"] or "N/A"}, EPSS {top["epss_score"]:.3f}) — {top["description"][:80]}</span></li>'
-        )
-
-    # Top vendor
-    if data.top_vendors:
-        v = data.top_vendors[0]
-        findings.append(
-            f'<li><span class="finding-icon">🏢</span><span>Most targeted vendor: <strong>{v["vendor"]}</strong> with {v["cve_count"]} CVEs (avg CVSS {v["avg_cvss"]})</span></li>'
-        )
-
-    # EPSS movers
-    if data.epss_movers:
-        m = data.epss_movers[0]
-        if m["epss_score"] and m["epss_score"] > 0.5:
-            findings.append(
-                f'<li><span class="finding-icon">💥</span><span>Highest exploitability: <strong>{m["id"]}</strong> with EPSS {m["epss_score"]:.3f} ({m["epss_score"] * 100:.0f}% exploitation probability)</span></li>'
-            )
-
-    # WoW trend
-    cve_change = _pct_change(data.total_cves_this_week, data.total_cves_last_week)
-    if data.total_cves_this_week > data.total_cves_last_week:
-        findings.append(
-            f'<li><span class="finding-icon">📈</span><span>CVE volume increased <strong>{cve_change}</strong> week-over-week ({data.total_cves_last_week} → {data.total_cves_this_week})</span></li>'
-        )
-    elif data.total_cves_this_week < data.total_cves_last_week:
-        findings.append(
-            f'<li><span class="finding-icon">📉</span><span>CVE volume decreased <strong>{cve_change}</strong> week-over-week ({data.total_cves_last_week} → {data.total_cves_this_week})</span></li>'
-        )
-
-    # Overdue
-    if data.kev_overdue > 0:
-        findings.append(
-            f'<li><span class="finding-icon">🚨</span><span><strong>{data.kev_overdue} KEVs overdue</strong> — past CISA remediation deadline</span>'
-            f'<span class="trend-indicator trend-up">URGENT</span></li>'
-        )
-
-    return "\n".join(findings)
-
-
-def _build_cve_cards(top_cves: list[dict]) -> str:
-    """Build top CVE detail cards."""
     cards = []
-    for cve in top_cves:
+    for cve in data.top_cves[:10]:
         kev_class = " kev-highlight" if cve["kev"] else ""
         kev_badge = ' <span class="badge kev">KEV</span>' if cve["kev"] else ""
         sev_class = (cve["cvss_severity"] or "N/A").lower()
         cvss = cvss_badge(cve["cvss_score"], cve["cvss_severity"])
         epss = epss_bar(cve["id"], cve["epss_score"]) if cve["epss_score"] is not None else "N/A"
-
-        # ATT&CK tags
-        tags_html = ""
-        if cve.get("attack_tags"):
-            tags = cve["attack_tags"][:4]
-            tags_html = (
-                '<div class="tag-list">'
-                + "".join(f'<span class="attack-tag">{t}</span>' for t in tags)
-                + "</div>"
-            )
-
         due = (
             f'<span class="cve-meta-item"> | <strong>Due:</strong> {cve["kev_due_date"]}</span>'
             if cve.get("kev_due_date")
@@ -1021,84 +1153,211 @@ def _build_cve_cards(top_cves: list[dict]) -> str:
         <span class="cve-meta-item"><strong>Reputation:</strong> {cve["reputation_score"] or 0:.1f}/10</span>
         <span class="cve-meta-item"><strong>PoCs:</strong> {cve["poc_source_count"]}</span>{due}
     </div>
-    {tags_html}
 </div>""")
-    return '<div class="cve-cards">' + "\n".join(cards) + "</div>"
 
-
-def _build_cve_table(top_cves: list[dict]) -> str:
-    """Build refined CVE data table."""
-    rows = ""
-    for cve in top_cves:
-        kev_class = ' class="kev-row"' if cve["kev"] else ""
-        kev_badge = ' <span class="badge kev">KEV</span>' if cve["kev"] else ""
-        sev_class = (cve["cvss_severity"] or "N/A").lower()
-        epss_bar_html = (
-            epss_bar(cve["id"], cve["epss_score"]) if cve["epss_score"] is not None else "N/A"
-        )
-        cvss = cvss_badge(cve["cvss_score"], cve["cvss_severity"])
-        rows += f"""<tr{kev_class}>
-            <td><strong>{cve["id"]}</strong>{kev_badge}</td>
-            <td>{cvss}</td>
-            <td><span class="sev-pill {sev_class}">{cve["cvss_severity"] or "N/A"}</span></td>
-            <td>{epss_bar_html}</td>
-            <td>{cve["reputation_score"] or 0:.1f}</td>
-            <td>{cve["poc_source_count"]}</td>
-            <td class="desc-cell">{cve["description"][:120]}</td>
-        </tr>"""
-    return f"""
-    <table class="data-table">
-        <thead><tr><th>CVE</th><th>CVSS</th><th>Severity</th><th>EPSS</th><th>Rep</th><th>PoCs</th><th>Description</th></tr></thead>
-        <tbody>{rows}</tbody>
-    </table>"""
+    return f"""<!-- ═══════════ CVE ANALYSIS ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="cve-analysis">
+    <h2>3. Critical &amp; High CVE Analysis</h2>
+    <div class="cve-cards">
+        {"".join(cards)}
+    </div>
+</div>"""
 
 
 def _build_kev_section(kev_entries: list[dict]) -> str:
-    """Build KEV section with alerts."""
+    """Build CISA KEV section."""
     if not kev_entries:
         return ""
-    new_kevs = [k for k in kev_entries if k["is_new"]]
+
+    from datetime import date as _date_mod
+
     overdue_kevs = [k for k in kev_entries if k["is_overdue"]]
+    due_soon = []
+    for k in kev_entries:
+        if k["kev_due_date"] != "Not Set" and not k["is_overdue"]:
+            try:
+                due_d = _date_mod.fromisoformat(k["kev_due_date"])
+                if (due_d - _date_mod.today()).days <= 30:
+                    due_soon.append(k)
+            except ValueError:
+                pass
 
-    html = '<div class="section-divider"></div><div class="section"><h2>CISA Known Exploited Vulnerabilities</h2>'
-    if overdue_kevs:
-        html += f'<div class="alert alert-danger"><strong>OVERDUE:</strong> {len(overdue_kevs)} KEV entries past CISA remediation deadline — immediate action required</div>'
-    if new_kevs:
-        html += f"<h3>New This Week ({len(new_kevs)})</h3>"
-        for kev in new_kevs[:5]:
-            due = f" | <strong>Due: {kev['kev_due_date']}</strong>" if kev["kev_due_date"] else ""
-            cvss = cvss_badge(kev["cvss_score"], None)
-            html += f"""<div class="news-item">
-                <strong>{kev["id"]}</strong> {cvss}{due}
-                <p class="news-summary">{kev["description"]}</p>
-            </div>"""
-    html += "</div>"
-    return html
-
-
-def _build_vendor_table(vendors: list[dict]) -> str:
-    """Build refined vendor table."""
     rows = ""
-    for v in vendors:
-        kev_str = (
-            f' <span class="badge kev-sm">{v["kev_count"]} KEV</span>' if v["kev_count"] else ""
-        )
-        rows += f"<tr><td>{v['vendor']}</td><td>{v['cve_count']}</td><td>{v['avg_cvss']}</td><td>{kev_str}</td></tr>"
-    return f"""
-    <div class="section-divider"></div>
-    <div class="section">
-        <h2>Most Targeted Vendors</h2>
-        <table class="data-table">
-            <thead><tr><th>Vendor</th><th>CVEs</th><th>Avg CVSS</th><th>KEVs</th></tr></thead>
-            <tbody>{rows}</tbody>
-        </table>
-    </div>"""
+    for kev in kev_entries:
+        row_class = ' class="kev-row"' if kev["is_overdue"] else ""
+        sev_class = (kev.get("cvss_severity") or "N/A").lower()
+        cvss = cvss_badge(kev["cvss_score"], None)
+        due_display = kev["kev_due_date"] if kev["kev_due_date"] != "Not Set" else "NOT SET"
+        days_display = str(kev["days_overdue"]) if kev["is_overdue"] else "—"
+        epss = f"{kev['epss_score']:.4f}" if kev.get("epss_score") is not None else "N/A"
+        affected = (kev.get("affected") or "Unknown")[:60]
+
+        rows += f"""<tr{row_class}>
+            <td><strong>{kev["id"]}</strong></td>
+            <td>{cvss}</td>
+            <td><span class="sev-pill {sev_class}">{kev.get("cvss_severity") or "N/A"}</span></td>
+            <td>{due_display}</td>
+            <td>{days_display}</td>
+            <td class="desc-cell">{affected}</td>
+            <td>{epss}</td>
+        </tr>"""
+
+    alert_html = ""
+    if overdue_kevs:
+        alert_html = f'<div class="alert alert-danger"><strong>OVERDUE:</strong> {len(overdue_kevs)} KEV entries past CISA remediation deadline — immediate action required</div>'
+
+    return f"""<!-- ═══════════ KEV ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="kev-section">
+    <h2>4. CISA Known Exploited Vulnerabilities</h2>
+    <div class="tf-grid">
+        <div class="tf-stat"><span class="tf-num">{len(kev_entries)}</span><span class="tf-label">Total KEVs</span></div>
+        <div class="tf-stat"><span class="tf-num critical">{len(overdue_kevs)}</span><span class="tf-label">Overdue</span></div>
+        <div class="tf-stat"><span class="tf-num">{len(due_soon)}</span><span class="tf-label">Due Soon (≤30d)</span></div>
+    </div>
+    {alert_html}
+    <table class="data-table">
+        <thead><tr><th>CVE</th><th>CVSS</th><th>Severity</th><th>Due Date</th><th>Days Overdue</th><th>Affected Products</th><th>EPSS</th></tr></thead>
+        <tbody>{rows}</tbody>
+    </table>
+</div>"""
+
+
+def _build_epss_section(data: WeeklyData, charts: dict[str, str]) -> str:
+    """Build EPSS exploitability section."""
+    if not data.epss_movers:
+        return ""
+
+    rows = ""
+    for m in data.epss_movers[:10]:
+        kev_badge = ' <span class="badge kev">KEV</span>' if m["kev"] else ""
+        epss_bar_html = epss_bar(m["id"], m["epss_score"]) if m["epss_score"] is not None else "N/A"
+        cvss = cvss_badge(m["cvss_score"], None)
+        rows += f"""<tr>
+            <td><strong>{m["id"]}</strong>{kev_badge}</td>
+            <td>{cvss}</td>
+            <td>{epss_bar_html}</td>
+            <td>{m["reputation_score"] or 0:.1f}</td>
+            <td class="desc-cell">{m["description"][:100]}</td>
+        </tr>"""
+
+    return f"""<!-- ═══════════ EPSS ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="epss-section">
+    <h2>5. EPSS Exploitability Trends</h2>
+    <div class="charts-grid">
+        <div class="chart-panel">
+            <h3>EPSS Score Distribution</h3>
+            {charts["epss_hist"]}
+        </div>
+        <div class="chart-panel">
+            <h3>Top 10 Highest EPSS CVEs</h3>
+            <table class="data-table">
+                <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>Rep</th><th>Description</th></tr></thead>
+                <tbody>{rows}</tbody>
+            </table>
+        </div>
+    </div>
+</div>"""
+
+
+def _build_mitre_section(data: WeeklyData, charts: dict[str, str]) -> str:
+    """Build MITRE ATT&CK technique mapping section."""
+    if not data.top_tags:
+        return ""
+
+    rows = ""
+    for t in data.top_tags[:10]:
+        rows += f"""<tr>
+            <td>{t["tag"]}</td>
+            <td>{t["cve_count"]}</td>
+            <td>{t["avg_cvss"]}</td>
+        </tr>"""
+
+    return f"""<!-- ═══════════ MITRE ATT&CK ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="mitre-section">
+    <h2>6. MITRE ATT&amp;CK Technique Mapping</h2>
+    <div class="charts-grid">
+        <div class="chart-panel">
+            <h3>Technique Heatmap</h3>
+            {charts["mitre"]}
+        </div>
+        <div class="chart-panel">
+            <h3>Technique Counts</h3>
+            <table class="data-table">
+                <thead><tr><th>Technique</th><th>CVEs</th><th>Avg CVSS</th></tr></thead>
+                <tbody>{rows}</tbody>
+            </table>
+        </div>
+    </div>
+</div>"""
+
+
+def _build_network_ioc_section(data: WeeklyData) -> str:
+    """Build network-based IOCs section."""
+    if not data.network_iocs and data.ioc_summary.get("network_count", 0) == 0:
+        return ""
+
+    rows = ""
+    for ioc in data.network_iocs[:25]:
+        cves = ", ".join(ioc.get("cves", [])[:5]) or "—"
+        sources = ", ".join(ioc.get("sources", []))
+        rows += f"""<tr>
+            <td><span class="ioc-type-badge">{ioc["type"]}</span></td>
+            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><code>{ioc["value"][:60]}</code></td>
+            <td>{sources}</td>
+            <td>{cves}</td>
+        </tr>"""
+
+    return f"""<!-- ═══════════ NETWORK IOCs ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="network-iocs">
+    <h2>7. Network-based Indicators (IOCs)</h2>
+    <p>Network indicators extracted from threat intelligence sources this period. These IPs, domains, and URLs are associated with known threat activity.</p>
+    <table class="data-table ioc-table">
+        <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>Linked CVEs</th></tr></thead>
+        <tbody>{rows}</tbody>
+    </table>
+</div>"""
+
+
+def _build_host_ioc_section(data: WeeklyData) -> str:
+    """Build host-based IOCs section."""
+    if not data.host_iocs:
+        return ""
+
+    rows = ""
+    for ioc in data.host_iocs[:25]:
+        cves = ", ".join(ioc.get("cves", [])[:5]) or "—"
+        sources = ", ".join(ioc.get("sources", []))
+        val = ioc["value"]
+        if len(val) > 60:
+            val = f"{val[:30]}...{val[-20:]}"
+        rows += f"""<tr>
+            <td><span class="ioc-type-badge">{ioc["type"]}</span></td>
+            <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><code>{val}</code></td>
+            <td>{sources}</td>
+            <td>{cves}</td>
+        </tr>"""
+
+    return f"""<!-- ═══════════ HOST IOCs ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="host-iocs">
+    <h2>8. Host-based Indicators (IOCs)</h2>
+    <p>Host-based indicators including file hashes, file paths, and registry keys associated with threat activity.</p>
+    <table class="data-table ioc-table">
+        <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>Linked CVEs</th></tr></thead>
+        <tbody>{rows}</tbody>
+    </table>
+</div>"""
 
 
 def _build_news_section(articles: list[dict]) -> str:
-    """Build news highlights section."""
+    """Build news & intelligence section."""
     tier_colors = {1: "#dc3545", 2: "#fd7e14", 3: "#ffc107", 4: "#28a745", 5: "#6c757d"}
-    html = '<div class="section-divider"></div><div class="section"><h2>Security News Highlights</h2><div class="news-list">'
+    html = '<div class="section-divider"></div><div class="section" id="news-section"><h2>9. Vulnerability News &amp; Intelligence</h2><div class="news-list">'
     for article in articles:
         tc = tier_colors.get(article["tier"], "#6c757d")
         html += f'''<div class="news-item">
@@ -1111,124 +1370,184 @@ def _build_news_section(articles: list[dict]) -> str:
     return html
 
 
-def _build_threatfox_section(summary: dict) -> str:
-    """Build ThreatFox IOC section."""
-    if summary.get("total_iocs", 0) == 0:
+def _build_vendor_section(data: WeeklyData, charts: dict[str, str]) -> str:
+    """Build vendors section."""
+    if not data.top_vendors:
         return ""
-    type_counts = summary.get("type_counts", {})
-    type_items = "".join(
-        f"<li><strong>{k}:</strong> {v}</li>" for k, v in sorted(type_counts.items())
-    )
-    threat_types = summary.get("top_threat_types", [])
-    type_str = "".join(f"<li>{t['threat_type']} ({t['count']})</li>" for t in threat_types[:5])
-    return f"""
-    <div class="section-divider"></div>
-    <div class="section">
-        <h2>Threat Intelligence (ThreatFox)</h2>
-        <div class="tf-grid">
-            <div class="tf-stat"><span class="tf-num">{summary["total_iocs"]}</span><span class="tf-label">Total IOCs</span></div>
-            <div class="tf-stat"><span class="tf-num">{summary["cves_with_iocs"]}</span><span class="tf-label">CVEs with IOCs</span></div>
+
+    rows = ""
+    for v in data.top_vendors[:15]:
+        kev_str = (
+            f' <span class="badge kev-sm">{v["kev_count"]} KEV</span>' if v["kev_count"] else ""
+        )
+        rows += f"""<tr>
+            <td>{v["vendor"]}</td>
+            <td>{v["cve_count"]}</td>
+            <td>{v["avg_cvss"]}</td>
+            <td>{kev_str}</td>
+        </tr>"""
+
+    return f"""<!-- ═══════════ VENDORS ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="vendor-section">
+    <h2>10. Affected Vendors &amp; Products</h2>
+    <div class="charts-grid">
+        <div class="chart-panel">
+            <h3>Vendor Bar Chart</h3>
+            {charts["vendor"]}
         </div>
-        <h3>IOC Types</h3><ul class="ioc-types">{type_items}</ul>
-        {f'<h3>Top Threat Types</h3><ul class="ioc-types">{type_str}</ul>' if type_str else ""}
-    </div>"""
+        <div class="chart-panel">
+            <h3>Vendor Table</h3>
+            <table class="data-table">
+                <thead><tr><th>Vendor</th><th>CVEs</th><th>Avg CVSS</th><th>KEVs</th></tr></thead>
+                <tbody>{rows}</tbody>
+            </table>
+        </div>
+    </div>
+</div>"""
 
 
-def _build_pocs_section(pocs: list[dict]) -> str:
-    """Build notable PoC publications section."""
-    html = '<div class="section-divider"></div><div class="section"><h2>Notable Exploit Publications</h2><div class="poc-list">'
-    for poc in pocs:
-        html += f'''<div class="poc-item">
-            <a href="{poc["url"]}">{poc["url"][:70]}...</a>
-            <span class="poc-meta">{poc["source"]} | {poc["stars"]} stars | {poc["exploit_type"] or "N/A"} | {poc["linked_cves"]} CVEs</span>
-        </div>'''
-    html += "</div></div>"
+def _build_correlation_section(data: WeeklyData) -> str:
+    """Build CVE correlation analysis section."""
+    # Simple clustering: group CVEs with shared tags
+    if not data.top_cves or len(data.top_cves) < 2:
+        return ""
+
+    # Build clusters from top tags
+    clusters = []
+    seen_cves: set[str] = set()
+    for tag in data.top_tags[:5]:
+        cluster_cves = [
+            c["id"] for c in data.top_cves if tag["tag"] in c.get("description", "").lower()
+        ]
+        new_cves = [c for c in cluster_cves if c not in seen_cves]
+        if new_cves:
+            clusters.append(
+                {"label": f"{tag['tag']} cluster", "cves": new_cves, "count": tag["cve_count"]}
+            )
+            seen_cves.update(new_cves)
+
+    if not clusters:
+        # Fallback: group by severity
+        sev_groups: dict[str, list[str]] = {}
+        for c in data.top_cves:
+            sev = c.get("cvss_severity", "UNKNOWN")
+            sev_groups.setdefault(sev, []).append(c["id"])
+        clusters = [
+            {"label": f"{sev} CVEs", "cves": cves, "count": len(cves)}
+            for sev, cves in sev_groups.items()
+            if len(cves) > 1
+        ]
+
+    if not clusters:
+        return ""
+
+    html = '<div class="section-divider"></div><div class="section" id="correlation-section"><h2>CVE Correlation Analysis</h2><p>CVEs grouped by shared characteristics (ATT&CK techniques, severity, or common PoC sources) that may indicate coordinated campaigns.</p>'
+    for cluster in clusters[:5]:
+        cve_list = ", ".join(cluster["cves"][:10])
+        html += f"""<div class="news-item">
+            <strong>{cluster["label"]}</strong> ({cluster["count"]} CVEs)
+            <p class="news-summary">{cve_list}</p>
+        </div>"""
+    html += "</div>"
     return html
 
 
-def _build_epss_section(movers: list[dict]) -> str:
-    """Build EPSS top exploitability section."""
-    rows = ""
-    for m in movers:
-        kev_badge = ' <span class="badge kev">KEV</span>' if m["kev"] else ""
-        epss_bar_html = epss_bar(m["id"], m["epss_score"]) if m["epss_score"] is not None else "N/A"
-        cvss = cvss_badge(m["cvss_score"], None)
-        rows += f"""<tr>
-            <td><strong>{m["id"]}</strong>{kev_badge}</td>
-            <td>{cvss}</td>
-            <td>{epss_bar_html}</td>
-            <td>{m["reputation_score"] or 0:.1f}</td>
-            <td class="desc-cell">{m["description"][:100]}</td>
-        </tr>"""
-    return f"""
-    <div class="section-divider"></div>
-    <div class="section">
-        <h2>Highest Exploitability (EPSS)</h2>
-        <table class="data-table">
-            <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>Rep</th><th>Description</th></tr></thead>
-            <tbody>{rows}</tbody>
-        </table>
-    </div>"""
+def _build_recommendations_section(data: WeeklyData) -> str:
+    """Build recommendations section."""
+    recs = []
 
-
-def _build_triage_section(summary: dict) -> str:
-    """Build triage workflow section."""
-    if not summary:
-        return ""
-    total = sum(summary.values())
-    items = "".join(
-        f"<li>{s.capitalize()}: <strong>{summary.get(s, 0)}</strong></li>"
-        for s in ["new", "acknowledged", "working", "done", "dismissed"]
-    )
-    return f"""
-    <div class="section-divider"></div>
-    <div class="section">
-        <h2>Triage Workflow</h2>
-        <p>Total triaged: <strong>{total}</strong></p>
-        <ul class="triage-list">{items}</ul>
-    </div>"""
-
-
-def _build_source_health(sources: list[dict]) -> str:
-    """Build source health section."""
-    if not sources:
-        return ""
-    rows = ""
-    for sh in sources:
-        status_class = (
-            "ok" if sh["status"] == "ok" else "error" if sh["status"] == "error" else "skipped"
+    if data.kev_overdue > 0:
+        recs.append(
+            f'<li><span class="rec-priority rec-p1">P1</span><span><strong>Patch Overdue KEVs:</strong> {data.kev_overdue} CISA KEV entries are past their remediation deadline and require immediate patching.</span></li>'
         )
-        err_tip = f' title="{sh["error"][:100]}"' if sh["error"] else ""
-        rows += f'<tr><td>{sh["source"]}</td><td class="status-{status_class}"{err_tip}>{sh["status"]}</td><td>{sh["last_run"][:16]}</td><td>{sh["cves"]}</td><td>{sh["pocs"]}</td><td>{sh["consecutive_failures"]}</td></tr>'
-    return f"""
-    <div class="section-divider"></div>
-    <div class="section">
-        <h2>Source Health</h2>
-        <table class="data-table health-table">
-            <thead><tr><th>Source</th><th>Status</th><th>Last Run</th><th>CVEs</th><th>PoCs</th><th>Fails</th></tr></thead>
-            <tbody>{rows}</tbody>
-        </table>
-    </div>"""
+    if data.critical_cves > 0:
+        recs.append(
+            f'<li><span class="rec-priority rec-p1">P1</span><span><strong>Address Critical CVEs:</strong> {data.critical_cves} CVEs with CVSS 9+ identified. Prioritize those with EPSS &gt; 0.5.</span></li>'
+        )
+    if data.epss_movers and data.epss_movers[0].get("epss_score", 0) > 0.3:
+        recs.append(
+            f'<li><span class="rec-priority rec-p2">P2</span><span><strong>Monitor Rising EPSS:</strong> {data.epss_movers[0]["id"]} has EPSS {data.epss_movers[0]["epss_score"]:.3f} indicating high exploitation likelihood.</span></li>'
+        )
+    if data.ioc_summary.get("network_count", 0) > 0:
+        recs.append(
+            '<li><span class="rec-priority rec-p2">P2</span><span><strong>Deploy Network IOCs:</strong> Block identified IPs, domains, and URLs at perimeter defenses.</span></li>'
+        )
+    if data.ioc_summary.get("host_count", 0) > 0:
+        recs.append(
+            '<li><span class="rec-priority rec-p2">P2</span><span><strong>Deploy Host IOCs:</strong> Add file hashes to EDR blocklists and monitor registry modifications.</span></li>'
+        )
+    if data.top_vendors:
+        recs.append(
+            f'<li><span class="rec-priority rec-p3">P3</span><span><strong>Vendor Risk Review:</strong> {data.top_vendors[0]["vendor"]} had {data.top_vendors[0]["cve_count"]} CVEs — assess exposure to affected products.</span></li>'
+        )
+    recs.append(
+        '<li><span class="rec-priority rec-p3">P3</span><span><strong>Review Correlated CVEs:</strong> CVEs sharing ATT&CK techniques may indicate campaign-level targeting.</span></li>'
+    )
+
+    recs_html = (
+        "\n        ".join(recs) if recs else "<li>No urgent recommendations this period.</li>"
+    )
+
+    return f"""<!-- ═══════════ RECOMMENDATIONS ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="recommendations">
+    <h2>11. Recommendations</h2>
+    <ul class="rec-list">
+        {recs_html}
+    </ul>
+</div>"""
+
+
+def _build_appendix(data: WeeklyData) -> str:
+    """Build appendix section."""
+    return """<!-- ═══════════ APPENDIX ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="appendix">
+    <h2>12. Appendix</h2>
+    <h3>Methodology</h3>
+    <p class="appendix">Horus aggregates vulnerability data from NVD, CISA KEV, Exploit-DB, GitHub, and ThreatFox. Reputation scores (0-10) are calculated using: CVSS (35%), EPSS (25%), KEV status, social mentions, PoC availability, and vendor ubiquity. IOCs are extracted from news articles and security resources using regex pattern matching, with private IP ranges and common CDNs excluded.</p>
+    <h3>Data Sources</h3>
+    <dl class="appendix">
+        <dt>NVD</dt><dd>National Vulnerability Database — authoritative CVE source</dd>
+        <dt>CISA KEV</dt><dd>Known Exploited Vulnerabilities catalog</dd>
+        <dt>Exploit-DB / GitHub</dt><dd>Proof-of-concept exploit publications</dd>
+        <dt>ThreatFox</dt><dd>Abuse.ch threat intelligence IOC feed</dd>
+        <dt>Security News</dt><dd>RSS feeds from security vendors and researchers</dd>
+    </dl>
+    <h3>Glossary</h3>
+    <dl class="appendix">
+        <dt>CVSS</dt><dd>Common Vulnerability Scoring System (0-10)</dd>
+        <dt>EPSS</dt><dd>Exploit Prediction Scoring System (0-1 probability)</dd>
+        <dt>KEV</dt><dd>Known Exploited Vulnerability (CISA catalog)</dd>
+        <dt>IOC</dt><dd>Indicator of Compromise</dd>
+        <dt>PoC</dt><dd>Proof of Concept exploit</dd>
+        <dt>TLP:WHITE</dt><dd>Traffic Light Protocol — unlimited distribution</dd>
+    </dl>
+</div>"""
+
+
+# ── Legacy wrappers and helpers ──
+
+
+class tf_grid:
+    """Placeholder for backward compatibility."""
+
+    pass
 
 
 def epss_section(data: WeeklyData) -> str:
     """Build EPSS top exploitability section (legacy wrapper)."""
     if not data.epss_movers:
         return ""
-    rows = ""
-    for m in data.epss_movers[:8]:
-        kev_badge = '<span class="badge kev">KEV</span>' if m["kev"] else ""
-        epss_bar_html = epss_bar(m["id"], m["epss_score"]) if m["epss_score"] is not None else "N/A"
-        rows += f"""<tr>
-            <td>{m["id"]} {kev_badge}</td>
-            <td>{m["cvss_score"] or "N/A"}</td>
-            <td>{epss_bar_html}</td>
-            <td>{m["reputation_score"] or 0:.1f}</td>
-            <td class="desc-cell">{m["description"][:100]}</td>
-        </tr>"""
-    return f"""
-    <h2>Highest Exploitability (EPSS)</h2>
-    <table class="data-table">
-        <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>Rep</th><th>Description</th></tr></thead>
-        <tbody>{rows}</tbody>
-    </table>"""
+    charts = {"epss_hist": _epss_histogram(data.epss_movers)}
+    return _build_epss_section(data, charts)
+
+
+# Add CSS class for tf-grid (used by KEV section)
+tf_grid_style = """
+.tf-grid { display: flex; gap: 1.2rem; margin: 1rem 0; flex-wrap: wrap; }
+.tf-stat { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem 1.8rem; text-align: center; }
+.tf-num { display: block; font-size: 1.6rem; font-weight: 800; color: var(--accent); }
+.tf-label { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.2rem; }
+"""

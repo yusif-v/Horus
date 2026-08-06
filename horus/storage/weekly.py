@@ -91,6 +91,13 @@ class WeeklyData:
     weekly_trend: list[dict[str, Any]] = field(default_factory=list)
     vendor_risk: list[dict[str, Any]] = field(default_factory=list)
     triage_summary: dict[str, int] = field(default_factory=dict)
+
+    # IOC sections
+    network_iocs: list[dict[str, Any]] = field(default_factory=list)
+    host_iocs: list[dict[str, Any]] = field(default_factory=list)
+    ioc_summary: dict[str, Any] = field(default_factory=dict)
+
+    # Source health
     source_health: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -131,6 +138,7 @@ def gather_weekly_data(conn: sqlite3.Connection, weeks_back: int = 1) -> WeeklyD
     _gather_severity_breakdown(conn, data, this_start, this_end)
     _gather_weekly_trend(conn, data)
     _gather_triage_summary(conn, data)
+    _gather_iocs(conn, data, this_start, this_end)
     _gather_source_health(conn, data)
 
     return data
@@ -260,29 +268,48 @@ def _gather_kev_details(
     this_start: str,
     this_end: str,
 ) -> None:
-    """CISA KEV entries with details."""
+    """CISA KEV entries with full details."""
+    today = _utc_now().strftime("%Y-%m-%d")
     rows = conn.execute(
         """
-        SELECT id, description, cvss_score, epss_score, kev_due_date, published_at
-        FROM cve
-        WHERE kev = 1
-        ORDER BY kev_due_date ASC
+        SELECT c.id, c.description, c.cvss_score, c.cvss_severity,
+               c.epss_score, c.kev_due_date, c.published_at,
+               GROUP_CONCAT(DISTINCT p.vendor || '/' || p.product) as affected
+        FROM cve c
+        LEFT JOIN cve_product cp ON cp.cve_id = c.id
+        LEFT JOIN product p ON p.id = cp.product_id AND p.category != 'unknown'
+        WHERE c.kev = 1
+        GROUP BY c.id
+        ORDER BY c.kev_due_date ASC
         """,
     ).fetchall()
 
-    data.kev_entries = [
-        {
-            "id": r[0],
-            "description": _truncate(r[1], 200),
-            "cvss_score": r[2],
-            "epss_score": r[3],
-            "kev_due_date": r[4],
-            "published_at": r[5][:10] if r[5] else "",
-            "is_new": r[5] is not None and r[5] >= this_start,
-            "is_overdue": r[4] is not None and r[4] < _utc_now().strftime("%Y-%m-%d"),
-        }
-        for r in rows
-    ]
+    data.kev_entries = []
+    for r in rows:
+        due_str = r[5] or "Not Set"
+        is_overdue = r[5] is not None and r[5] < today
+        days_overdue = 0
+        if is_overdue:
+            try:
+                due_date = datetime.strptime(r[5], "%Y-%m-%d").date()
+                days_overdue = (_utc_now().date() - due_date).days
+            except ValueError:
+                pass
+        data.kev_entries.append(
+            {
+                "id": r[0],
+                "description": _truncate(r[1], 200),
+                "cvss_score": r[2],
+                "cvss_severity": r[3],
+                "epss_score": r[4],
+                "kev_due_date": due_str,
+                "published_at": r[6][:10] if r[6] else "",
+                "affected": r[7] or "Unknown",
+                "is_new": r[6] is not None and r[6] >= this_start,
+                "is_overdue": is_overdue,
+                "days_overdue": days_overdue,
+            }
+        )
 
 
 def _gather_epss_movers(
@@ -332,6 +359,8 @@ def _gather_vendor_breakdown(
         JOIN cve_product cp ON cp.cve_id = c.id
         JOIN product p ON p.id = cp.product_id
         WHERE c.first_seen >= ? AND c.first_seen < ?
+          AND p.category != 'unknown'
+          AND p.vendor != 'unknown'
         GROUP BY p.vendor
         ORDER BY cve_count DESC, avg_cvss DESC
         LIMIT 15
@@ -551,7 +580,7 @@ def _gather_triage_summary(conn: sqlite3.Connection, data: WeeklyData) -> None:
 
 
 def _gather_source_health(conn: sqlite3.Connection, data: WeeklyData) -> None:
-    """Source health observability data."""
+    """Gather source health status."""
     rows = conn.execute(
         """
         SELECT source_name, last_run_at, last_status, last_error,
@@ -560,16 +589,185 @@ def _gather_source_health(conn: sqlite3.Connection, data: WeeklyData) -> None:
         ORDER BY source_name
         """
     ).fetchall()
-
     data.source_health = [
         {
             "source": r[0],
-            "last_run": r[1][:19] if r[1] else "never",
+            "last_run_at": r[1] or "",
             "status": r[2],
-            "error": _truncate(r[3], 100),
-            "cves": r[4],
-            "pocs": r[5],
-            "consecutive_failures": r[6],
+            "error": r[3],
+            "cve_count": r[4] or 0,
+            "poc_count": r[5] or 0,
+            "consecutive_failures": r[6] or 0,
         }
         for r in rows
     ]
+
+
+def _gather_iocs(
+    conn: sqlite3.Connection,
+    data: WeeklyData,
+    this_start: str,
+    this_end: str,
+) -> None:
+    """Gather network and host IOCs from ioc_indicator and cve_threatfox_ioc tables."""
+    # Network IOCs: IPs, domains, URLs — from both ioc_indicator and threatfox
+    network: dict[str, dict[str, Any]] = {}
+
+    # From ioc_indicator
+    for row in conn.execute(
+        """
+        SELECT ioc_value, ioc_type, source, source_ref, cve_id
+        FROM ioc_indicator
+        WHERE ioc_type IN ('ip', 'domain', 'url')
+          AND first_seen >= ? AND first_seen < ?
+        ORDER BY last_seen DESC
+        LIMIT 100
+        """,
+        (this_start, this_end),
+    ):
+        val, typ, src, ref, cve = row
+        key = f"{typ}:{val}"
+        if key not in network:
+            network[key] = {
+                "value": val,
+                "type": typ,
+                "sources": set(),
+                "refs": set(),
+                "cves": set(),
+            }
+        network[key]["sources"].add(src)
+        if ref:
+            network[key]["refs"].add(ref)
+        if cve:
+            network[key]["cves"].add(cve)
+
+    # From threatfox
+    for row in conn.execute(
+        """
+        SELECT ioc_value, ioc_type, cve_id
+        FROM cve_threatfox_ioc
+        WHERE ioc_type IN ('ip', 'domain', 'url')
+        ORDER BY last_seen DESC
+        LIMIT 100
+        """,
+    ):
+        val, typ, cve = row
+        key = f"{typ}:{val}"
+        if key not in network:
+            network[key] = {
+                "value": val,
+                "type": typ,
+                "sources": set(),
+                "refs": set(),
+                "cves": set(),
+            }
+        network[key]["sources"].add("threatfox")
+        if cve:
+            network[key]["cves"].add(cve)
+
+    data.network_iocs = sorted(
+        [
+            {
+                "value": v["value"],
+                "type": v["type"],
+                "sources": sorted(v["sources"]),
+                "refs": sorted(v["refs"])[:3],
+                "cves": sorted(v["cves"]),
+                "cve_count": len(v["cves"]),
+            }
+            for v in network.values()
+        ],
+        key=lambda x: (-x["cve_count"], x["type"], x["value"]),
+    )
+
+    # Host IOCs: hashes, paths, registry keys
+    host: dict[str, dict[str, Any]] = {}
+
+    for row in conn.execute(
+        """
+        SELECT ioc_value, ioc_type, source, source_ref, cve_id
+        FROM ioc_indicator
+        WHERE ioc_type IN ('hash_md5', 'hash_sha1', 'hash_sha256', 'path', 'registry')
+          AND first_seen >= ? AND first_seen < ?
+        ORDER BY last_seen DESC
+        LIMIT 100
+        """,
+        (this_start, this_end),
+    ):
+        val, typ, src, ref, cve = row
+        key = f"{typ}:{val}"
+        if key not in host:
+            host[key] = {
+                "value": val,
+                "type": typ,
+                "sources": set(),
+                "refs": set(),
+                "cves": set(),
+            }
+        host[key]["sources"].add(src)
+        if ref:
+            host[key]["refs"].add(ref)
+        if cve:
+            host[key]["cves"].add(cve)
+
+    # ThreatFox hashes
+    for row in conn.execute(
+        """
+        SELECT ioc_value, ioc_type, cve_id
+        FROM cve_threatfox_ioc
+        WHERE ioc_type = 'hash'
+        ORDER BY last_seen DESC
+        LIMIT 100
+        """,
+    ):
+        val, typ, cve = row
+        key = f"hash:{val}"
+        if key not in host:
+            host[key] = {
+                "value": val,
+                "type": "hash_md5"
+                if len(val) == 32
+                else "hash_sha1"
+                if len(val) == 40
+                else "hash_sha256",
+                "sources": set(),
+                "refs": set(),
+                "cves": set(),
+            }
+        host[key]["sources"].add("threatfox")
+        if cve:
+            host[key]["cves"].add(cve)
+
+    data.host_iocs = sorted(
+        [
+            {
+                "value": v["value"],
+                "type": v["type"],
+                "sources": sorted(v["sources"]),
+                "refs": sorted(v["refs"])[:3],
+                "cves": sorted(v["cves"]),
+                "cve_count": len(v["cves"]),
+            }
+            for v in host.values()
+        ],
+        key=lambda x: (-x["cve_count"], x["type"], x["value"]),
+    )
+
+    # IOC summary counts
+    type_counts: dict[str, int] = {}
+    for ioc in data.network_iocs + data.host_iocs:
+        t = ioc["type"]
+        type_counts[t] = type_counts.get(t, 0) + 1
+
+    total_iocs = len(data.network_iocs) + len(data.host_iocs)
+    all_cves: set[str] = set()
+    for ioc in data.network_iocs + data.host_iocs:
+        all_cves.update(ioc["cves"])
+
+    data.ioc_summary = {
+        "total_iocs": total_iocs,
+        "network_count": len(data.network_iocs),
+        "host_count": len(data.host_iocs),
+        "cves_with_iocs": len(all_cves),
+        "type_counts": type_counts,
+    }

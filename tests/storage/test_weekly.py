@@ -136,6 +136,18 @@ def _make_conn() -> sqlite3.Connection:
             first_seen TEXT NOT NULL,
             last_seen TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS ioc_indicator (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ioc_type TEXT NOT NULL,
+            ioc_value TEXT NOT NULL,
+            source TEXT NOT NULL,
+            source_ref TEXT,
+            cve_id TEXT REFERENCES cve(id) ON DELETE SET NULL,
+            first_seen TEXT NOT NULL,
+            last_seen TEXT NOT NULL,
+            UNIQUE (ioc_type, ioc_value, source)
+        );
         """
     )
     return conn

@@ -409,3 +409,21 @@ CREATE TABLE IF NOT EXISTS cve_cluster_member (
     membership_score REAL NOT NULL,
     PRIMARY KEY (cluster_id, cve_id)
 );
+
+-- ─── Extracted IOC indicators (news + resources + ThreatFox) ──────────────
+
+CREATE TABLE IF NOT EXISTS ioc_indicator (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ioc_type    TEXT NOT NULL,  -- ip | domain | url | hash_md5 | hash_sha1 | hash_sha256 | email | cve | path | registry
+    ioc_value   TEXT NOT NULL,
+    source      TEXT NOT NULL,  -- news | resource | threatfox | manual
+    source_ref  TEXT,           -- article URL or resource URL
+    cve_id      TEXT REFERENCES cve(id) ON DELETE SET NULL,
+    first_seen  TEXT NOT NULL,
+    last_seen   TEXT NOT NULL,
+    UNIQUE (ioc_type, ioc_value, source)
+);
+
+CREATE INDEX IF NOT EXISTS ioc_type ON ioc_indicator(ioc_type);
+CREATE INDEX IF NOT EXISTS ioc_cve ON ioc_indicator(cve_id);
+CREATE INDEX IF NOT EXISTS ioc_value ON ioc_indicator(ioc_value);

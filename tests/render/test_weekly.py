@@ -73,11 +73,14 @@ def _make_weekly_data(**overrides) -> WeeklyData:
                 "id": "CVE-2026-0001",
                 "description": "A critical RCE vulnerability",
                 "cvss_score": 9.8,
+                "cvss_severity": "CRITICAL",
                 "epss_score": 0.95,
                 "kev_due_date": "2026-08-15",
                 "published_at": "2026-07-21",
+                "affected": "microsoft/windows",
                 "is_new": True,
                 "is_overdue": False,
+                "days_overdue": 0,
             },
         ],
         "epss_movers": [
@@ -141,17 +144,6 @@ def _make_weekly_data(**overrides) -> WeeklyData:
             "done": 15,
             "dismissed": 5,
         },
-        "source_health": [
-            {
-                "source": "nvd",
-                "last_run": "2026-07-25T12:00:00",
-                "status": "ok",
-                "error": None,
-                "cves": 100,
-                "pocs": 0,
-                "consecutive_failures": 0,
-            },
-        ],
     }
     defaults.update(overrides)
     return WeeklyData(**defaults)
@@ -278,12 +270,6 @@ class TestRenderMarkdown:
         report = render_weekly_report(data, fmt="md")
         assert "Triage" in report
 
-    def test_source_health_section(self):
-        data = _make_weekly_data()
-        report = render_weekly_report(data, fmt="md")
-        assert "Source Health" in report
-        assert "nvd" in report
-
     def test_empty_data_minimal_report(self):
         data = _make_weekly_data(
             top_cves=[],
@@ -297,7 +283,6 @@ class TestRenderMarkdown:
             severity_breakdown={},
             weekly_trend=[],
             triage_summary={},
-            source_health=[],
         )
         report = render_weekly_report(data, fmt="md")
         assert "Executive Summary" in report
@@ -387,7 +372,6 @@ class TestRenderHtml:
             severity_breakdown={},
             weekly_trend=[],
             triage_summary={},
-            source_health=[],
         )
         report = render_weekly_report(data, fmt="html")
         assert "<!DOCTYPE html>" in report
