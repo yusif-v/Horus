@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="eyebrow">Exploit Probability Scoring · EPSS</div>
+<h1 class="page-title">EPSS <em>trends</em>.</h1>
+<p class="page-subtitle">CVEs with the largest EPSS score changes and those crossing the 50% exploitation probability threshold.</p>
+
+<!-- Controls -->
+<div class="dashboard-controls">
+  <div class="control-group">
+    <span class="control-label">Window</span>
+    <div class="pill-group">
+      <a href="/epss-trends?days=7" class="pill {% if days == 7 %}active{% endif %}">7d</a>
+      <a href="/epss-trends?days=14" class="pill {% if days == 14 %}active{% endif %}">14d</a>
+      <a href="/epss-trends?days=30" class="pill {% if days == 30 %}active{% endif %}">30d</a>
+      <a href="/epss-trends?days=90" class="pill {% if days == 90 %}active{% endif %}">90d</a>
+    </div>
+  </div>
+</div>
+
+<!-- Summary stats -->
+<div class="posture">
+  <div class="cell">
+    <div class="k">Top movers</div>
+    <div class="v warn">{{ total_movers }}</div>
+    <div class="meta">biggest EPSS velocity</div>
+    <div class="tick">01</div>
+  </div>
+  <div class="cell">
+    <div class="k">Threshold alerts</div>
+    <div class="v danger">{{ total_alerts }}</div>
+    <div class="meta">crossed 50% EPSS</div>
+    <div class="tick">02</div>
+  </div>
+  <div class="cell">
+    <div class="k">Crossed above</div>
+    <div class="v">{{ above }}</div>
+    <div class="meta">newly high risk</div>
+    <div class="tick">03</div>
+  </div>
+  <div class="cell">
+    <div class="k">Crossed below</div>
+    <div class="v info">{{ below }}</div>
+    <div class="meta">dropped below 50%</div>
+    <div class="tick">04</div>
+  </div>
+</div>
+
+<div class="two-col">
+  <!-- Top movers table -->
+  <div>
+    <div class="section-head">
+      <h2>Top movers</h2>
+      <span class="count">{{ total_movers }} CVEs · last {{ days }}d</span>
+    </div>
+    <div class="panel"><div class="panel-body flush">
+      {% if movers %}
+      <table>
+        <thead><tr><th>CVE</th><th>Current</th><th>Previous</th><th>Velocity</th><th>CVSS</th><th>KEV</th><th>Trend</th></tr></thead>
+        <tbody>
+        {% for m in movers %}
+        <tr>
+          <td><a href="/cve/{{ m.cve_id }}" class="cve-id-cell">{{ m.cve_id }}</a></td>
+          <td><span class="epss-text">{{ "%.1f%%"|format(m.current_score * 100) }}</span></td>
+          <td><span style="color:var(--text-mid);">{{ "%.1f%%"|format(m.previous_score * 100) }}</span></td>
+          <td><span class="num {% if m.velocity > 0 %}danger-text{% else %}success-text{% endif %}">{{ "%+.2f"|format(m.velocity) }}</span></td>
+          <td><span class="num">{{ m.cvss_score or '—' }}</span></td>
+          <td>{% if m.kev %}<span class="badge badge-kev badge-kev-animated">KEV</span>{% else %}—{% endif %}</td>
+          <td>{% if m.trend == 'rising' %}<span class="badge badge-danger">Rising</span>{% elif m.trend == 'falling' %}<span class="badge badge-info">Falling</span>{% else %}<span class="badge badge-neutral">Stable</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="text-align:center;padding:2rem;color:var(--text-dim);">No EPSS movers in the selected window.</div>
+      {% endif %}
+    </div></div>
+  </div>
+
+  <!-- Threshold alerts -->
+  <div>
+    <div class="section-head">
+      <h2>Threshold alerts</h2>
+      <span class="count">{{ total_alerts }} CVEs · 50% EPSS</span>
+    </div>
+    <div class="panel"><div class="panel-body flush">
+      {% if threshold_alerts %}
+      <table>
+        <thead><tr><th>CVE</th><th>Direction</th><th>Crossed at</th></tr></thead>
+        <tbody>
+        {% for a in threshold_alerts %}
+        <tr>
+          <td><a href="/cve/{{ a.cve_id }}" class="cve-id-cell">{{ a.cve_id }}</a></td>
+          <td>{% if a.direction == 'above' %}<span class="badge badge-danger">↑ Above</span>{% else %}<span class="badge badge-info">↓ Below</span>{% endif %}</td>
+          <td><span class="num">{{ a.crossed_at[:10] if a.crossed_at else '—' }}</span></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="text-align:center;padding:2rem;color:var(--text-dim);">No threshold crossings in the selected window.</div>
+      {% endif %}
+    </div></div>
+  </div>
+</div>
+
+{% endblock %}

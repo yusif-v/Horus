@@ -5,6 +5,7 @@ from .api import bp as api_bp
 from .auth import bp as auth_bp
 from .cves import bp as cves_bp
 from .dashboard import bp as dashboard_bp
+from .epss_trends import bp as epss_trends_bp
 from .news import bp as news_bp
 from .pocs import bp as pocs_bp
 from .profile import bp as profile_bp
@@ -24,6 +25,7 @@ ALL_BLUEPRINTS = [
     resources_bp,
     news_bp,
     vendors_bp,
+    epss_trends_bp,
     api_bp,
     admin_bp,
     watchlist_bp,
