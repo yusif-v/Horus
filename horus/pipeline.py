@@ -175,7 +175,8 @@ def run_pipeline(
         2.  merge + score (reputation, watchlist split)
         3.  enrich (KEV, EPSS)
         4.  persist (cve, poc, watchlist, mark_run)
-        5.  render report + graph
+        5.  CVE-news linking (retroactive + active search)
+        6.  render report + graph
     """
     log = opts.log or (
         (lambda msg: None) if opts.quiet else (lambda msg: print(msg, file=sys.stderr))
@@ -366,7 +367,22 @@ def run_pipeline(
         for name in set(sources) - set(selected_sources):
             db.upsert_source_health(conn, name, status="skipped")
 
-    # 5 — render
+    # 5 — CVE-news linking
+    from .sources.news_linker import link_cves_to_news as _link_news
+
+    try:
+        with db.connect() as link_conn:
+            link_result = _link_news(link_conn, since_days=7)
+        if link_result["linked"]:
+            logger.info(
+                "Linked %d CVEs to news articles (%d scanned)",
+                link_result["linked"],
+                link_result["articles_scanned"],
+            )
+    except Exception as e:
+        logger.warning("CVE-news linking skipped: %s", e)
+
+    # 6 — render
     report_text = render_report(cves, pocs, links, fmt=opts.output_fmt)
     if opts.print_report:
         print(report_text, end="")
