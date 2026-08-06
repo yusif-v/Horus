@@ -153,6 +153,104 @@
 </div>
 {% endif %}
 
+{% if data.epss_trend and data.epss_trend.history %}
+<div class="section">
+  <div class="section-head"><h2>EPSS Trend <em>/ 30-day trajectory</em></h2>
+    <span class="count">
+      {% if data.epss_trend.trend == "rising" %}
+        <span class="badge badge-kev" style="background:#fb3748;">RISING</span>
+      {% elif data.epss_trend.trend == "falling" %}
+        <span class="badge badge-epss">FALLING</span>
+      {% else %}
+        <span class="badge badge-source">STABLE</span>
+      {% endif %}
+      {% if data.epss_trend.velocity > 0 %}+{% endif %}{{ "%.4f"|format(data.epss_trend.velocity) }}/d
+    </span>
+  </div>
+  <div class="panel">
+    <div class="panel-body">
+      <div style="display:flex;gap:2rem;align-items:flex-start;flex-wrap:wrap;">
+        <div style="flex:1;min-width:280px;height:200px;position:relative;">
+          <canvas id="epssTrendChart"></canvas>
+        </div>
+        <div style="min-width:180px;display:flex;flex-direction:column;gap:.75rem;">
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;">Current</div>
+            <div style="font-size:1.4rem;font-weight:700;font-family:var(--mono);">
+              {% if data.epss_trend.current_score is not none %}{{ "%.2f%%"|format(data.epss_trend.current_score * 100) }}{% else %}—{% endif %}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;">Velocity</div>
+            <div style="font-size:1rem;font-family:var(--mono);color:{% if data.epss_trend.trend == 'rising' %}var(--critical){% elif data.epss_trend.trend == 'falling' %}var(--info){% else %}var(--text-mid){% endif %};">
+              {% if data.epss_trend.velocity > 0 %}+{% endif %}{{ "%.4f"|format(data.epss_trend.velocity) }}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;">Days ≥ 50%</div>
+            <div style="font-size:1rem;font-family:var(--mono);">
+              {{ data.epss_trend.days_above_50pct }} / {{ data.epss_trend.history|length }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function(){
+      var ctx = document.getElementById('epssTrendChart').getContext('2d');
+      var labels = {{ data.epss_trend.history|map(attribute='recorded_at')|list|tojson }};
+      var scores = {{ data.epss_trend.history|map(attribute='score')|list|tojson }};
+      var trend = {{ data.epss_trend.trend|tojson }};
+      var accent = trend === 'rising' ? '#fb3748' : trend === 'falling' ? '#8576ff' : '#4abeff';
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'EPSS',
+            data: scores.map(function(s){ return +(s * 100).toFixed(3); }),
+            borderColor: accent,
+            backgroundColor: accent + '22',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.3,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) { return ctx.parsed.y.toFixed(2) + '%'; }
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#a3a3a3', maxTicksLimit: 6 },
+              grid: { color: '#262626' }
+            },
+            y: {
+              min: 0,
+              max: 100,
+              ticks: {
+                color: '#a3a3a3',
+                callback: function(v){ return v + '%'; }
+              },
+              grid: { color: '#262626' }
+            }
+          }
+        }
+      });
+    })();
+  </script>
+</div>
+{% endif %}
+
 {% if data.linked_pocs or data.cve.kev %}
 <div class="section">
   <div class="section-head"><h2>Detection <em>/ rules</em></h2><span class="count">community rules</span></div>
