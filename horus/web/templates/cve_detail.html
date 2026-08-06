@@ -129,6 +129,30 @@
 </div>
 {% endif %}
 
+{% if data.linked_sources %}
+<div class="section">
+  <div class="section-head"><h2>Intelligence Sources</h2><span class="count">{{ data.linked_sources|length }} article{% if data.linked_sources|length != 1 %}s{% endif %}</span></div>
+  <div class="panel">
+    <div class="news-feed">
+    {% for src in data.linked_sources %}
+    <a href="{{ src.url }}" target="_blank" rel="noopener noreferrer" class="news-item">
+      <span class="news-dot tier-{{ src.tier }}"></span>
+      <div class="news-content">
+        <div class="news-title">{{ src.title }}</div>
+        <div class="news-meta">
+          <span class="badge badge-source">{{ src.source }}</span>
+          {% if src.tier <= 2 %}<span class="badge badge-exploit-active">EXPLOIT</span>{% endif %}
+          {{ src.published_at[:10] if src.published_at else '—' }}
+        </div>
+        {% if src.snippet %}<div class="poc-desc" style="margin-top:.35rem;">{{ src.snippet[:200] }}</div>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if data.linked_pocs or data.cve.kev %}
 <div class="section">
   <div class="section-head"><h2>Detection <em>/ rules</em></h2><span class="count">community rules</span></div>

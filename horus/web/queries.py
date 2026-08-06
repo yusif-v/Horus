@@ -545,6 +545,33 @@ def safe_int(value: str, default: int = 1, min_val: int = 1, max_val: int = 1000
         return default
 
 
+# ── Linked sources (CVE ↔ news) ─────────────────────────────────────────────
+
+
+def linked_sources(cve_id: str, limit: int = 10) -> list[dict]:
+    """Return linked intelligence sources (news articles) for a CVE.
+
+    Latest *limit* articles by ``published_at`` joined through
+    ``news_article_cve``.  Each dict carries the news-article fields
+    plus the ``snippet`` and ``context`` from the link table.
+    """
+    cve_id = cve_id.upper()
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT na.id, na.title, na.url, na.source, na.tier,
+                   na.published_at, nac.snippet, nac.context
+            FROM news_article_cve nac
+            JOIN news_article na ON na.id = nac.article_id
+            WHERE nac.cve_id = ?
+            ORDER BY na.published_at DESC
+            LIMIT ?
+            """,
+            (cve_id, limit),
+        ).fetchall()
+        return _rows_to_dicts(rows)
+
+
 # ── News ─────────────────────────────────────────────────────────────────────
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from flask import Blueprint, redirect, request, url_for
 
 from .._render import error_page, page
-from ..queries import PER_PAGE_DEFAULT, get_cve_detail, safe_int, search_cves
+from ..queries import PER_PAGE_DEFAULT, get_cve_detail, linked_sources, safe_int, search_cves
 from .auth import READ_ALL, role_required
 
 bp = Blueprint("search", __name__)
@@ -49,4 +49,5 @@ def cve_detail(cve_id):
             msg=f"No record for {cve_id} in the local index. "
             f"Try a keyword search: /search?q={cve_id}",
         ), 404
+    data["linked_sources"] = linked_sources(cve_id, limit=10)
     return page("cve_detail.html", title=data["cve"]["id"], data=data)
