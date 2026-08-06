@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-08-07
+
+### Added
+- **CVE correlation engine**: pairwise correlation scoring from shared tags, CWEs, products, PoCs, and temporal proximity. Related CVEs on each dossier page grouped by reason. Correlation Clusters dashboard at `/correlations` showing attack campaign groups.
+- **Automated PoC verification**: composite confidence score (0-100, grade A-F) from 6 signals — CVE presence in description, repo freshness, star count, URL quality, description quality, NVD cross-reference. Stored in `poc_verification` table.
+- **MITRE ATT&CK technique mapping**: 22 attack tags mapped to ATT&CK technique IDs (T1059, T1190, T1068, etc.). Techniques persisted per-CVE and exposed via API.
+- **EPSS trend tracking**: CVE-level EPSS history chart (Chart.js), velocity badge, days-above-threshold counter. Global movers dashboard at `/epss-trends`.
+- **CVE-news intelligence linking**: extract CVE IDs from RSS articles, link to CVEs with context (exploit status, severity mention). Latest 10 sources shown on each CVE page.
+
 ## [0.14.0] - 2026-08-06
 
 ### Added
