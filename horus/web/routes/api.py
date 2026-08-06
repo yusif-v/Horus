@@ -5,7 +5,14 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from ...storage import db as _storage
-from ..queries import get_cve_detail, get_stats, search_cves
+from ..queries import (
+    epss_movers,
+    epss_threshold_alerts,
+    epss_trend,
+    get_cve_detail,
+    get_stats,
+    search_cves,
+)
 from .auth import READ_ALL, role_required
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -116,6 +123,33 @@ def cve_sources(cve_id):
                 "total": total,
                 "limit": limit,
                 "offset": offset,
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/cve/<cve_id>/epss-trend")
+@role_required(*READ_ALL)
+def cve_epss_trend(cve_id):
+    """Return EPSS trend data for a specific CVE."""
+    try:
+        return jsonify(epss_trend(cve_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/epss-trends")
+@role_required(*READ_ALL)
+def epss_trends():
+    """Return top EPSS movers and threshold alerts."""
+    try:
+        days = request.args.get("days", default=7, type=int)
+        limit = request.args.get("limit", default=20, type=int)
+        return jsonify(
+            {
+                "movers": epss_movers(days=days, limit=limit),
+                "threshold_alerts": epss_threshold_alerts(days=days),
             }
         )
     except Exception as e:
