@@ -25,8 +25,9 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# Common CDN domains to exclude from IOC_DOMAIN results
+# Common CDN/source domains to exclude from IOC_DOMAIN results
 CDN_DOMAINS: set[str] = {
+    # CDNs & cloud
     "cloudflare.com",
     "akamai.com",
     "akamaiedge.net",
@@ -35,16 +36,25 @@ CDN_DOMAINS: set[str] = {
     "azureedge.net",
     "cloudfront.net",
     "googleapis.com",
+    # Social & search
     "google.com",
     "youtube.com",
     "facebook.com",
     "twitter.com",
     "x.com",
     "linkedin.com",
+    "bing.com",
+    "msn.com",
+    "reddit.com",
+    # Dev platforms
     "github.com",
     "githubusercontent.com",
     "gitlab.com",
     "stackoverflow.com",
+    "npmjs.com",
+    "pypi.org",
+    "maven.org",
+    # Reference & documentation
     "wikipedia.org",
     "mozilla.org",
     "apple.com",
@@ -55,15 +65,251 @@ CDN_DOMAINS: set[str] = {
     "sharepoint.com",
     "outlook.com",
     "live.com",
-    "msn.com",
-    "bing.com",
+    # Security advisory sources (reference, not IOCs)
+    "cisa.gov",
+    "cve.org",
+    "nvd.nist.gov",
+    "mitre.org",
+    "se.com",
+    "cert.org",
+    "us-cert.gov",
+    "ncsc.gov.uk",
+    "cisa.gov.au",
+    # URL shorteners
+    "t.co",
+    "bit.ly",
+    "goo.gl",
+    "ow.ly",
+    "tinyurl.com",
+    # Common CDNs
     "fonts.googleapis.com",
     "ajax.googleapis.com",
     "cdnjs.cloudflare.com",
     "unpkg.com",
     "jsdelivr.net",
-    "bootstrapcdn.com",
+    "bootstrapcdn.net",
 }
+
+# File extensions that look like TLDs but aren't domains
+FILE_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        "json",
+        "xml",
+        "pdf",
+        "txt",
+        "csv",
+        "html",
+        "htm",
+        "jsp",
+        "asp",
+        "aspx",
+        "php",
+        "py",
+        "js",
+        "css",
+        "md",
+        "yaml",
+        "yml",
+        "toml",
+        "cfg",
+        "conf",
+        "ini",
+        "log",
+        "bak",
+        "zip",
+        "tar",
+        "gz",
+        "rar",
+        "exe",
+        "dll",
+        "sys",
+        "bin",
+        "img",
+        "iso",
+        "dmg",
+        "deb",
+        "rpm",
+    }
+)
+
+# Known valid TLDs (subset — excludes file extensions)
+VALID_TLDS: frozenset[str] = frozenset(
+    {
+        "com",
+        "org",
+        "net",
+        "edu",
+        "gov",
+        "mil",
+        "int",
+        "io",
+        "co",
+        "us",
+        "uk",
+        "de",
+        "fr",
+        "jp",
+        "cn",
+        "ru",
+        "br",
+        "in",
+        "au",
+        "ca",
+        "it",
+        "nl",
+        "se",
+        "no",
+        "fi",
+        "dk",
+        "es",
+        "pt",
+        "ch",
+        "at",
+        "be",
+        "ie",
+        "nz",
+        "za",
+        "mx",
+        "ar",
+        "cl",
+        "co.uk",
+        "com.au",
+        "co.in",
+        "com.br",
+        "co.jp",
+        "com.cn",
+        "or.jp",
+        "go.jp",
+        "ac.uk",
+        "info",
+        "biz",
+        "name",
+        "pro",
+        "aero",
+        "museum",
+        "coop",
+        "travel",
+        "jobs",
+        "mobi",
+        "tel",
+        "cat",
+        "asia",
+        "xxx",
+        "post",
+        "onion",
+        # Country codes that could be confused with file extensions
+        "pl",
+        "cz",
+        "hu",
+        "ro",
+        "bg",
+        "hr",
+        "sk",
+        "si",
+        "lt",
+        "lv",
+        "ee",
+        "ua",
+        "by",
+        "md",
+        "am",
+        "ge",
+        "az",
+        "kz",
+        "uz",
+        "kg",
+        "tj",
+        "tm",
+        "kr",
+        "tw",
+        "hk",
+        "sg",
+        "th",
+        "vn",
+        "my",
+        "ph",
+        "id",
+        "bd",
+        "pk",
+        "lk",
+        "np",
+        "mm",
+        "kh",
+        "la",
+        "bn",
+        "mo",
+        "mn",
+        "kp",
+        "ae",
+        "sa",
+        "qa",
+        "kw",
+        "bh",
+        "om",
+        "jo",
+        "lb",
+        "sy",
+        "iq",
+        "ir",
+        "il",
+        "ps",
+        "tr",
+        "cy",
+        "mt",
+        "gr",
+        "eg",
+        "ng",
+        "ke",
+        "tz",
+        "ug",
+        "gh",
+        "cm",
+        "ci",
+        "sn",
+        "ml",
+        "bf",
+        "ne",
+        "td",
+        "sd",
+        "et",
+        "so",
+        "cd",
+        "cg",
+        "ga",
+        "gq",
+        "st",
+        "ao",
+        "mz",
+        "zw",
+        "bw",
+        "na",
+        "sz",
+        "mg",
+        "mu",
+        "sc",
+        "km",
+        "dj",
+        "er",
+        "cf",
+        "gw",
+        "lr",
+        "sl",
+        "gn",
+        "bj",
+        "tg",
+        "cv",
+        "gm",
+        "mr",
+        "bi",
+        "rw",
+        "ss",
+        "ma",
+        "tn",
+        "dz",
+        "ly",
+        "eh",
+    }
+)
 
 # Regex patterns
 RE_IPV4 = re.compile(r"(?<![\d.])((?:\d{1,3}\.){3}\d{1,3})(?![\d.])")
@@ -113,6 +359,58 @@ def _is_cdn_domain(domain: str) -> bool:
     return any(lower == cdn or lower.endswith("." + cdn) for cdn in CDN_DOMAINS)
 
 
+def _is_valid_domain(domain: str) -> bool:
+    """Check if a string is a real domain, not a filename with file extension."""
+    lower = domain.lower()
+    parts = lower.split(".")
+    tld = parts[-1]
+    # Reject if TLD is a known file extension
+    if tld in FILE_EXTENSIONS:
+        return False
+    # Reject if TLD is not a known valid TLD
+    if tld not in VALID_TLDS:
+        return False
+    # Reject single-character domains (likely false positives)
+    if len(parts) == 2 and len(parts[0]) <= 2:
+        return False
+    # Reject domains ending in common filename patterns
+    return not lower.endswith((".json", ".xml", ".pdf", ".txt", ".csv", ".html", ".htm"))
+
+
+def _is_reference_url(url: str) -> bool:
+    """Check if URL is a reference/documentation link, not an IOC."""
+    lower = url.lower()
+    # GitHub repos, documentation, advisory pages
+    reference_paths = [
+        "/blob/",
+        "/tree/",
+        "/develop/",
+        "/docs/",
+        "/wiki/",
+        "/advisories/",
+        "/bulletins/",
+        "/alerts/",
+        "/analysis/",
+        "/csaf_files/",
+        "/cve/",
+        "/detail/",
+    ]
+    if any(p in lower for p in reference_paths):
+        return True
+    # Reference domains
+    reference_domains = [
+        "cisa.gov",
+        "github.com",
+        "nvd.nist.gov",
+        "mitre.org",
+        "cve.org",
+        "se.com",
+        "cert.org",
+        "us-cert.gov",
+    ]
+    return any(d in lower for d in reference_domains)
+
+
 def extract_iocs(text: str) -> dict[str, list[str]]:
     """Extract all IOC types from a text block.
 
@@ -141,21 +439,22 @@ def extract_iocs(text: str) -> dict[str, list[str]]:
         if _is_valid_ip(ip) and not _is_private_ip(ip):
             ips.add(ip)
 
-    # Extract domains (exclude CDNs)
+    # Extract domains (exclude CDNs, file names, invalid TLDs)
     domains: set[str] = set()
     for m in RE_DOMAIN.finditer(text):
         d = m.group(1).lower()
-        if not _is_cdn_domain(d):
+        if not _is_cdn_domain(d) and _is_valid_domain(d):
             domains.add(d)
 
-    # Extract URLs
+    # Extract URLs (exclude reference/documentation links)
     urls: set[str] = set()
     for m in RE_URL.finditer(text):
         url = m.group(0)
         # Trim trailing punctuation
         while url and url[-1] in ".,;:!?)":
             url = url[:-1]
-        urls.add(url)
+        if not _is_reference_url(url):
+            urls.add(url)
 
     # Extract hashes (prefer longer hashes to avoid overlap)
     sha256s = {m.group(1).lower() for m in RE_SHA256.finditer(text)}
