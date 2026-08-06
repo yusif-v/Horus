@@ -175,8 +175,9 @@ def run_pipeline(
         2.  merge + score (reputation, watchlist split)
         3.  enrich (KEV, EPSS)
         4.  persist (cve, poc, watchlist, mark_run)
-        5.  CVE-news linking (retroactive + active search)
-        6.  render report + graph
+        5.  CVE correlation pass (compute pairwise correlations + build clusters)
+        6.  CVE-news linking (retroactive + active search)
+        7.  render report + graph
     """
     log = opts.log or (
         (lambda msg: None) if opts.quiet else (lambda msg: print(msg, file=sys.stderr))
@@ -208,7 +209,9 @@ def run_pipeline(
     all_resources: list[dict[str, Any]] = []
     source_results: dict[str, dict[str, Any]] = {}
     step = 0
-    total_steps = len(selected_sources) + len(selected_enrichers) + 3  # +cve_fetch +merge +persist
+    total_steps = (
+        len(selected_sources) + len(selected_enrichers) + 4
+    )  # +cve_fetch +merge +persist +correlation
     x_discovered_urls: list[str] = []
 
     def _run_source(name: str, mod: Any) -> dict[str, Any]:
@@ -367,7 +370,17 @@ def run_pipeline(
         for name in set(sources) - set(selected_sources):
             db.upsert_source_health(conn, name, status="skipped")
 
-    # 5 — CVE-news linking
+    # 5 — CVE correlation pass
+    step += 1
+    log(f"[{step}/{total_steps}] computing CVE correlations...")
+    with db.connect() as conn:
+        from .core import correlation as _correlation
+
+        correlations_found = _correlation.compute_correlations(conn)
+        clusters_built = _correlation.build_clusters(conn)
+        log(f"  {correlations_found} correlations, {clusters_built} clusters")
+
+    # 6 — CVE-news linking
     from .sources.news_linker import link_cves_to_news as _link_news
 
     try:
