@@ -20,6 +20,17 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _truncate(text: str, max_len: int) -> str:
+    """Truncate text at a word boundary, adding ellipsis if cut."""
+    if not text or len(text) <= max_len:
+        return text or ""
+    truncated = text[:max_len]
+    last_space = truncated.rfind(" ")
+    if last_space > max_len // 2:
+        truncated = truncated[:last_space]
+    return truncated + "..."
+
+
 def _week_boundaries(weeks_back: int = 1) -> tuple[str, str, str, str]:
     """Return (this_week_start, this_week_end, last_week_start, last_week_end) as ISO strings.
 
@@ -225,7 +236,7 @@ def _gather_top_cves(
     data.top_cves = [
         {
             "id": r[0],
-            "description": r[1][:200] if r[1] else "",
+            "description": _truncate(r[1], 200),
             "cvss_score": r[2],
             "cvss_severity": r[3],
             "epss_score": r[4],
@@ -262,7 +273,7 @@ def _gather_kev_details(
     data.kev_entries = [
         {
             "id": r[0],
-            "description": r[1][:200] if r[1] else "",
+            "description": _truncate(r[1], 200),
             "cvss_score": r[2],
             "epss_score": r[3],
             "kev_due_date": r[4],
@@ -299,7 +310,7 @@ def _gather_epss_movers(
             "epss_score": r[2],
             "kev": bool(r[3]),
             "reputation_score": r[4],
-            "description": r[5][:150] if r[5] else "",
+            "description": _truncate(r[5], 150),
         }
         for r in rows
     ]
@@ -394,7 +405,7 @@ def _gather_news(
             "url": r[1],
             "source": r[2],
             "tier": r[3],
-            "summary": r[4][:200] if r[4] else "",
+            "summary": _truncate(r[4], 200),
             "published_at": r[5][:10] if r[5] else "",
         }
         for r in rows
@@ -469,7 +480,7 @@ def _gather_top_pocs(
             "url": r[0],
             "source": r[1],
             "stars": r[2] or 0,
-            "description": r[3][:150] if r[3] else "",
+            "description": _truncate(r[3], 150),
             "exploit_type": r[4],
             "linked_cves": r[5],
         }
@@ -555,7 +566,7 @@ def _gather_source_health(conn: sqlite3.Connection, data: WeeklyData) -> None:
             "source": r[0],
             "last_run": r[1][:19] if r[1] else "never",
             "status": r[2],
-            "error": r[3][:100] if r[3] else None,
+            "error": _truncate(r[3], 100),
             "cves": r[4],
             "pocs": r[5],
             "consecutive_failures": r[6],

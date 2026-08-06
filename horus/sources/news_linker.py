@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -127,7 +128,13 @@ def link_cves_to_news(conn: sqlite3.Connection, *, since_days: int = 7) -> dict[
                 """INSERT OR IGNORE INTO news_article_cve
                    (article_id, cve_id, snippet, context, linked_at)
                    VALUES (?, ?, ?, ?, ?)""",
-                (article[0], cve_id, link["snippet"], str(link["context"]), link["linked_at"]),
+                (
+                    article[0],
+                    cve_id,
+                    link["snippet"],
+                    json.dumps(link["context"]),
+                    link["linked_at"],
+                ),
             )
             if cur.rowcount > 0:
                 linked += 1
