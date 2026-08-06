@@ -228,24 +228,33 @@ def extract_iocs_from_news(conn: sqlite3.Connection) -> int:
         text = f"{title or ''} {summary or ''}"
         iocs = extract_iocs(text)
         source_url = f"news:{article_id}"
+        # Link all IOCs to CVEs mentioned in the same article
+        article_cves = iocs["cves"]
 
         for ip in iocs["ips"]:
-            inserted += _insert_ioc(conn, "ip", ip, "news", source_url, now)
+            for cve in article_cves:
+                inserted += _insert_ioc(conn, "ip", ip, "news", source_url, now, cve_id=cve)
         for domain in iocs["domains"]:
-            inserted += _insert_ioc(conn, "domain", domain, "news", source_url, now)
+            for cve in article_cves:
+                inserted += _insert_ioc(conn, "domain", domain, "news", source_url, now, cve_id=cve)
         for url in iocs["urls"]:
-            inserted += _insert_ioc(conn, "url", url, "news", source_url, now)
+            for cve in article_cves:
+                inserted += _insert_ioc(conn, "url", url, "news", source_url, now, cve_id=cve)
         for h in iocs["hashes"]:
             htype = _hash_type(h)
-            inserted += _insert_ioc(conn, htype, h, "news", source_url, now)
+            for cve in article_cves:
+                inserted += _insert_ioc(conn, htype, h, "news", source_url, now, cve_id=cve)
         for email in iocs["emails"]:
-            inserted += _insert_ioc(conn, "email", email, "news", source_url, now)
+            for cve in article_cves:
+                inserted += _insert_ioc(conn, "email", email, "news", source_url, now, cve_id=cve)
         for cve in iocs["cves"]:
             inserted += _insert_ioc(conn, "cve", cve, "news", source_url, now, cve_id=cve)
         for path in iocs["paths"]:
-            inserted += _insert_ioc(conn, "path", path, "news", source_url, now)
+            for cve in article_cves:
+                inserted += _insert_ioc(conn, "path", path, "news", source_url, now, cve_id=cve)
         for reg in iocs["registry"]:
-            inserted += _insert_ioc(conn, "registry", reg, "news", source_url, now)
+            for cve in article_cves:
+                inserted += _insert_ioc(conn, "registry", reg, "news", source_url, now, cve_id=cve)
 
     conn.commit()
     return inserted
@@ -270,24 +279,32 @@ def extract_iocs_from_resources(conn: sqlite3.Connection) -> int:
         url, title, description, tags = row
         text = f"{title or ''} {description or ''} {tags or ''}"
         iocs = extract_iocs(text)
+        resource_cves = iocs["cves"]
 
         for ip in iocs["ips"]:
-            inserted += _insert_ioc(conn, "ip", ip, "resource", url, now)
+            for cve in resource_cves:
+                inserted += _insert_ioc(conn, "ip", ip, "resource", url, now, cve_id=cve)
         for domain in iocs["domains"]:
-            inserted += _insert_ioc(conn, "domain", domain, "resource", url, now)
+            for cve in resource_cves:
+                inserted += _insert_ioc(conn, "domain", domain, "resource", url, now, cve_id=cve)
         for u in iocs["urls"]:
-            inserted += _insert_ioc(conn, "url", u, "resource", url, now)
+            for cve in resource_cves:
+                inserted += _insert_ioc(conn, "url", u, "resource", url, now, cve_id=cve)
         for h in iocs["hashes"]:
             htype = _hash_type(h)
-            inserted += _insert_ioc(conn, htype, h, "resource", url, now)
+            for cve in resource_cves:
+                inserted += _insert_ioc(conn, htype, h, "resource", url, now, cve_id=cve)
         for email in iocs["emails"]:
-            inserted += _insert_ioc(conn, "email", email, "resource", url, now)
+            for cve in resource_cves:
+                inserted += _insert_ioc(conn, "email", email, "resource", url, now, cve_id=cve)
         for cve in iocs["cves"]:
             inserted += _insert_ioc(conn, "cve", cve, "resource", url, now, cve_id=cve)
         for path in iocs["paths"]:
-            inserted += _insert_ioc(conn, "path", path, "resource", url, now)
+            for cve in resource_cves:
+                inserted += _insert_ioc(conn, "path", path, "resource", url, now, cve_id=cve)
         for reg in iocs["registry"]:
-            inserted += _insert_ioc(conn, "registry", reg, "resource", url, now)
+            for cve in resource_cves:
+                inserted += _insert_ioc(conn, "registry", reg, "resource", url, now, cve_id=cve)
 
     conn.commit()
     return inserted

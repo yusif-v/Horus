@@ -1240,19 +1240,15 @@ def _build_epss_section(data: WeeklyData, charts: dict[str, str]) -> str:
 <div class="section-divider"></div>
 <div class="section" id="epss-section">
     <h2>5. EPSS Exploitability Trends</h2>
-    <div class="charts-grid">
-        <div class="chart-panel">
-            <h3>EPSS Score Distribution</h3>
-            {charts["epss_hist"]}
-        </div>
-        <div class="chart-panel">
-            <h3>Top 10 Highest EPSS CVEs</h3>
-            <table class="data-table">
-                <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>Rep</th><th>Description</th></tr></thead>
-                <tbody>{rows}</tbody>
-            </table>
-        </div>
+    <div class="chart-panel">
+        <h3>EPSS Score Distribution</h3>
+        {charts["epss_hist"]}
     </div>
+    <h3>Top 10 Highest EPSS CVEs</h3>
+    <table class="data-table">
+        <thead><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>Rep</th><th>Description</th></tr></thead>
+        <tbody>{rows}</tbody>
+    </table>
 </div>"""
 
 
