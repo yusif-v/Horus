@@ -7,4 +7,4 @@ Usage:
     python3 -m horos [--sources github,nvd] [--skip-kev] [--format md]
 """
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-08-06
+
+### Added
+- **Weekly threat intelligence report**: `horus --weekly-report` generates aggregated weekly reports with executive summary, top CVEs by risk score, KEV entries, EPSS exploitability rankings, most targeted vendors, attack technique distribution (MITRE ATT&CK), security news highlights, ThreatFox IOC summary, triage workflow status, and source health observability.
+- **AI-powered report analysis**: `--ai` flag augments the weekly report with LLM-generated narrative analysis (executive summary, trend analysis, risk assessment, recommended actions) and automated QA bug detection (data anomalies + report correctness). Configurable providers: OpenAI, Anthropic, Ollama (local).
+- `horus/ai/` package: provider-agnostic AI interface with pluggable backends.
+- `--weekly-format` flag supporting text, markdown, and HTML output.
+- `--ai-provider` flag to override the AI provider per-run.
+
+### Fixed
+- Test isolation: `tests/conftest.py` now snapshots `os.environ` before importing `horus.web` to prevent `.env` leakage from polluting test config.
+
 ## [0.10.0] - 2026-06-17
 
 ### Added
