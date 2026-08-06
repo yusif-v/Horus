@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">Correlation engine</div>
+
+{% if viewing_cluster %}
+<div style="margin-bottom:1rem;">
+  <a href="/correlations" class="meta-link">&larr; Back to all clusters</a>
+</div>
+<div class="section">
+  <div class="section-head">
+    <h2>Cluster #{{ viewing_cluster }}</h2>
+    <span class="count">{{ members|length }} member{% if members|length != 1 %}s{% endif %}</span>
+  </div>
+  {% if members %}
+  <div class="panel"><div class="panel-body flush">
+    <table>
+      <thead><tr><th>CVE</th><th>CVSS</th><th>Membership</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for m in members %}
+      <tr class="sev-{{ m.cvss_severity }}">
+        <td><a href="/cve/{{ m.id }}" class="cve-id-cell">{{ m.id }}</a></td>
+        <td><span class="num strong">{{ m.cvss_score or '—' }}</span> {% if m.cvss_severity %}<span class="badge badge-{{ m.cvss_severity|lower }}">{{ m.cvss_severity[:3] }}</span>{% endif %}</td>
+        <td><span class="badge badge-epss">{{ "%.1f"|format(m.membership_score) }}</span></td>
+        <td class="desc-cell" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ (m.description or '')[:120] }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div></div>
+  {% else %}
+  <div class="panel"><div class="panel-body"><p style="color:var(--text-dim);">No members found for this cluster.</p></div></div>
+  {% endif %}
+</div>
+
+{% else %}
+<div class="section">
+  <div class="section-head">
+    <h2>Correlation Clusters</h2>
+    <span class="count">{{ clusters|length }} cluster{% if clusters|length != 1 %}s{% endif %}</span>
+  </div>
+  {% if clusters %}
+  <div class="panel"><div class="panel-body flush">
+    <table>
+      <thead><tr><th>Label</th><th>Centroid</th><th>Size</th><th>Date range</th><th>Dominant tags</th><th></th></tr></thead>
+      <tbody>
+      {% for c in clusters %}
+      <tr>
+        <td>{% if c.label %}<strong>{{ c.label }}</strong>{% else %}<span style="color:var(--text-dim);">Cluster #{{ c.id }}</span>{% endif %}</td>
+        <td><a href="/cve/{{ c.centroid_cve }}" class="cve-id-cell">{{ c.centroid_cve }}</a></td>
+        <td><span class="badge badge-source">{{ c.cve_count }}</span></td>
+        <td style="font-size:12px;color:var(--text-mid);">{% if c.earliest %}{{ c.earliest }} → {{ c.latest }}{% else %}—{% endif %}</td>
+        <td>
+          <div class="tag-cloud" style="gap:4px;">
+          {% for tag in c.tags[:4] %}
+          <span class="badge badge-tag" style="font-size:11px;">{{ tag }}</span>
+          {% endfor %}
+          </div>
+        </td>
+        <td><a href="/correlations/{{ c.id }}" class="meta-link">View &rarr;</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div></div>
+  {% else %}
+  <div class="panel"><div class="panel-body"><p style="color:var(--text-dim);">No correlation clusters found. Run the correlation engine to generate clusters.</p></div></div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

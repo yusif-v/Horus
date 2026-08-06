@@ -474,18 +474,34 @@ def get_cve_detail(cve_id: str) -> dict | None:
                         "relation": "same_product",
                     }
 
-    return {
-        "cve": cve,
-        "tags": tags,
-        "cwes": cwes,
-        "products": products,
-        "products_grouped": group_products_by_vendor(products),
-        "product_count": len(set((p["vendor"], p["product"]) for p in products)),
-        "sources": sources,
-        "linked_pocs": linked_pocs,
-        "social_posts": social_posts,
-        "related_cves": list(related.values()),
-    }
+        # Enhanced correlation data from cve_correlation table
+        correlation_links = _rows_to_dicts(
+            conn.execute(
+                """
+            SELECT c.related_id AS id, c.score, c.reasons,
+                   cv.cvss_score, cv.cvss_severity, cv.description
+            FROM cve_correlation c
+            JOIN cve cv ON cv.id = c.related_id
+            WHERE c.cve_id = ?
+            ORDER BY c.score DESC
+            """,
+                (cve_id,),
+            )
+        )
+
+        return {
+            "cve": cve,
+            "tags": tags,
+            "cwes": cwes,
+            "products": products,
+            "products_grouped": group_products_by_vendor(products),
+            "product_count": len(set((p["vendor"], p["product"]) for p in products)),
+            "sources": sources,
+            "linked_pocs": linked_pocs,
+            "social_posts": social_posts,
+            "related_cves": list(related.values()),
+            "correlation_links": correlation_links,
+        }
 
 
 # ── PoC list ────────────────────────────────────────────────────────────────

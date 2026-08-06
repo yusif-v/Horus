@@ -3,6 +3,7 @@
 from .admin import bp as admin_bp
 from .api import bp as api_bp
 from .auth import bp as auth_bp
+from .correlations import bp as correlations_bp
 from .cves import bp as cves_bp
 from .dashboard import bp as dashboard_bp
 from .epss_trends import bp as epss_trends_bp
@@ -26,6 +27,7 @@ ALL_BLUEPRINTS = [
     news_bp,
     vendors_bp,
     epss_trends_bp,
+    correlations_bp,
     api_bp,
     admin_bp,
     watchlist_bp,

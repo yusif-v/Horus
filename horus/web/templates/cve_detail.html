@@ -300,7 +300,32 @@
 </div>
 {% endif %}
 
-{% if data.related_cves %}
+{% if data.correlation_links %}
+<div class="section">
+  <div class="section-head"><h2>Correlated vulnerabilities</h2><span class="count">{{ data.correlation_links|length }} linked</span></div>
+  <div class="panel"><div class="panel-body flush">
+    <table>
+      <thead><tr><th>CVE</th><th>Score</th><th>Reasons</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for rc in data.correlation_links %}
+      <tr class="sev-{{ rc.cvss_severity }}">
+        <td><a href="/cve/{{ rc.id }}" class="cve-id-cell">{{ rc.id }}</a></td>
+        <td><span class="badge badge-epss">{{ "%.1f"|format(rc.score) }}</span></td>
+        <td>
+          <div class="tag-cloud" style="gap:4px;">
+          {% for reason in rc.reasons.split(',') %}
+          <span class="badge badge-source" style="font-size:11px;">{{ reason|trim }}</span>
+          {% endfor %}
+          </div>
+        </td>
+        <td class="desc-cell" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ (rc.description or '')[:120] }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div></div>
+</div>
+{% elif data.related_cves %}
 <div class="section">
   <div class="section-head"><h2>Related vulnerabilities</h2><span class="count">{{ data.related_cves|length }} linked</span></div>
   <div class="panel"><div class="panel-body flush">
