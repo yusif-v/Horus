@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
@@ -97,3 +98,103 @@ def extract_links_from_article(article: dict[str, Any]) -> list[dict[str, Any]]:
         }
         for cve in cves
     ]
+
+
+def link_cves_to_news(conn: sqlite3.Connection, *, since_days: int = 7) -> dict[str, int]:
+    """Run CVE-news linking pass. Returns {"linked": N, "articles_scanned": M}."""
+    linked = 0
+    articles_scanned = 0
+
+    # Retroactive: scan all unlinked articles
+    unlinked = conn.execute(
+        """
+        SELECT id, title, summary FROM news_article
+        WHERE id NOT IN (SELECT article_id FROM news_article_cve)
+        """
+    ).fetchall()
+
+    # Get all known CVE IDs for matching
+    known_cves = {row[0] for row in conn.execute("SELECT id FROM cve")}
+
+    for article in unlinked:
+        articles_scanned += 1
+        article_record = {"title": article[1], "summary": article[2]}
+        for link in extract_links_from_article(article_record):
+            cve_id = link["cve_id"]
+            if cve_id not in known_cves:
+                continue
+            cur = conn.execute(
+                """INSERT OR IGNORE INTO news_article_cve
+                   (article_id, cve_id, snippet, context, linked_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (article[0], cve_id, link["snippet"], str(link["context"]), link["linked_at"]),
+            )
+            if cur.rowcount > 0:
+                linked += 1
+
+    # Active search: critical CVEs from last N days
+    critical_cves = conn.execute(
+        """
+        SELECT id FROM cve
+        WHERE (cvss_score >= 9.0 OR kev = 1)
+          AND first_seen >= datetime('now', ?)
+        """,
+        (f"-{since_days} days",),
+    ).fetchall()
+
+    if critical_cves:
+        # Re-scan all RSS feeds for critical CVE coverage
+        try:
+            from .news import FEEDS
+        except ImportError:
+            FEEDS = {}
+        try:
+            import feedparser
+        except ImportError:
+            feedparser = None
+        if feedparser and FEEDS:
+            critical_ids = [row[0] for row in critical_cves]
+            for feed_key, (feed_url, _) in FEEDS.items():
+                try:
+                    parsed = feedparser.parse(feed_url)
+                except Exception:
+                    continue
+                for entry in parsed.entries:
+                    text = f"{getattr(entry, 'title', '')} {getattr(entry, 'summary', '')}"
+                    for cve_id in critical_ids:
+                        if cve_id.upper() in text.upper():
+                            url = getattr(entry, "link", "")
+                            if not url:
+                                continue
+                            existing = conn.execute(
+                                "SELECT id FROM news_article WHERE url = ?", (url,)
+                            ).fetchone()
+                            if not existing:
+                                conn.execute(
+                                    """INSERT OR IGNORE INTO news_article
+                                       (title, url, source, tier, summary, first_seen)
+                                       VALUES (?, ?, ?, 3, ?, ?)""",
+                                    (
+                                        getattr(entry, "title", "")[:500],
+                                        url,
+                                        feed_key,
+                                        getattr(entry, "summary", "")[:1000],
+                                        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                    ),
+                                )
+                                existing = conn.execute(
+                                    "SELECT id FROM news_article WHERE url = ?", (url,)
+                                ).fetchone()
+                            if existing:
+                                snippet = extract_snippet(text, cve_id)
+                                context = detect_context(text)
+                                now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                                conn.execute(
+                                    """INSERT OR IGNORE INTO news_article_cve
+                                       (article_id, cve_id, snippet, context, linked_at)
+                                       VALUES (?, ?, ?, ?, ?)""",
+                                    (existing[0], cve_id, snippet, str(context), now),
+                                )
+
+    conn.commit()
+    return {"linked": linked, "articles_scanned": articles_scanned}
