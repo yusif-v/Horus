@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
+from typing import Any
 
+from ..core.context import SourceContext
 from ..storage import db
 
 NAME = "News/RSS Feed"
@@ -93,7 +95,7 @@ def _classify_tier(title: str, summary: str) -> int:
     return 4
 
 
-def _parse_published(entry) -> str | None:
+def _parse_published(entry: Any) -> str | None:
     """Extract ISO-8601 date from a feedparser entry, or None."""
     if hasattr(entry, "published_parsed") and entry.published_parsed:
         try:
@@ -110,10 +112,10 @@ def _parse_published(entry) -> str | None:
     return None
 
 
-def run(ctx) -> dict:
+def run(ctx: SourceContext) -> dict[str, Any]:
     """Fetch RSS feeds, classify tiers, persist to news_article table.
 
-    Returns {{}} (empty dict) — articles are persisted directly,
+    Returns {} (empty dict) — articles are persisted directly,
     not through the resource pipeline.
     """
     try:

@@ -58,6 +58,7 @@ FRESH_POC_KEYWORDS = [
 ]
 
 LOW_VALUE_KEYWORDS = [
+    # Aggregator / list repos — not actual PoCs
     "awesome",
     "collection",
     "list",
@@ -72,4 +73,21 @@ LOW_VALUE_KEYWORDS = [
     "daily digest",
     "newsletter",
     "curated list",
+    # Gaming platforms — game cheats / executors are not CVE exploits
+    "roblox",
+    "minecraft",
+    "fortnite",
+    "valorant",
+    "lua executor",
+    "script executor",
+    "game exploit",
+    "game hack",
+    "game cheat",
+    "mod menu",
+    "aimbot",
+    # Spam / skid noise with no CVE research value
+    "free robux",
+    "free coins",
+    "cracked by",
+    "nulled by",
 ]

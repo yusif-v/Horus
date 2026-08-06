@@ -20,7 +20,15 @@ CREATE TABLE IF NOT EXISTS cve (
     reputation_score REAL,                      -- computed composite (0-10)
     confidence      TEXT DEFAULT 'high',        -- high | medium | low
     first_seen      TEXT NOT NULL,
-    last_seen       TEXT NOT NULL
+    last_seen       TEXT NOT NULL,
+    -- Trust scoring (v0.12)
+    trust_score      REAL DEFAULT 0.0,          -- aggregate trust 0-100
+    trust_nvd        REAL DEFAULT 1.0,         -- NVD confirmation (1.0 = confirmed)
+    trust_threatfox  REAL DEFAULT 0.0,         -- IOC hits contribution
+    trust_hudsonrock REAL DEFAULT 0.0,          -- stealer log hits
+    threatfox_ioc_count INTEGER DEFAULT 0,      -- ThreatFox IOCs found
+    stealer_hits     INTEGER DEFAULT 0,         -- compromised machines for vendor domains
+    kev_due_date   TEXT                      -- CISA KEV remediation deadline
 );
 
 CREATE TABLE IF NOT EXISTS poc (
@@ -93,6 +101,17 @@ CREATE TABLE IF NOT EXISTS meta (
     value           TEXT NOT NULL
 );
 
+-- ─── Source health (observability; updated every cycle) ──────────────────
+CREATE TABLE IF NOT EXISTS source_health (
+    source_name          TEXT PRIMARY KEY,
+    last_run_at          TEXT,
+    last_status          TEXT NOT NULL,          -- ok | error | skipped
+    last_error           TEXT,
+    cve_count            INTEGER DEFAULT 0,
+    poc_count            INTEGER DEFAULT 0,
+    consecutive_failures INTEGER DEFAULT 0
+);
+
 -- ─── Indexes ─────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_cve_published_at        ON cve(published_at);
@@ -108,8 +127,10 @@ CREATE INDEX IF NOT EXISTS idx_cve_reputation_score     ON cve(reputation_score)
 CREATE INDEX IF NOT EXISTS idx_cve_social_mentions      ON cve(social_mentions);
 CREATE INDEX IF NOT EXISTS idx_cve_poc_source_count     ON cve(poc_source_count);
 CREATE INDEX IF NOT EXISTS idx_cve_confidence           ON cve(confidence);
+CREATE INDEX IF NOT EXISTS idx_cve_trust_score        ON cve(trust_score);
+CREATE INDEX IF NOT EXISTS idx_cve_threatfox_ioc_count ON cve(threatfox_ioc_count);
 
--- ─── Social posts (X tweets mentioning a CVE) ────────────────────────────
+-- ─── ThreatFox IOCs (v0.12) ───────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS cve_social_post (
     cve_id          TEXT NOT NULL REFERENCES cve(id) ON DELETE CASCADE,
@@ -304,3 +325,19 @@ CREATE TABLE IF NOT EXISTS epss_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_epss_history_cve ON epss_history(cve_id);
+
+-- ─── ThreatFox IOCs (v0.12) ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS cve_threatfox_ioc (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    cve_id          TEXT NOT NULL REFERENCES cve(id) ON DELETE CASCADE,
+    ioc_type        TEXT NOT NULL,               -- ip | domain | hash | url
+    ioc_value       TEXT NOT NULL,
+    threat_type     TEXT,                        -- malware family or threat type
+    first_seen      TEXT NOT NULL,
+    last_seen       TEXT NOT NULL,
+    UNIQUE (cve_id, ioc_value)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cve_threatfox_cve ON cve_threatfox_ioc(cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_threatfox_type ON cve_threatfox_ioc(ioc_type);

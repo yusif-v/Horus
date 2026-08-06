@@ -38,4 +38,4 @@ EXPOSE 8080
 # SIGTERM propagates cleanly to gunicorn workers
 STOPSIGNAL SIGTERM
 
-ENTRYPOINT ["python", "-m", "horus", "--server"]
+ENTRYPOINT ["python", "-m", "horus", "--server", "--config", "/app/horus.yaml"]

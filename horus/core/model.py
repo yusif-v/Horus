@@ -52,6 +52,14 @@ class CVE:
     imminence_bucket: str = "unlikely"  # imminent | weeks | months | unlikely
     first_seen: datetime = field(default_factory=_utc_now)
     last_seen: datetime = field(default_factory=_utc_now)
+    # Trust scoring fields (v0.12)
+    trust_score: float = 0.0  # aggregate trust 0-100
+    trust_nvd: float = 1.0  # NVD confirmation (1.0 = confirmed)
+    trust_threatfox: float = 0.0  # IOC hits contribution
+    trust_hudsonrock: float = 0.0  # stealer log hits
+    threatfox_ioc_count: int = 0  # number of ThreatFox IOCs found
+    stealer_hits: int = 0  # compromised machines for vendor domains
+    kev_due_date: str | None = None  # CISA KEV remediation deadline
 
 
 @dataclass

@@ -2,7 +2,23 @@
 
 *Consolidates the former `IDEA.md` and `IDEA_EXTENDED.md`. Active version work lives in `docs/plans/`. Open issues live in `docs/issues.md`.*
 
-*Last updated: 2026-06-24*
+|*Last updated: 2026-07-02*|
+
+### v0.12 — CTI Platform Upgrade (in progress)
+
+Dark web intel integration via `darknet-mcp-server`:
+
+| # | Feature | Status |
+|---|---------|--------|
+| 1 | ThreatFox IOC enricher | pending |
+| 2 | Hudson Rock stealer log enricher | pending |
+| 3 | MalwareBazaar + Hybrid Analysis malware enrichers | pending |
+| 4 | IntelligenceX dark web search enricher | pending |
+| 5 | Trust scoring system (trust_score + breakdown fields) | pending |
+| 6 | OpenCTI-style dashboard panels (threat actors, infrastructure, malware) | pending |
+| 7 | URLhaus + Vulners PoC sources | pending |
+| 8 | CVE regex validation + false positive reduction | pending |
+| 9 | MITRE ATT&CK technique mapping on malware hits | pending |
 
 ---
 

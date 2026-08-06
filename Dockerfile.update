@@ -1,0 +1,8 @@
+# Incremental build: update source code on top of existing horus image.
+# Used when Docker Hub is unreachable (SSL interception by corporate VPN).
+FROM horus-horus:latest
+USER root
+# Dependencies already installed via editable install in base image.
+# Just overwrite source code — no pip needed, no network required.
+COPY --chown=horus:horus . /app
+USER horus

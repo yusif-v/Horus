@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from horus.core.context import EnricherContext, SourceContext
+from horus.core.model import CVE
 from horus.pipeline import (
     PipelineOptions,
+    _build_events,
     _select,
     discover_enrichers,
     discover_sources,
@@ -96,3 +100,31 @@ def test_plugins_accept_only_one_positional_argument():
             if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
         ]
         assert len(params) == 1, f"enricher '{name}' has unexpected enrich() signature: {sig}"
+
+
+def test_build_events_includes_kev_overdue_and_due_soon():
+    """KEV due-date events are extracted when kev_due_date is set."""
+    now = datetime.now(timezone.utc)
+    yesterday = (now - __import__("datetime").timedelta(days=1)).strftime("%Y-%m-%d")
+    future_15 = (now + __import__("datetime").timedelta(days=15)).strftime("%Y-%m-%d")
+
+    cves = [
+        CVE(
+            id="CVE-2026-0001", description="overdue", cvss_score=9.0, kev=1, kev_due_date=yesterday
+        ),
+        CVE(
+            id="CVE-2026-0002",
+            description="due soon",
+            cvss_score=7.5,
+            kev=1,
+            kev_due_date=future_15,
+        ),
+    ]
+    pocs = []
+    ctx = EnricherContext(cves=cves, pocs=pocs)
+
+    events = _build_events(cves, pocs, ctx)
+    assert len(events["kev_overdue"]) == 1
+    assert events["kev_overdue"][0]["cve_id"] == "CVE-2026-0001"
+    assert len(events["kev_due_soon"]) == 1
+    assert events["kev_due_soon"][0]["cve_id"] == "CVE-2026-0002"

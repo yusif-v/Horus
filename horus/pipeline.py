@@ -19,6 +19,7 @@ import pkgutil
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -110,6 +111,8 @@ class PipelineResult:
     events: dict[str, list[dict[str, Any]]] = field(
         default_factory=lambda: {
             "kev_new": [],
+            "kev_overdue": [],
+            "kev_due_soon": [],
             "epss_jump": [],
             "critical_cve": [],
             "watchlist_match": [],
@@ -348,8 +351,20 @@ def run_pipeline(
             posted = db.persist_social_posts(conn, all_social_signals, known_cve_ids=db_cve_ids)
             if posted:
                 log(f"  persisted {posted} social posts")
-        for name in source_results:
+        for name, result in source_results.items():
             db.mark_run(conn, name)
+            status = "error" if "error" in result else "ok"
+            db.upsert_source_health(
+                conn,
+                name,
+                status=status,
+                error=result.get("error"),
+                cve_count=result.get("cves", 0),
+                poc_count=result.get("pocs", 0),
+            )
+        # Discovered-but-disabled sources show as intentionally skipped, not broken.
+        for name in set(sources) - set(selected_sources):
+            db.upsert_source_health(conn, name, status="skipped")
 
     # 5 — render
     report_text = render_report(cves, pocs, links, fmt=opts.output_fmt)
@@ -409,6 +424,8 @@ def _build_events(
     """
     events: dict[str, list[dict[str, Any]]] = {
         "kev_new": [],
+        "kev_overdue": [],
+        "kev_due_soon": [],
         "epss_jump": [],
         "critical_cve": [],
         "watchlist_match": [],
@@ -425,6 +442,27 @@ def _build_events(
                     "cvss_severity": cve.cvss_severity,
                 }
             )
+
+        # KEV overdue/due-soon (based on kev_due_date)
+        if cve.kev and cve.kev_due_date:
+            try:
+                due = datetime.strptime(cve.kev_due_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                now = datetime.now(timezone.utc)
+                days_diff = (due - now).days
+
+                event_item = {
+                    "cve_id": cve.id,
+                    "cvss_score": cve.cvss_score,
+                    "cvss_severity": cve.cvss_severity,
+                    "due_date": cve.kev_due_date,
+                }
+
+                if days_diff < 0:
+                    events["kev_overdue"].append(event_item)
+                elif 0 <= days_diff <= 30:
+                    events["kev_due_soon"].append(event_item)
+            except (ValueError, TypeError):
+                pass  # bad date format, skip
 
         # Critical CVE with PoC
         if cve.cvss_score is not None and cve.cvss_score >= 9:

@@ -299,6 +299,19 @@ def users_edit(user_id: int):
     )
 
 
+@bp.route("/sources")
+@role_required("admin")
+def sources_health():
+    with _storage.connect() as conn:
+        sources = _storage.get_source_health(conn)
+    return page(
+        "admin_sources.html",
+        title="Source Health",
+        active="admin",
+        sources=sources,
+    )
+
+
 @bp.route("/audit")
 @role_required("admin")
 def audit_log():

@@ -132,6 +132,11 @@ def load_config(path: str | None) -> Config:
         cfg.web.port = int(w.get("port", cfg.web.port))
         cfg.web.workers = int(w.get("workers", cfg.web.workers))
         cfg.web.allow_dev_fallback = bool(w.get("allow_dev_fallback", cfg.web.allow_dev_fallback))
+    # Env-var overrides (useful in Docker where yaml bakes 127.0.0.1 but compose sets 0.0.0.0)
+    if os.environ.get("HORUS_WEB_HOST"):
+        cfg.web.host = os.environ["HORUS_WEB_HOST"]
+    if os.environ.get("HORUS_WEB_PORT"):
+        cfg.web.port = int(os.environ["HORUS_WEB_PORT"])
     if "telegram" in data and isinstance(data["telegram"], dict):
         t = data["telegram"]
         cfg.telegram.enabled = bool(t.get("enabled", cfg.telegram.enabled))

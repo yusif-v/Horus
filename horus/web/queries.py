@@ -193,7 +193,7 @@ def get_stats(year: int | None = None, window: str | None = None, recent_limit: 
 
         recent_cves = _rows_to_dicts(
             conn.execute(
-                f"SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at"
+                f"SELECT id, cvss_score, cvss_severity, description, epss_score, kev, published_at, trust_score, threatfox_ioc_count, stealer_hits"
                 f" FROM cve {_extra()}"
                 f" ORDER BY published_at DESC LIMIT ?",
                 [*year_param, recent_limit],
@@ -270,6 +270,16 @@ def get_stats(year: int | None = None, window: str | None = None, recent_limit: 
             ).fetchall()
         )
 
+        high_trust_count = _cve_count("trust_score >= 50")
+        threatfox_hits = conn.execute(
+            f"SELECT COUNT(*) FROM cve {_extra('threatfox_ioc_count > 0')}",
+            year_param,
+        ).fetchone()[0]
+        stealer_compromised_count = conn.execute(
+            f"SELECT COUNT(*) FROM cve {_extra('stealer_hits > 0')}",
+            year_param,
+        ).fetchone()[0]
+
     return {
         "cve_count": cve_count,
         "poc_count": poc_count,
@@ -297,6 +307,9 @@ def get_stats(year: int | None = None, window: str | None = None, recent_limit: 
         "imminence_buckets": imminence_buckets,
         "actionable": actionable,
         "latest_update": latest_update,
+        "high_trust_count": high_trust_count,
+        "threatfox_hits": threatfox_hits,
+        "stealer_compromised_count": stealer_compromised_count,
     }
 
 

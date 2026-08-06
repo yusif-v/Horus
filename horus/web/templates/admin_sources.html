@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">Administration · source health</div>
+<h1 class="page-title">Source health <em>· {{ sources|length }}</em></h1>
+<p class="page-subtitle">Read-only status of each ingestion source's most recent run.</p>
+
+<div class="filter-bar">
+  <a href="{{ url_for('admin.users_list') }}" class="btn btn-sm">Users</a>
+</div>
+
+<div class="panel">
+  <div class="panel-body flush">
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Status</th>
+          <th>Last run</th>
+          <th>CVEs</th>
+          <th>PoCs</th>
+          <th>Consecutive failures</th>
+          <th>Last error</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for s in sources %}
+        <tr>
+          <td><strong>{{ s.source_name }}</strong></td>
+          <td>{{ s.last_status }}</td>
+          <td>{{ s.last_run_at[:16].replace('T', ' ') if s.last_run_at else "—" }}</td>
+          <td>{{ s.cve_count }}</td>
+          <td>{{ s.poc_count }}</td>
+          <td>{{ s.consecutive_failures }}</td>
+          <td>{{ s.last_error or "" }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7">No source runs recorded yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

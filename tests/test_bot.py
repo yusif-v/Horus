@@ -389,8 +389,256 @@ def test_handle_unlink():
 
         with _db.connect() as conn:
             row = conn.execute(
-                "SELECT telegram_chat_id FROM user WHERE username = 'uunlink'"
+                "SELECT telegram_chat_id FROM user WHERE username = ?",
+                ("uunlink",),
             ).fetchone()
             assert row[0] is None
+    finally:
+        _cleanup()
+
+
+def test_handle_status():
+    _seed, _cleanup = _fresh_db("status")
+    try:
+        _, token = _seed()
+        from horus.bot.telegram import _process_update
+
+        api = MagicMock()
+        _process_update(api, _make_update(f"/start {token}"))
+        api.reset_mock()
+
+        _process_update(api, _make_update("/status"))
+        api.send_message.assert_called_once()
+        msg = api.send_message.call_args[0][1]
+        assert "Notification Preferences" in msg
+    finally:
+        _cleanup()
+
+
+def test_handle_cve_no_results():
+    _seed, _cleanup = _fresh_db("cve_none")
+    try:
+        _, token = _seed()
+        from horus.bot.telegram import _process_update
+
+        api = MagicMock()
+        _process_update(api, _make_update(f"/start {token}"))
+        api.reset_mock()
+
+        _process_update(api, _make_update("/cve nonexistent"))
+        api.send_message.assert_called_once()
+        msg = api.send_message.call_args[0][1]
+        assert "No CVEs match" in msg
+    finally:
+        _cleanup()
+
+
+def test_handle_poc_no_results():
+    _seed, _cleanup = _fresh_db("poc_none")
+    try:
+        _, token = _seed()
+        from horus.bot.telegram import _process_update
+
+        api = MagicMock()
+        _process_update(api, _make_update(f"/start {token}"))
+        api.reset_mock()
+
+        _process_update(api, _make_update("/poc nonexistent"))
+        api.send_message.assert_called_once()
+        msg = api.send_message.call_args[0][1]
+        assert "No PoCs match" in msg
+    finally:
+        _cleanup()
+
+
+def test_handle_poc_with_results():
+    _seed, _cleanup = _fresh_db("poc_hit")
+    try:
+        _, token = _seed()
+        from horus.bot.telegram import _process_update
+
+        api = MagicMock()
+        _process_update(api, _make_update(f"/start {token}"))
+        api.reset_mock()
+
+        with _db.connect() as conn:
+            conn.execute(
+                "INSERT INTO poc (url, source, stars, description, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "https://github.com/poc/repo",
+                    "github",
+                    100,
+                    "Test PoC",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                ),
+            )
+
+        _process_update(api, _make_update("/poc github"))
+        api.send_message.assert_called_once()
+        msg = api.send_message.call_args[0][1]
+        assert "PoC search" in msg
+        assert "github" in msg
+    finally:
+        _cleanup()
+
+
+def test_handle_kev_no_results():
+    _seed, _cleanup = _fresh_db("kev_none")
+    try:
+        _, token = _seed()
+        from horus.bot.telegram import _process_update
+
+        api = MagicMock()
+        _process_update(api, _make_update(f"/start {token}"))
+        api.reset_mock()
+
+        _process_update(api, _make_update("/kev"))
+        api.send_message.assert_called_once()
+        msg = api.send_message.call_args[0][1]
+        assert "No KEV-tagged CVEs" in msg
+    finally:
+        _cleanup()
+
+
+def test_handle_kev_with_results():
+    _seed, _cleanup = _fresh_db("kev_hit")
+    try:
+        _, token = _seed()
+        from horus.bot.telegram import _process_update
+
+        api = MagicMock()
+        _process_update(api, _make_update(f"/start {token}"))
+        api.reset_mock()
+
+        with _db.connect() as conn:
+            conn.execute(
+                "INSERT INTO cve (id, description, cvss_score, cvss_severity, first_seen, last_seen, kev) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "CVE-2026-5678",
+                    "Test RCE",
+                    9.8,
+                    "CRITICAL",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    1,
+                ),
+            )
+
+        _process_update(api, _make_update("/kev"))
+        api.send_message.assert_called_once()
+        msg = api.send_message.call_args[0][1]
+        assert "Known Exploited" in msg
+        assert "CVE-2026-5678" in msg
+    finally:
+        _cleanup()
+
+
+def test_handle_top_no_results():
+    _seed, _cleanup = _fresh_db("top_none")
+    try:
+        _, token = _seed()
+        from horus.bot.telegram import _process_update
+
+        api = MagicMock()
+        _process_update(api, _make_update(f"/start {token}"))
+        api.reset_mock()
+
+        _process_update(api, _make_update("/top"))
+        api.send_message.assert_called_once()
+        msg = api.send_message.call_args[0][1]
+        assert "No EPSS data" in msg
+    finally:
+        _cleanup()
+
+
+def test_handle_cve_usage_error():
+    """/cve without argument shows usage."""
+    _seed, _cleanup = _fresh_db("cve_usage")
+    try:
+        _, token = _seed()
+        from horus.bot.telegram import _process_update
+
+        api = MagicMock()
+        _process_update(api, _make_update(f"/start {token}"))
+        api.reset_mock()
+
+        _process_update(api, _make_update("/cve"))
+        api.send_message.assert_called_once()
+        msg = api.send_message.call_args[0][1]
+        assert "Usage:" in msg
+    finally:
+        _cleanup()
+
+
+def test_handle_cve_with_results():
+    """/cve with matching CVE returns results."""
+    _seed, _cleanup = _fresh_db("cve_hit")
+    try:
+        _, token = _seed()
+        from horus.bot.telegram import _process_update
+
+        api = MagicMock()
+        _process_update(api, _make_update(f"/start {token}"))
+        api.reset_mock()
+
+        with _db.connect() as conn:
+            conn.execute(
+                "INSERT INTO cve (id, description, cvss_score, cvss_severity, first_seen, last_seen, epss_score, kev) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "CVE-2026-9999",
+                    "Test vulnerability",
+                    8.5,
+                    "HIGH",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    0.75,
+                    1,
+                ),
+            )
+
+        _process_update(api, _make_update("/cve CVE-2026-9999"))
+        api.send_message.assert_called_once()
+        msg = api.send_message.call_args[0][1]
+        assert "CVE-2026-9999" in msg
+        assert "Test vulnerability" in msg
+    finally:
+        _cleanup()
+
+
+def test_handle_top_with_results():
+    """/top with EPSS data returns results."""
+    _seed, _cleanup = _fresh_db("top_hit")
+    try:
+        _, token = _seed()
+        from horus.bot.telegram import _process_update
+
+        api = MagicMock()
+        _process_update(api, _make_update(f"/start {token}"))
+        api.reset_mock()
+
+        with _db.connect() as conn:
+            conn.execute(
+                "INSERT INTO cve (id, description, cvss_score, cvss_severity, first_seen, last_seen, epss_score, kev) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "CVE-2026-1111",
+                    "High EPSS vuln",
+                    9.0,
+                    "CRITICAL",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    0.95,
+                    1,
+                ),
+            )
+
+        _process_update(api, _make_update("/top"))
+        api.send_message.assert_called_once()
+        msg = api.send_message.call_args[0][1]
+        assert "Top by EPSS" in msg
+        assert "CVE-2026-1111" in msg
     finally:
         _cleanup()

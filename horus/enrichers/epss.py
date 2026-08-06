@@ -12,9 +12,14 @@ from __future__ import annotations
 import gzip
 import hashlib
 import logging
+import sqlite3
 import urllib.request
+from typing import TYPE_CHECKING
 
 from ..storage.db import append_epss_history
+
+if TYPE_CHECKING:
+    from ..core.context import EnricherContext
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +95,7 @@ def _download_epss_scores() -> dict[str, float]:
     return scores
 
 
-def enrich(ctx) -> None:
+def enrich(ctx: EnricherContext) -> None:
     """Enrich CVEs with EPSS scores. Mutates CVEs in-place.
 
     After scoring the current batch, backfills ALL unscored CVEs
@@ -121,7 +126,7 @@ def enrich(ctx) -> None:
         logger.warning("EPSS backfill skipped: %s", e)
 
 
-def _backfill_db(conn, scores: dict[str, float]) -> int:
+def _backfill_db(conn: sqlite3.Connection, scores: dict[str, float]) -> int:
     """Backfill EPSS scores + append history for all known CVEs."""
     all_cves = conn.execute("SELECT id, epss_score FROM cve").fetchall()
     updated = 0
@@ -139,7 +144,7 @@ def _backfill_db(conn, scores: dict[str, float]) -> int:
     return updated
 
 
-def backfill_all(conn) -> int:
+def backfill_all(conn: sqlite3.Connection) -> int:
     """One-time backfill: score ALL unscored CVEs in the DB.
 
     This is the entry point for the --backfill-epss CLI flag.

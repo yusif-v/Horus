@@ -158,6 +158,45 @@ def test_format_unknown_kind_returns_none():
     assert format_event_message("unknown_kind", {}, "alice") is None
 
 
+def test_format_kev_overdue():
+    """KEV overdue formatter includes deadline info."""
+    from horus.notifications.format import format_event_message
+
+    msg = format_event_message(
+        "kev_overdue",
+        {
+            "cve_id": "CVE-2026-1234",
+            "cvss_score": 9.8,
+            "cvss_severity": "CRITICAL",
+            "due_date": "2024-06-01",
+        },
+        "alice",
+    )
+    assert "KEV OVERDUE" in msg
+    assert "2024-06-01 (passed)" in msg
+    assert "CVE-2026-1234" in msg
+
+
+def test_format_kev_due_soon():
+    """KEV due soon formatter includes deadline without (passed)."""
+    from horus.notifications.format import format_event_message
+
+    msg = format_event_message(
+        "kev_due_soon",
+        {
+            "cve_id": "CVE-2026-5678",
+            "cvss_score": 7.5,
+            "cvss_severity": "HIGH",
+            "due_date": "2026-07-15",
+        },
+        "alice",
+    )
+    assert "KEV DUE SOON" in msg
+    assert "2026-07-15" in msg
+    assert "(passed)" not in msg
+    assert "CVE-2026-5678" in msg
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 2. dispatch — per-user routing
 # ═══════════════════════════════════════════════════════════════════════════════
