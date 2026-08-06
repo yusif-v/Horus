@@ -663,7 +663,7 @@ def _render_html(data: WeeklyData) -> str:
     mitre_html = _build_mitre_section(data, charts)
     network_ioc_html = _build_network_ioc_section(data)
     host_ioc_html = _build_host_ioc_section(data)
-    news_html = _build_news_section(data.news_highlights[:10]) if data.news_highlights else ""
+    news_html = _build_news_section(data.news_highlights[:10])
     vendor_html = _build_vendor_section(data, charts)
     correlation_html = _build_correlation_section(data)
     recommendations_html = _build_recommendations_section(data)
@@ -901,28 +901,22 @@ def _build_cover(data: WeeklyData) -> str:
 
 
 def _build_toc(data: WeeklyData) -> str:
-    """Build table of contents."""
+    """Build table of contents — all sections always present."""
     items = [
         ("1.", "executive-summary", "Executive Summary"),
         ("2.", "landscape", "Threat Landscape Overview"),
         ("3.", "cve-analysis", "Critical & High CVE Analysis"),
+        ("4.", "kev-section", "CISA Known Exploited Vulnerabilities"),
+        ("5.", "epss-section", "EPSS Exploitability Trends"),
+        ("6.", "mitre-section", "MITRE ATT&CK Technique Mapping"),
+        ("7.", "network-iocs", "Network-based Indicators (IOCs)"),
+        ("8.", "host-iocs", "Host-based Indicators (IOCs)"),
+        ("9.", "news-section", "Vulnerability News & Intelligence"),
+        ("10.", "vendor-section", "Affected Vendors & Products"),
+        ("11.", "correlation-section", "CVE Correlation Analysis"),
+        ("12.", "recommendations", "Recommendations"),
+        ("13.", "appendix", "Appendix"),
     ]
-    if data.kev_entries:
-        items.append(("4.", "kev-section", "CISA Known Exploited Vulnerabilities"))
-    if data.epss_movers:
-        items.append(("5.", "epss-section", "EPSS Exploitability Trends"))
-    if data.top_tags:
-        items.append(("6.", "mitre-section", "MITRE ATT&CK Technique Mapping"))
-    if data.network_iocs or data.ioc_summary.get("network_count", 0) > 0:
-        items.append(("7.", "network-iocs", "Network-based Indicators (IOCs)"))
-    if data.host_iocs:
-        items.append(("8.", "host-iocs", "Host-based Indicators (IOCs)"))
-    if data.news_highlights:
-        items.append(("9.", "news-section", "Vulnerability News & Intelligence"))
-    if data.top_vendors:
-        items.append(("10.", "vendor-section", "Affected Vendors & Products"))
-    items.append(("11.", "recommendations", "Recommendations"))
-    items.append(("12.", "appendix", "Appendix"))
 
     items_html = "".join(
         f'<div class="toc-item"><span class="toc-num">{num}</span><a href="#{anchor}">{label}</a></div>'
@@ -1297,9 +1291,6 @@ def _build_mitre_section(data: WeeklyData, charts: dict[str, str]) -> str:
 
 def _build_network_ioc_section(data: WeeklyData) -> str:
     """Build network-based IOCs section."""
-    if not data.network_iocs and data.ioc_summary.get("network_count", 0) == 0:
-        return ""
-
     rows = ""
     for ioc in data.network_iocs[:25]:
         cves = ", ".join(ioc.get("cves", [])[:5]) or "—"
@@ -1311,11 +1302,14 @@ def _build_network_ioc_section(data: WeeklyData) -> str:
             <td>{cves}</td>
         </tr>"""
 
+    if not rows:
+        rows = '<tr><td colspan="4" class="empty-cell">No network indicators identified in this reporting period.</td></tr>'
+
     return f"""<!-- ═══════════ NETWORK IOCs ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="network-iocs">
     <h2>7. Network-based Indicators (IOCs)</h2>
-    <p>Network indicators extracted from threat intelligence sources this period. These IPs, domains, and URLs are associated with known threat activity.</p>
+    <p>Network indicators extracted from threat intelligence sources this period. These IPs, domains, and URLs are associated with known threat activity. Private IP ranges and common CDNs are excluded.</p>
     <table class="data-table ioc-table">
         <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>Linked CVEs</th></tr></thead>
         <tbody>{rows}</tbody>
@@ -1325,9 +1319,6 @@ def _build_network_ioc_section(data: WeeklyData) -> str:
 
 def _build_host_ioc_section(data: WeeklyData) -> str:
     """Build host-based IOCs section."""
-    if not data.host_iocs:
-        return ""
-
     rows = ""
     for ioc in data.host_iocs[:25]:
         cves = ", ".join(ioc.get("cves", [])[:5]) or "—"
@@ -1341,6 +1332,9 @@ def _build_host_ioc_section(data: WeeklyData) -> str:
             <td>{sources}</td>
             <td>{cves}</td>
         </tr>"""
+
+    if not rows:
+        rows = '<tr><td colspan="4" class="empty-cell">No host indicators identified in this reporting period.</td></tr>'
 
     return f"""<!-- ═══════════ HOST IOCs ═══════════ -->
 <div class="section-divider"></div>
@@ -1358,6 +1352,8 @@ def _build_news_section(articles: list[dict]) -> str:
     """Build news & intelligence section."""
     tier_colors = {1: "#dc3545", 2: "#fd7e14", 3: "#ffc107", 4: "#28a745", 5: "#6c757d"}
     html = '<div class="section-divider"></div><div class="section" id="news-section"><h2>9. Vulnerability News &amp; Intelligence</h2><div class="news-list">'
+    if not articles:
+        html += '<p class="empty-cell">No news articles linked in this reporting period.</p>'
     for article in articles:
         tc = tier_colors.get(article["tier"], "#6c757d")
         html += f'''<div class="news-item">
@@ -1372,9 +1368,6 @@ def _build_news_section(articles: list[dict]) -> str:
 
 def _build_vendor_section(data: WeeklyData, charts: dict[str, str]) -> str:
     """Build vendors section."""
-    if not data.top_vendors:
-        return ""
-
     rows = ""
     for v in data.top_vendors[:15]:
         kev_str = (
@@ -1386,6 +1379,8 @@ def _build_vendor_section(data: WeeklyData, charts: dict[str, str]) -> str:
             <td>{v["avg_cvss"]}</td>
             <td>{kev_str}</td>
         </tr>"""
+    if not rows:
+        rows = '<tr><td colspan="4" class="empty-cell">No vendor data available for this reporting period.</td></tr>'
 
     return f"""<!-- ═══════════ VENDORS ═══════════ -->
 <div class="section-divider"></div>
@@ -1442,7 +1437,7 @@ def _build_correlation_section(data: WeeklyData) -> str:
     if not clusters:
         return ""
 
-    html = '<div class="section-divider"></div><div class="section" id="correlation-section"><h2>CVE Correlation Analysis</h2><p>CVEs grouped by shared characteristics (ATT&CK techniques, severity, or common PoC sources) that may indicate coordinated campaigns.</p>'
+    html = '<div class="section-divider"></div><div class="section" id="correlation-section"><h2>11. CVE Correlation Analysis</h2><p>CVEs grouped by shared characteristics (ATT&CK techniques, severity, or common PoC sources) that may indicate coordinated campaigns.</p>'
     for cluster in clusters[:5]:
         cve_list = ", ".join(cluster["cves"][:10])
         html += f"""<div class="news-item">
@@ -1492,7 +1487,7 @@ def _build_recommendations_section(data: WeeklyData) -> str:
     return f"""<!-- ═══════════ RECOMMENDATIONS ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="recommendations">
-    <h2>11. Recommendations</h2>
+    <h2>12. Recommendations</h2>
     <ul class="rec-list">
         {recs_html}
     </ul>
@@ -1504,7 +1499,7 @@ def _build_appendix(data: WeeklyData) -> str:
     return """<!-- ═══════════ APPENDIX ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="appendix">
-    <h2>12. Appendix</h2>
+    <h2>13. Appendix</h2>
     <h3>Methodology</h3>
     <p class="appendix">Horus aggregates vulnerability data from NVD, CISA KEV, Exploit-DB, GitHub, and ThreatFox. Reputation scores (0-10) are calculated using: CVSS (35%), EPSS (25%), KEV status, social mentions, PoC availability, and vendor ubiquity. IOCs are extracted from news articles and security resources using regex pattern matching, with private IP ranges and common CDNs excluded.</p>
     <h3>Data Sources</h3>
