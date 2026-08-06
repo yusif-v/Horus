@@ -7,8 +7,10 @@ route or test. Returns plain dicts / lists of dicts.
 from __future__ import annotations
 
 import re
+from datetime import date, timedelta
 from typing import Any
 
+from ..core.forecast import epss_velocity
 from ..storage import db as _storage
 
 # Re-export for tests that monkey-patch DB_PATH on the web module.
@@ -612,3 +614,119 @@ def get_news(
             [*params, per_page, offset],
         ).fetchall()
         return _rows_to_dicts(rows), total
+
+
+_EPSS_TREND_THRESHOLD = 0.005
+
+
+def _classify_trend(velocity: float) -> str:
+    if velocity > _EPSS_TREND_THRESHOLD:
+        return "rising"
+    if velocity < -_EPSS_TREND_THRESHOLD:
+        return "falling"
+    return "stable"
+
+
+# ── EPSS trends ─────────────────────────────────────────────────────────────
+
+
+def epss_trend(cve_id: str) -> dict:
+    """Get EPSS history + computed trend for a CVE."""
+    since = (date.today() - timedelta(days=30)).isoformat()
+    with db_connect() as conn:
+        rows = conn.execute(
+            "SELECT score, recorded_at FROM epss_history"
+            " WHERE cve_id = ? AND recorded_at >= ?"
+            " ORDER BY recorded_at ASC",
+            (cve_id, since),
+        ).fetchall()
+        history = [{"score": r[0], "recorded_at": r[1]} for r in rows]
+        velocity = epss_velocity(cve_id, conn)
+        trend = _classify_trend(velocity)
+        days_above = sum(1 for r in rows if r[0] >= 0.50)
+        current = rows[-1][0] if rows else None
+    return {
+        "cve_id": cve_id,
+        "current_score": current,
+        "velocity": velocity,
+        "trend": trend,
+        "days_above_50pct": days_above,
+        "history": history,
+    }
+
+
+def epss_movers(days: int = 7, limit: int = 20) -> list[dict]:
+    """Top EPSS velocity changes in last N days."""
+    since = (date.today() - timedelta(days=days)).isoformat()
+    with db_connect() as conn:
+        cve_ids = [
+            r[0]
+            for r in conn.execute(
+                "SELECT DISTINCT cve_id FROM epss_history WHERE recorded_at >= ?",
+                (since,),
+            ).fetchall()
+        ]
+        results = []
+        for cid in cve_ids:
+            rows = conn.execute(
+                "SELECT score, recorded_at FROM epss_history"
+                " WHERE cve_id = ? AND recorded_at >= ?"
+                " ORDER BY recorded_at DESC LIMIT 2",
+                (cid, since),
+            ).fetchall()
+            if len(rows) < 2:
+                continue
+            (s_new, d_new), (s_old, d_old) = rows[0], rows[1]
+            try:
+                day_diff = (date.fromisoformat(d_new) - date.fromisoformat(d_old)).days
+            except ValueError:
+                continue
+            if day_diff <= 0:
+                continue
+            velocity = float((float(s_new) - float(s_old)) / day_diff)
+            current_score = rows[0][0]
+            previous_score = rows[1][0]
+            cve = conn.execute("SELECT cvss_score, kev FROM cve WHERE id = ?", (cid,)).fetchone()
+            results.append(
+                {
+                    "cve_id": cid,
+                    "current_score": current_score,
+                    "previous_score": previous_score,
+                    "velocity": velocity,
+                    "trend": _classify_trend(velocity),
+                    "cvss_score": cve[0] if cve else None,
+                    "kev": cve[1] if cve else 0,
+                }
+            )
+    results.sort(key=lambda x: abs(x["velocity"]), reverse=True)
+    return results[:limit]
+
+
+def epss_threshold_alerts(days: int = 7) -> list[dict]:
+    """CVEs that crossed 50% EPSS in last N days."""
+    since = (date.today() - timedelta(days=days)).isoformat()
+    with db_connect() as conn:
+        cve_ids = [
+            r[0]
+            for r in conn.execute(
+                "SELECT DISTINCT cve_id FROM epss_history WHERE recorded_at >= ?",
+                (since,),
+            ).fetchall()
+        ]
+        results = []
+        for cid in cve_ids:
+            rows = conn.execute(
+                "SELECT score, recorded_at FROM epss_history"
+                " WHERE cve_id = ? AND recorded_at >= ?"
+                " ORDER BY recorded_at ASC",
+                (cid, since),
+            ).fetchall()
+            if len(rows) < 2:
+                continue
+            first_score, _first_date = rows[0]
+            last_score, last_date = rows[-1]
+            if first_score < 0.50 and last_score >= 0.50:
+                results.append({"cve_id": cid, "crossed_at": last_date, "direction": "above"})
+            elif first_score >= 0.50 and last_score < 0.50:
+                results.append({"cve_id": cid, "crossed_at": last_date, "direction": "below"})
+    return results
