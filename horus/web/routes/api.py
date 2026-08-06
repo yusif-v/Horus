@@ -83,3 +83,40 @@ def cve(cve_id):
     if not data:
         return jsonify({"error": "not found"}), 404
     return jsonify(data)
+
+
+@bp.route("/cve/<cve_id>/sources")
+@role_required(*READ_ALL)
+def cve_sources(cve_id):
+    """Return linked intelligence sources for a CVE."""
+    try:
+        limit = min(int(request.args.get("limit", 10)), 50)
+        offset = int(request.args.get("offset", 0))
+        with _storage.connect() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM news_article_cve WHERE cve_id = ?",
+                (cve_id.upper(),),
+            ).fetchone()[0]
+            rows = conn.execute(
+                """
+                SELECT na.id, na.title, na.url, na.source, na.tier,
+                       na.published_at, nac.snippet, nac.context
+                FROM news_article_cve nac
+                JOIN news_article na ON na.id = nac.article_id
+                WHERE nac.cve_id = ?
+                ORDER BY na.published_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (cve_id.upper(), limit, offset),
+            ).fetchall()
+        return jsonify(
+            {
+                "cve_id": cve_id.upper(),
+                "sources": [dict(r) for r in rows],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
