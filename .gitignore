@@ -72,5 +72,10 @@ horus.yaml
 .pre-commit-config.yaml
 ARCHITECTURE.md
 
+# Internal dev tooling (not for public repo)
+/superpowers/
+/plans/
+/99 Meta/
+
 # Local secrets (never commit)
 .env
