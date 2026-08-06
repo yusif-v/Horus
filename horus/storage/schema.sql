@@ -314,6 +314,20 @@ CREATE INDEX IF NOT EXISTS idx_news_article_tier ON news_article(tier);
 CREATE INDEX IF NOT EXISTS idx_news_article_published ON news_article(published_at);
 CREATE INDEX IF NOT EXISTS idx_news_article_first_seen ON news_article(first_seen);
 
+-- ─── CVE-News linking (v0.14) ──────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS news_article_cve (
+    article_id  INTEGER NOT NULL REFERENCES news_article(id) ON DELETE CASCADE,
+    cve_id      TEXT NOT NULL REFERENCES cve(id) ON DELETE CASCADE,
+    snippet     TEXT,
+    context     TEXT,
+    linked_at   TEXT NOT NULL,
+    PRIMARY KEY (article_id, cve_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_news_article_cve_cve ON news_article_cve(cve_id);
+CREATE INDEX IF NOT EXISTS idx_news_article_cve_linked ON news_article_cve(linked_at);
+
 -- ─── EPSS history (one row per CVE per day) ──────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS epss_history (
