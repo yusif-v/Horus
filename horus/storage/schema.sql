@@ -355,3 +355,30 @@ CREATE TABLE IF NOT EXISTS cve_threatfox_ioc (
 
 CREATE INDEX IF NOT EXISTS idx_cve_threatfox_cve ON cve_threatfox_ioc(cve_id);
 CREATE INDEX IF NOT EXISTS idx_cve_threatfox_type ON cve_threatfox_ioc(ioc_type);
+
+-- ─── CVE correlations (v0.14) ───────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS cve_correlation (
+    cve_id      TEXT NOT NULL REFERENCES cve(id) ON DELETE CASCADE,
+    related_id  TEXT NOT NULL REFERENCES cve(id) ON DELETE CASCADE,
+    score       REAL NOT NULL,
+    reasons     TEXT NOT NULL,
+    computed_at TEXT NOT NULL,
+    PRIMARY KEY (cve_id, related_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cve_correlation_cve ON cve_correlation(cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_correlation_score ON cve_correlation(score DESC);
+
+CREATE TABLE IF NOT EXISTS cve_cluster (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    label        TEXT NOT NULL,
+    centroid_cve TEXT,
+    cve_count    INTEGER NOT NULL,
+    created_at   TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cve_cluster_member (
+    cluster_id       INTEGER NOT NULL REFERENCES cve_cluster(id) ON DELETE CASCADE,
+    cve_id           TEXT NOT NULL REFERENCES cve(id) ON DELETE CASCADE,
+    membership_score REAL NOT NULL,
+    PRIMARY KEY (cluster_id, cve_id)
+);
