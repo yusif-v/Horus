@@ -30,6 +30,18 @@ from horus.storage import db as _db  # noqa: E402
 
 _db.DB_PATH = _TMP_STATE / "horus.db"
 
+
+# Importing horus.web builds a module-level Flask app (for gunicorn), which
+# calls _load_dotenv() and leaks the repo's real .env values (e.g.
+# HORUS_WEB_PORT) into os.environ for the rest of the test session — making
+# server.load_config() see them as an intentional Docker-style env override.
+# Snapshot and strip anything the import adds so tests stay isolated from
+# the developer's local .env.
+_env_before = set(os.environ)
+
 from horus.web import queries as _q  # noqa: E402
 
 _q.DB_PATH = _TMP_STATE / "horus.db"
+
+for _leaked_key in set(os.environ) - _env_before:
+    os.environ.pop(_leaked_key, None)
