@@ -6,11 +6,14 @@ from flask import Blueprint, jsonify, request
 
 from ...storage import db as _storage
 from ..queries import (
+    cluster_members,
+    correlation_clusters,
     epss_movers,
     epss_threshold_alerts,
     epss_trend,
     get_cve_detail,
     get_stats,
+    related_cves,
     search_cves,
 )
 from .auth import READ_ALL, role_required
@@ -152,5 +155,43 @@ def epss_trends():
                 "threshold_alerts": epss_threshold_alerts(days=days),
             }
         )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/cve/<cve_id>/correlations")
+@role_required(*READ_ALL)
+def cve_correlations(cve_id):
+    """Return correlated CVEs for a specific CVE."""
+    try:
+        limit = min(int(request.args.get("limit", 10)), 50)
+        return jsonify(
+            {
+                "cve_id": cve_id.upper(),
+                "correlations": related_cves(cve_id, limit=limit),
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/clusters")
+@role_required(*READ_ALL)
+def clusters():
+    """Return all correlation clusters."""
+    try:
+        limit = min(int(request.args.get("limit", 50)), 100)
+        return jsonify({"clusters": correlation_clusters(limit=limit)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/clusters/<int:cluster_id>")
+@role_required(*READ_ALL)
+def cluster_detail(cluster_id):
+    """Return members of a specific correlation cluster."""
+    try:
+        members = cluster_members(cluster_id)
+        return jsonify({"cluster_id": cluster_id, "members": members})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -730,3 +730,57 @@ def epss_threshold_alerts(days: int = 7) -> list[dict]:
             elif first_score >= 0.50 and last_score < 0.50:
                 results.append({"cve_id": cid, "crossed_at": last_date, "direction": "below"})
     return results
+
+
+# ── correlations ─────────────────────────────────────────────────────────
+
+
+def related_cves(cve_id: str, limit: int = 10) -> list[dict]:
+    """Return related CVEs for a given CVE, ordered by correlation score desc."""
+    cve_id = cve_id.upper()
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT c.related_id AS id, c.score, c.reasons,
+                   cv.cvss_score, cv.cvss_severity, cv.description
+            FROM cve_correlation c
+            JOIN cve cv ON cv.id = c.related_id
+            WHERE c.cve_id = ?
+            ORDER BY c.score DESC
+            LIMIT ?
+            """,
+            (cve_id, limit),
+        ).fetchall()
+        return _rows_to_dicts(rows)
+
+
+def correlation_clusters(limit: int = 50) -> list[dict]:
+    """Return all correlation clusters with their metadata."""
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, label, centroid_cve, cve_count, created_at
+            FROM cve_cluster
+            ORDER BY cve_count DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return _rows_to_dicts(rows)
+
+
+def cluster_members(cluster_id: int) -> list[dict]:
+    """Return members of a correlation cluster, ordered by membership score desc."""
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT cm.cve_id AS id, cm.membership_score,
+                   c.cvss_score, c.cvss_severity, c.description
+            FROM cve_cluster_member cm
+            JOIN cve c ON c.id = cm.cve_id
+            WHERE cm.cluster_id = ?
+            ORDER BY cm.membership_score DESC
+            """,
+            (cluster_id,),
+        ).fetchall()
+        return _rows_to_dicts(rows)
