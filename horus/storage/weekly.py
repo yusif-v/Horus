@@ -598,8 +598,11 @@ def _gather_affected_packages(
         FROM cve c
         JOIN cve_product cp ON cp.cve_id = c.id
         JOIN product p ON p.id = cp.product_id
-        WHERE p.category != 'unknown' AND c.first_seen >= ? AND c.first_seen < ?
+        WHERE p.category != 'unknown'
+          AND p.vendor != 'unknown'
+          AND c.first_seen >= ? AND c.first_seen < ?
         GROUP BY p.vendor, p.product
+        HAVING cve_count > 0
         ORDER BY cve_count DESC
         LIMIT 20
         """,
