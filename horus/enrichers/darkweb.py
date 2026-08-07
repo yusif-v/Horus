@@ -1,74 +1,73 @@
-"""Enricher — Dark web threat intelligence via darknet-mcp-server.
+"""Enricher — Dark web threat intelligence via direct HTTP APIs.
 
-Fetches ThreatFox IOCs, Hudson Rock stealer logs, and MalwareBazaar samples
-for CVEs. Uses MCP subprocess invocation when available.
+Fetches ThreatFox IOCs for CVEs using the ThreatFox REST API.
+Hudson Rock and MalwareBazaar enrichments are stubbed for future
+direct-API integration.
 
 Sources:
 - ThreatFox (abuse.ch) — IOC search by IP/domain/hash/URL
-- Hudson Rock Cavalier — stealer log search by domain/email/IP
-- MalwareBazaar — malware sample lookup by hash
-- Hybrid Analysis — malware verdict + MITRE ATT&CK mapping
+- Hudson Rock (stub) — stealer log search by domain/email/IP
+- MalwareBazaar (stub) — malware sample lookup by hash
 
-All are optional enrichments. Missing MCP server or API keys skip gracefully.
+All are optional enrichments. Missing API keys skip gracefully.
 """
 
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
+import logging
 from typing import TYPE_CHECKING, Any
+
+from ..core.threatfox import search_c2, search_ioc
 
 if TYPE_CHECKING:
     from ..core.context import EnricherContext
+
+log = logging.getLogger(__name__)
 
 NAME = "Dark web intel"
 DEFAULT_ENABLED = True
 
 
-def _call_mcp_tool(tool: str, args: dict[str, str | int]) -> dict[str, object] | None:
-    """Invoke darknet-mcp-server tool and return parsed JSON result.
+def _search_threatfox_for_cve(cve_id: str, affected: list[Any]) -> list[dict]:
+    """Search ThreatFox for IOCs related to a CVE.
 
-    Returns None if MCP server not available or tool fails.
-    Tool invocation: npx darknet-mcp-server --tool <name> '<json-args>'
+    Searches by:
+    1. The CVE ID directly (mentions in tags/reference)
+    2. Each affected product's vendor domain
+
+    Returns list of normalised IOC dicts.
     """
-    try:
-        # MCP tools use snake_case; invoke via npx
-        result = subprocess.run(
-            ["npx", "darknet-mcp-server", "--tool", tool, json.dumps(args)],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode != 0:
-            return None
-        if not result.stdout.strip():
-            return None
-        return json.loads(result.stdout)  # type: ignore[no-any-return]
-    except Exception as e:
-        print(f"  [WARN] MCP tool {tool} failed: {e}", file=sys.stderr)
-        return None
+    iocs: list[dict] = []
+    seen_values: set[str] = set()
 
+    # Search by CVE ID
+    for ioc in search_ioc(cve_id):
+        val = ioc.get("ioc_value", "")
+        if val and val not in seen_values:
+            seen_values.add(val)
+            iocs.append(ioc)
 
-def _search_threatfox(cve_id: str) -> int:
-    """Search ThreatFox for IOCs related to a CVE. Returns count of IOCs."""
-    result = _call_mcp_tool("threatfoxSearch", {"searchTerm": cve_id})
-    if result and isinstance(result, list):
-        return len(result)
-    return 0
+    # Search by vendor/product domains
+    for prod in affected:
+        vendor = getattr(prod, "vendor", "") or ""
+        if not vendor:
+            continue
+        domain = f"{vendor.lower()}.com"
+        for ioc in search_c2(domain):
+            val = ioc.get("ioc_value", "")
+            if val and val not in seen_values:
+                seen_values.add(val)
+                iocs.append(ioc)
+
+    return iocs
 
 
 def _check_stealer_for_vendor(vendor: str, product: str) -> int:
     """Check Hudson Rock stealer logs for vendor.product.com domain.
 
-    Returns number of compromised machines found.
+    Stub — Hudson Rock direct API not yet integrated.
+    Returns 0 until direct API is available.
     """
-    # Construct plausible domain for vendor/product
-    domain = f"{vendor.lower()}.{product.lower()}.com"
-    result = _call_mcp_tool("stealer_domain", {"domain": domain})
-    if result and isinstance(result, dict):
-        val = result.get("compromisedMachines", 0)
-        return int(val) if isinstance(val, int | float | str) else 0
     return 0
 
 
@@ -116,8 +115,11 @@ def enrich(ctx: EnricherContext) -> None:
         if not hasattr(cve, "stealer_hits"):
             cve.stealer_hits = 0
 
-        # ThreatFox: search for IOCs mentioning this CVE ID
-        ioc_count = _search_threatfox(cve.id)
+        affected = getattr(cve, "affected", [])
+
+        # ThreatFox: search for IOCs related to this CVE
+        iocs = _search_threatfox_for_cve(cve.id, affected)
+        ioc_count = len(iocs)
         if ioc_count > 0:
             cve.threatfox_ioc_count = ioc_count
             if not hasattr(cve, "trust_threatfox"):
@@ -125,7 +127,7 @@ def enrich(ctx: EnricherContext) -> None:
             cve.trust_threatfox = min(ioc_count * 2, 30)
 
         # Hudson Rock: check each affected product for stealer logs
-        for prod in cve.affected:
+        for prod in affected:
             if prod.vendor and prod.product:
                 hits = _check_stealer_for_vendor(prod.vendor, prod.product)
                 if hits > 0:
@@ -138,8 +140,74 @@ def enrich(ctx: EnricherContext) -> None:
         cve.trust_score = _compute_trust_score(cve)
 
         if cve.threatfox_ioc_count or cve.stealer_hits:
-            print(
-                f"  Dark web: {cve.id} - {cve.threatfox_ioc_count} IOCs, "
-                f"{cve.stealer_hits} stealer hits, trust={cve.trust_score:.0f}",
-                file=sys.stderr,
+            log.info(
+                "Dark web: %s - %d IOCs, %d stealer hits, trust=%.0f",
+                cve.id,
+                cve.threatfox_ioc_count,
+                cve.stealer_hits,
+                cve.trust_score,
             )
+
+
+def persist_threatfox_iocs(
+    conn: Any,
+    cve_id: str,
+    iocs: list[dict[str, Any]],
+) -> int:
+    """Store ThreatFox IOCs in ``cve_threatfox_ioc`` and ``ioc_indicator``.
+
+    Returns the number of new rows inserted.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    inserted = 0
+
+    for ioc in iocs:
+        ioc_value = ioc.get("ioc_value", "")
+        if not ioc_value:
+            continue
+        ioc_type = ioc.get("ioc_type", "unknown")
+        threat_type = ioc.get("threat_type", "")
+        first_seen = ioc.get("first_seen") or now
+        last_seen = ioc.get("last_seen") or now
+
+        # Upsert into cve_threatfox_ioc
+        conn.execute(
+            """INSERT INTO cve_threatfox_ioc
+                   (cve_id, ioc_type, ioc_value, threat_type,
+                    first_seen, last_seen)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(cve_id, ioc_value) DO UPDATE SET
+                   last_seen = excluded.last_seen,
+                   threat_type = excluded.threat_type
+            """,
+            (cve_id, ioc_type, ioc_value, threat_type, first_seen, last_seen),
+        )
+
+        # Also populate ioc_indicator for weekly reports
+        try:
+            conn.execute(
+                """INSERT INTO ioc_indicator
+                       (ioc_type, ioc_value, source, source_ref,
+                        cve_id, first_seen, last_seen)
+                   VALUES (?, ?, 'threatfox', ?, ?, ?, ?)
+                   ON CONFLICT(ioc_type, ioc_value, source) DO UPDATE SET
+                       last_seen = excluded.last_seen,
+                       cve_id = COALESCE(excluded.cve_id, ioc_indicator.cve_id)
+                """,
+                (
+                    ioc_type,
+                    ioc_value,
+                    ioc.get("reference", ""),
+                    cve_id,
+                    first_seen,
+                    last_seen,
+                ),
+            )
+            inserted += 1
+        except Exception:
+            # ioc_indicator may not exist in very old DBs — skip gracefully
+            pass
+
+    return inserted
