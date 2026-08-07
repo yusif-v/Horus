@@ -656,6 +656,7 @@ def _render_html(data: WeeklyData) -> str:
     cover_html = _build_cover(data)
     toc_html = _build_toc(data)
     executive_html = _build_executive_section(data)
+    introduction_html = _build_introduction_section(data)
     landscape_html = _build_landscape_section(data, charts)
     cve_analysis_html = _build_cve_analysis(data)
     kev_html = _build_kev_section(data.kev_entries)
@@ -663,8 +664,8 @@ def _render_html(data: WeeklyData) -> str:
     mitre_html = _build_mitre_section(data, charts)
     network_ioc_html = _build_network_ioc_section(data)
     host_ioc_html = _build_host_ioc_section(data)
+    affected_pkg_html = _build_affected_packages_section(data)
     news_html = _build_news_section(data.news_highlights[:10])
-    vendor_html = _build_vendor_section(data, charts)
     correlation_html = _build_correlation_section(data)
     recommendations_html = _build_recommendations_section(data)
     appendix_html = _build_appendix(data)
@@ -854,6 +855,7 @@ h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weig
 <div class="container">
 {toc_html}
 {executive_html}
+{introduction_html}
 {landscape_html}
 {cve_analysis_html}
 {kev_html}
@@ -861,8 +863,8 @@ h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weig
 {mitre_html}
 {network_ioc_html}
 {host_ioc_html}
+{affected_pkg_html}
 {news_html}
-{vendor_html}
 {correlation_html}
 {recommendations_html}
 {appendix_html}
@@ -906,18 +908,19 @@ def _build_toc(data: WeeklyData) -> str:
     """Build table of contents — all sections always present."""
     items = [
         ("1.", "executive-summary", "Executive Summary"),
-        ("2.", "landscape", "Threat Landscape Overview"),
-        ("3.", "cve-analysis", "Critical & High CVE Analysis"),
-        ("4.", "kev-section", "CISA Known Exploited Vulnerabilities"),
-        ("5.", "epss-section", "EPSS Exploitability Trends"),
-        ("6.", "mitre-section", "MITRE ATT&CK Technique Mapping"),
-        ("7.", "network-iocs", "Network-based Indicators (IOCs)"),
-        ("8.", "host-iocs", "Host-based Indicators (IOCs)"),
-        ("9.", "news-section", "Vulnerability News & Intelligence"),
-        ("10.", "vendor-section", "Affected Vendors & Products"),
-        ("11.", "correlation-section", "CVE Correlation Analysis"),
-        ("12.", "recommendations", "Recommendations"),
-        ("13.", "appendix", "Appendix"),
+        ("2.", "introduction", "Introduction"),
+        ("3.", "landscape", "Threat Overview"),
+        ("4.", "cve-analysis", "Critical & High CVE Analysis"),
+        ("5.", "kev-section", "CISA Known Exploited Vulnerabilities"),
+        ("6.", "epss-section", "EPSS Exploitability Trends"),
+        ("7.", "mitre-section", "MITRE ATT&CK Technique Mapping"),
+        ("8.", "network-iocs", "Network-based Indicators (IOCs)"),
+        ("9.", "host-iocs", "Host-based Indicators (IOCs)"),
+        ("10.", "affected-packages", "Affected Packages & Products"),
+        ("11.", "news-section", "Vulnerability News & Intelligence"),
+        ("12.", "correlation-section", "CVE Correlation Analysis"),
+        ("13.", "recommendations", "Recommendations"),
+        ("14.", "appendix", "Appendix"),
     ]
 
     items_html = "".join(
@@ -1052,8 +1055,28 @@ def _build_executive_section(data: WeeklyData) -> str:
 </div>"""
 
 
+def _build_introduction_section(data: WeeklyData) -> str:
+    """Build introduction / scope section."""
+    ioc_total = data.ioc_summary.get("total_iocs", 0)
+    return f"""<!-- ═══════════ INTRODUCTION ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="introduction">
+    <h2>2. Introduction</h2>
+    <div class="executive-narrative">
+        <p>This report provides threat intelligence analysis for the period {data.period_start} to {data.period_end}.
+        Data sources include NVD (authoritative CVE data), CISA KEV, EPSS, AlienVault OTX,
+        and ThreatFox. Analysis covers {data.total_cves_this_week} new CVEs, {data.total_pocs_this_week} new exploit
+        publications, and {ioc_total} indicators of compromise.</p>
+        <p>The report follows a structured analytical methodology: initial data aggregation from authoritative sources,
+        followed by multi-factor risk scoring (CVSS, EPSS, KEV status, PoC availability), IOC extraction and correlation,
+        and finally prioritized recommendations. Each section builds on the previous to provide a comprehensive
+        threat landscape assessment suitable for security operations teams, vulnerability management, and executive briefing.</p>
+    </div>
+</div>"""
+
+
 def _build_landscape_section(data: WeeklyData, charts: dict[str, str]) -> str:
-    """Build threat landscape section with charts."""
+    """Build threat overview section with narrative analysis and charts."""
     tc = data.total_cves_this_week
     tn = (
         "up"
@@ -1065,10 +1088,82 @@ def _build_landscape_section(data: WeeklyData, charts: dict[str, str]) -> str:
     cve_pct = _pct_change(tc, data.total_cves_last_week)
     poc_pct = _pct_change(data.total_pocs_this_week, data.total_pocs_last_week)
 
-    return f"""<!-- ═══════════ THREAT LANDSCAPE ═══════════ -->
+    # ── Narrative analysis paragraphs ──
+    # Paragraph 1: CVE volume trend interpretation
+    if tc == 0:
+        p1 = f"No new CVEs were observed during the reporting period ({data.period_start} to {data.period_end}). This may reflect reduced disclosure activity, a lull between major vulnerability cycles, or underreporting during holiday periods."
+    elif tc > data.total_cves_last_week:
+        p1 = f"<strong>CVE volume increased {cve_pct} week-over-week</strong> ({tc} vs {data.total_cves_last_week}), suggesting accelerated vulnerability disclosure. This may correlate with vendor patch cycles (e.g., Microsoft Patch Tuesday), coordinated disclosure following security conferences, or increased scanning activity by security researchers. Defenders should expect elevated patching workload in the coming days."
+    elif tc < data.total_cves_last_week:
+        p1 = f"<strong>CVE volume decreased {cve_pct} week-over-week</strong> ({tc} vs {data.total_cves_last_week}), indicating a slower disclosure period. While this reduces immediate patching pressure, it may precede a surge as deferred disclosures accumulate. Teams should use this window to address existing backlog."
+    else:
+        p1 = f"CVE volume remained stable at {tc} new entries this week, consistent with the previous week's {data.total_cves_last_week}. This steady-state suggests normal vulnerability disclosure cadence."
+
+    # Paragraph 2: Severity and KEV analysis
+    sev_parts = []
+    if data.critical_cves > 0:
+        sev_parts.append(f"<strong>{data.critical_cves} critical-rated (CVSS 9+)</strong>")
+    if data.high_cves > 0:
+        sev_parts.append(f"<strong>{data.high_cves} high-rated (CVSS 7-8.9)</strong>")
+    sev_text = ", ".join(sev_parts) if sev_parts else "no critical or high-severity CVEs"
+    p2 = f"This week's disclosures include {sev_text}. "
+    if data.kev_new_this_week > 0:
+        p2 += f"<strong>CISA added {data.kev_new_this_week} new KEV entries</strong>, confirming active exploitation in the wild. "
+    if data.kev_overdue > 0:
+        p2 += f"<strong style='color:var(--red);'>{data.kev_overdue} KEVs are past their remediation deadline — these represent known-exploited vulnerabilities with no excuse for delay.</strong> "
+    p2 += f"The average EPSS of {data.avg_epss_this_week:.3f} suggests a {'high' if data.avg_epss_this_week > 0.2 else 'moderate' if data.avg_epss_this_week > 0.05 else 'low'} near-term exploitation likelihood across the new CVE set."
+
+    # Paragraph 3: ATT&CK technique trends
+    if data.top_tags:
+        top3 = data.top_tags[:3]
+        tech_detail = ", ".join(
+            f"<strong>{t['tag']}</strong> ({t['cve_count']} CVEs, avg CVSS {t['avg_cvss']})"
+            for t in top3
+        )
+        p3 = f"Attack technique analysis shows <strong>{top3[0]['tag']}</strong> as the most prevalent technique this week. The top 3 techniques — {tech_detail} — suggest "
+        # Context-aware interpretation
+        techniques = [t["tag"].lower() for t in top3]
+        if any(t in ("rce", "command-execution", "code-execution") for t in techniques):
+            p3 += "a focus on remote exploitation capabilities that enable initial access and lateral movement. "
+        elif any(t in ("privilege-escalation", "elevation") for t in techniques):
+            p3 += "adversaries prioritizing post-compromise privilege escalation. "
+        elif any(t in ("xss", "csrf", "injection") for t in techniques):
+            p3 += "continued targeting of web application attack surfaces. "
+        else:
+            p3 += "diverse adversary tooling and techniques. "
+        p3 += "Defenders should ensure detections cover these techniques in EDR and SIEM platforms."
+    else:
+        p3 = "Insufficient attack technique data for trend analysis this period. Enriching CVE records with ATT&CK mappings would improve detection gap analysis."
+
+    # Paragraph 4: Vendor targeting patterns
+    if data.top_vendors:
+        top_vendor = data.top_vendors[0]
+        vendor_count = len(data.top_vendors)
+        p4 = f"<strong>{vendor_count} vendors</strong> were affected by new CVEs this week. <strong>{top_vendor['vendor'].title()}</strong> was most targeted with {top_vendor['cve_count']} CVEs (avg CVSS {top_vendor['avg_cvss']}), "
+        if top_vendor["kev_count"] > 0:
+            p4 += f"including {top_vendor['kev_count']} KEV-listed vulnerability. "
+        else:
+            p4 += "none currently on the KEV catalog. "
+        if vendor_count > 1:
+            second = data.top_vendors[1]
+            p4 += f"{second['vendor'].title()} followed with {second['cve_count']} CVEs. "
+        p4 += "Organizations with significant exposure to these vendors should prioritize patching and verify compensating controls."
+    else:
+        p4 = "No vendor targeting data available for this period."
+
+    narrative_html = f"""
+    <div class="executive-narrative">
+        <p>{p1}</p>
+        <p>{p2}</p>
+        <p>{p3}</p>
+        <p>{p4}</p>
+    </div>"""
+
+    return f"""<!-- ═══════════ THREAT OVERVIEW ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="landscape">
-    <h2>2. Threat Landscape Overview</h2>
+    <h2>3. Threat Overview</h2>
+    {narrative_html}
 
     <div class="kpi-grid">
         <div class="kpi-card">
@@ -1154,7 +1249,7 @@ def _build_cve_analysis(data: WeeklyData) -> str:
     return f"""<!-- ═══════════ CVE ANALYSIS ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="cve-analysis">
-    <h2>3. Critical &amp; High CVE Analysis</h2>
+    <h2>4. Critical &amp; High CVE Analysis</h2>
     <div class="cve-cards">
         {"".join(cards)}
     </div>
@@ -1207,7 +1302,7 @@ def _build_kev_section(kev_entries: list[dict]) -> str:
     return f"""<!-- ═══════════ KEV ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="kev-section">
-    <h2>4. CISA Known Exploited Vulnerabilities</h2>
+    <h2>5. CISA Known Exploited Vulnerabilities</h2>
     <div class="tf-grid">
         <div class="tf-stat"><span class="tf-num">{len(kev_entries)}</span><span class="tf-label">Total KEVs</span></div>
         <div class="tf-stat"><span class="tf-num critical">{len(overdue_kevs)}</span><span class="tf-label">Overdue</span></div>
@@ -1243,7 +1338,7 @@ def _build_epss_section(data: WeeklyData, charts: dict[str, str]) -> str:
     return f"""<!-- ═══════════ EPSS ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="epss-section">
-    <h2>5. EPSS Exploitability Trends</h2>
+    <h2>6. EPSS Exploitability Trends</h2>
     <div class="chart-panel">
         <h3>EPSS Score Distribution</h3>
         {charts["epss_hist"]}
@@ -1272,7 +1367,7 @@ def _build_mitre_section(data: WeeklyData, charts: dict[str, str]) -> str:
     return f"""<!-- ═══════════ MITRE ATT&CK ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="mitre-section">
-    <h2>6. MITRE ATT&amp;CK Technique Mapping</h2>
+    <h2>7. MITRE ATT&amp;CK Technique Mapping</h2>
     <div class="charts-grid">
         <div class="chart-panel">
             <h3>Technique Heatmap</h3>
@@ -1308,7 +1403,7 @@ def _build_network_ioc_section(data: WeeklyData) -> str:
     return f"""<!-- ═══════════ NETWORK IOCs ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="network-iocs">
-    <h2>7. Network-based Indicators (IOCs)</h2>
+    <h2>8. Network-based Indicators (IOCs)</h2>
     <p>Network indicators extracted from threat intelligence sources this period. These IPs, domains, and URLs are associated with known threat activity. Private IP ranges and common CDNs are excluded.</p>
     <table class="data-table ioc-table">
         <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>Linked CVEs</th></tr></thead>
@@ -1340,7 +1435,7 @@ def _build_host_ioc_section(data: WeeklyData) -> str:
     return f"""<!-- ═══════════ HOST IOCs ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="host-iocs">
-    <h2>8. Host-based Indicators (IOCs)</h2>
+    <h2>9. Host-based Indicators (IOCs)</h2>
     <p>Host-based indicators including file hashes, file paths, and registry keys associated with threat activity.</p>
     <table class="data-table ioc-table">
         <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>Linked CVEs</th></tr></thead>
@@ -1349,10 +1444,35 @@ def _build_host_ioc_section(data: WeeklyData) -> str:
 </div>"""
 
 
+def _build_affected_packages_section(data: WeeklyData) -> str:
+    """Build affected packages & products section."""
+    rows = ""
+    for pkg in data.affected_packages[:20]:
+        cves = ", ".join(pkg["sample_cves"][:5])
+        rows += f"""<tr>
+            <td>{pkg["vendor"]}</td>
+            <td>{pkg["product"]}</td>
+            <td>{pkg["cve_count"]}</td>
+            <td class="desc-cell">{cves}</td>
+        </tr>"""
+    if not rows:
+        rows = '<tr><td colspan="4" class="empty-cell">No vendor/product data available for this reporting period.</td></tr>'
+
+    return f"""<!-- ═══════════ AFFECTED PACKAGES ═══════════ -->
+<div class="section-divider"></div>
+<div class="section" id="affected-packages">
+    <h2>10. Affected Packages &amp; Products</h2>
+    <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1rem;">Specific vendor/product combinations with CVE counts during this period.</p>
+    <table class="data-table">
+        <thead><tr><th>Vendor</th><th>Product</th><th>CVEs</th><th>Sample CVEs</th></tr></thead>
+        <tbody>{rows}</tbody>
+    </table></div>"""
+
+
 def _build_news_section(articles: list[dict]) -> str:
     """Build news & intelligence section."""
     tier_colors = {1: "#dc3545", 2: "#fd7e14", 3: "#ffc107", 4: "#28a745", 5: "#6c757d"}
-    html = '<div class="section-divider"></div><div class="section" id="news-section"><h2>9. Vulnerability News &amp; Intelligence</h2><div class="news-list">'
+    html = '<div class="section-divider"></div><div class="section" id="news-section"><h2>11. Vulnerability News &amp; Intelligence</h2><p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1rem;">Recent security news and advisories relevant to this period\'s threat landscape (last 7 days).</p><div class="news-list">'
     if not articles:
         html += '<p class="empty-cell">No news articles linked in this reporting period.</p>'
     for article in articles:
@@ -1438,7 +1558,7 @@ def _build_correlation_section(data: WeeklyData) -> str:
     if not clusters:
         return ""
 
-    html = '<div class="section-divider"></div><div class="section" id="correlation-section"><h2>11. CVE Correlation Analysis</h2><p>CVEs grouped by shared characteristics (ATT&CK techniques, severity, or common PoC sources) that may indicate coordinated campaigns.</p>'
+    html = '<div class="section-divider"></div><div class="section" id="correlation-section"><h2>12. CVE Correlation Analysis</h2><p>CVEs grouped by shared characteristics (ATT&CK techniques, severity, or common PoC sources) that may indicate coordinated campaigns.</p>'
     for cluster in clusters[:5]:
         cve_list = ", ".join(cluster["cves"][:10])
         html += f"""<div class="news-item">
@@ -1450,36 +1570,65 @@ def _build_correlation_section(data: WeeklyData) -> str:
 
 
 def _build_recommendations_section(data: WeeklyData) -> str:
-    """Build recommendations section."""
+    """Build data-driven, specific recommendations section."""
     recs = []
 
+    # P1: Overdue KEVs with specific CVEs
     if data.kev_overdue > 0:
+        overdue_ids = [k["id"] for k in data.kev_entries if k["is_overdue"]][:5]
+        overdue_detail = ", ".join(overdue_ids) if overdue_ids else f"{data.kev_overdue} CVEs"
         recs.append(
-            f'<li><span class="rec-priority rec-p1">P1</span><span><strong>Patch Overdue KEVs:</strong> {data.kev_overdue} CISA KEV entries are past their remediation deadline and require immediate patching.</span></li>'
+            f'<li><span class="rec-priority rec-p1">P1</span><span><strong>Patch {data.kev_overdue} overdue KEVs:</strong> {overdue_detail} — past CISA remediation deadline. Immediate patching or vendor mitigation required.</span></li>'
         )
-    if data.critical_cves > 0:
+
+    # P1: Critical CVEs with EPSS > 50%
+    critical_high_epss = [
+        c
+        for c in data.top_cves
+        if c.get("cvss_score", 0) >= 9.0 and (c.get("epss_score") or 0) > 0.5
+    ]
+    if critical_high_epss:
+        cve_list = ", ".join(c["id"] for c in critical_high_epss[:5])
         recs.append(
-            f'<li><span class="rec-priority rec-p1">P1</span><span><strong>Address Critical CVEs:</strong> {data.critical_cves} CVEs with CVSS 9+ identified. Prioritize those with EPSS &gt; 0.5.</span></li>'
+            f'<li><span class="rec-priority rec-p1">P1</span><span><strong>Address {len(critical_high_epss)} critical CVEs with high exploitability:</strong> {cve_list} — CVSS 9+ with EPSS &gt; 50%. Prioritize for emergency patching.</span></li>'
         )
-    if data.epss_movers and data.epss_movers[0].get("epss_score", 0) > 0.3:
+
+    # P2: CVEs with EPSS > 90%
+    high_epss = [c for c in data.top_cves if (c.get("epss_score") or 0) > 0.9]
+    if high_epss:
+        cve_list = ", ".join(f"{c['id']} ({c['epss_score']:.0%})" for c in high_epss[:6])
         recs.append(
-            f'<li><span class="rec-priority rec-p2">P2</span><span><strong>Monitor Rising EPSS:</strong> {data.epss_movers[0]["id"]} has EPSS {data.epss_movers[0]["epss_score"]:.3f} indicating high exploitation likelihood.</span></li>'
+            f'<li><span class="rec-priority rec-p2">P2</span><span><strong>Monitor {len(high_epss)} CVEs with EPSS &gt; 90%:</strong> {cve_list} — near-term exploitation likely. Apply patches or compensating controls.</span></li>'
         )
+
+    # P2: Network IOCs
     if data.ioc_summary.get("network_count", 0) > 0:
         recs.append(
-            '<li><span class="rec-priority rec-p2">P2</span><span><strong>Deploy Network IOCs:</strong> Block identified IPs, domains, and URLs at perimeter defenses.</span></li>'
+            f'<li><span class="rec-priority rec-p2">P2</span><span><strong>Deploy {data.ioc_summary["network_count"]} network IOCs:</strong> Block identified IPs, domains, and URLs at perimeter defenses (firewall, proxy, DNS).</span></li>'
         )
+
+    # P2: Host IOCs
     if data.ioc_summary.get("host_count", 0) > 0:
         recs.append(
-            '<li><span class="rec-priority rec-p2">P2</span><span><strong>Deploy Host IOCs:</strong> Add file hashes to EDR blocklists and monitor registry modifications.</span></li>'
+            f'<li><span class="rec-priority rec-p2">P2</span><span><strong>Deploy {data.ioc_summary["host_count"]} host IOCs:</strong> Add file hashes to EDR blocklists and monitor for registry modifications and suspicious file paths.</span></li>'
         )
+
+    # P3: Vendor risk review
     if data.top_vendors:
-        recs.append(
-            f'<li><span class="rec-priority rec-p3">P3</span><span><strong>Vendor Risk Review:</strong> {data.top_vendors[0]["vendor"]} had {data.top_vendors[0]["cve_count"]} CVEs — assess exposure to affected products.</span></li>'
+        top3 = data.top_vendors[:3]
+        vendor_detail = ", ".join(
+            f"{v['vendor']} ({v['cve_count']} CVEs, avg CVSS {v['avg_cvss']})" for v in top3
         )
-    recs.append(
-        '<li><span class="rec-priority rec-p3">P3</span><span><strong>Review Correlated CVEs:</strong> CVEs sharing ATT&CK techniques may indicate campaign-level targeting.</span></li>'
-    )
+        recs.append(
+            f'<li><span class="rec-priority rec-p3">P3</span><span><strong>Review exposure to top-targeted vendors:</strong> {vendor_detail} — assess organizational exposure and prioritize patching.</span></li>'
+        )
+
+    # P3: Correlated CVEs
+    if data.top_tags and len(data.top_tags) > 1:
+        top_tags = ", ".join(f"{t['tag']} ({t['cve_count']} CVEs)" for t in data.top_tags[:3])
+        recs.append(
+            f'<li><span class="rec-priority rec-p3">P3</span><span><strong>Review correlated attack techniques:</strong> {top_tags} — CVEs sharing ATT&CK techniques may indicate campaign-level targeting.</span></li>'
+        )
 
     recs_html = (
         "\n        ".join(recs) if recs else "<li>No urgent recommendations this period.</li>"
@@ -1488,7 +1637,8 @@ def _build_recommendations_section(data: WeeklyData) -> str:
     return f"""<!-- ═══════════ RECOMMENDATIONS ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="recommendations">
-    <h2>12. Recommendations</h2>
+    <h2>13. Recommendations</h2>
+    <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1rem;">Prioritized, actionable recommendations based on this period's data. P1 = immediate action, P2 = near-term, P3 = planned review.</p>
     <ul class="rec-list">
         {recs_html}
     </ul>
@@ -1500,7 +1650,7 @@ def _build_appendix(data: WeeklyData) -> str:
     return """<!-- ═══════════ APPENDIX ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="appendix">
-    <h2>13. Appendix</h2>
+    <h2>14. Appendix</h2>
     <h3>Methodology</h3>
     <p class="appendix">Horus aggregates vulnerability data from NVD, CISA KEV, Exploit-DB, GitHub, and ThreatFox. Reputation scores (0-10) are calculated using: CVSS (35%), EPSS (25%), KEV status, social mentions, PoC availability, and vendor ubiquity. IOCs are extracted from news articles and security resources using regex pattern matching, with private IP ranges and common CDNs excluded.</p>
     <h3>Data Sources</h3>

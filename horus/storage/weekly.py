@@ -97,6 +97,9 @@ class WeeklyData:
     host_iocs: list[dict[str, Any]] = field(default_factory=list)
     ioc_summary: dict[str, Any] = field(default_factory=dict)
 
+    # Affected packages (vendor/product/version)
+    affected_packages: list[dict[str, Any]] = field(default_factory=list)
+
     # Source health
     source_health: list[dict[str, Any]] = field(default_factory=list)
 
@@ -139,6 +142,7 @@ def gather_weekly_data(conn: sqlite3.Connection, weeks_back: int = 1) -> WeeklyD
     _gather_weekly_trend(conn, data)
     _gather_triage_summary(conn, data)
     _gather_iocs(conn, data, this_start, this_end)
+    _gather_affected_packages(conn, data, this_start, this_end)
     _gather_source_health(conn, data)
 
     return data
@@ -416,8 +420,8 @@ def _gather_news(
     this_start: str,
     this_end: str,
 ) -> None:
-    """Top news articles by tier (severity)."""
-    cutoff = (_utc_now() - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%S")
+    """Top news articles by tier (severity) from the last 7 days."""
+    cutoff = (_utc_now() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
     rows = conn.execute(
         """
         SELECT title, url, source, tier, summary, published_at
@@ -578,6 +582,39 @@ def _gather_triage_summary(conn: sqlite3.Connection, data: WeeklyData) -> None:
     for row in conn.execute("SELECT status, COUNT(*) FROM cve_triage GROUP BY status"):
         summary[row[0]] = row[1]
     data.triage_summary = summary
+
+
+def _gather_affected_packages(
+    conn: sqlite3.Connection,
+    data: WeeklyData,
+    this_start: str,
+    this_end: str,
+) -> None:
+    """Affected vendor/product combinations with CVE counts."""
+    rows = conn.execute(
+        """
+        SELECT p.vendor, p.product, COUNT(DISTINCT c.id) as cve_count,
+               GROUP_CONCAT(DISTINCT c.id) as sample_cves
+        FROM cve c
+        JOIN cve_product cp ON cp.cve_id = c.id
+        JOIN product p ON p.id = cp.product_id
+        WHERE p.category != 'unknown' AND c.first_seen >= ? AND c.first_seen < ?
+        GROUP BY p.vendor, p.product
+        ORDER BY cve_count DESC
+        LIMIT 20
+        """,
+        (this_start, this_end),
+    ).fetchall()
+
+    data.affected_packages = [
+        {
+            "vendor": r[0],
+            "product": r[1],
+            "cve_count": r[2],
+            "sample_cves": r[3].split(",")[:5] if r[3] else [],
+        }
+        for r in rows
+    ]
 
 
 def _gather_source_health(conn: sqlite3.Connection, data: WeeklyData) -> None:
