@@ -780,6 +780,8 @@ h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weig
 .data-table tbody tr:hover {{ background: rgba(88,166,255,0.06); }}
 .data-table .desc-cell {{ color: var(--text-dim); font-size: 0.8rem; max-width: 300px; }}
 .kev-row {{ background: rgba(248,81,73,0.06) !important; }}
+.tf-num.warning {{ color: var(--orange); }}
+.empty-cell {{ text-align: center; color: var(--text-dim); padding: 1.5rem !important; font-style: italic; }}
 
 /* ── Alerts ─────────────────────────────────────────── */
 .alert {{ padding: 0.8rem 1.2rem; border-radius: 6px; margin: 1rem 0; font-size: 0.9rem; page-break-inside: avoid; }}
@@ -1167,6 +1169,7 @@ def _build_kev_section(kev_entries: list[dict]) -> str:
     from datetime import date as _date_mod
 
     overdue_kevs = [k for k in kev_entries if k["is_overdue"]]
+    no_due_date = [k for k in kev_entries if k["kev_due_date"] == "Not Set"]
     due_soon = []
     for k in kev_entries:
         if k["kev_due_date"] != "Not Set" and not k["is_overdue"]:
@@ -1208,7 +1211,8 @@ def _build_kev_section(kev_entries: list[dict]) -> str:
     <div class="tf-grid">
         <div class="tf-stat"><span class="tf-num">{len(kev_entries)}</span><span class="tf-label">Total KEVs</span></div>
         <div class="tf-stat"><span class="tf-num critical">{len(overdue_kevs)}</span><span class="tf-label">Overdue</span></div>
-        <div class="tf-stat"><span class="tf-num">{len(due_soon)}</span><span class="tf-label">Due Soon (≤30d)</span></div>
+        <div class="tf-stat"><span class="tf-num warning">{len(due_soon)}</span><span class="tf-label">Due Soon (≤30d)</span></div>
+        <div class="tf-stat"><span class="tf-num">{len(no_due_date)}</span><span class="tf-label">No Due Date</span></div>
     </div>
     {alert_html}
     <table class="data-table">
