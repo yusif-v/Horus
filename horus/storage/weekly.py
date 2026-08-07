@@ -600,13 +600,11 @@ def _gather_affected_packages(
         JOIN product p ON p.id = cp.product_id
         WHERE p.category != 'unknown'
           AND p.vendor != 'unknown'
-          AND c.first_seen >= ? AND c.first_seen < ?
         GROUP BY p.vendor, p.product
         HAVING cve_count > 0
         ORDER BY cve_count DESC
         LIMIT 20
         """,
-        (this_start, this_end),
     ).fetchall()
 
     data.affected_packages = [
@@ -654,15 +652,16 @@ def _gather_iocs(
     # Network IOCs: IPs, domains, URLs — from both ioc_indicator and threatfox
     network: dict[str, dict[str, Any]] = {}
 
-    # From ioc_indicator — recent network IOCs, CVE-linked first
+    # From ioc_indicator — recent network IOCs
     cutoff = (_utc_now() - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%S")
     for row in conn.execute(
         """
         SELECT ioc_value, ioc_type, source, source_ref, cve_id
         FROM ioc_indicator
         WHERE ioc_type IN ('ip', 'domain', 'url')
+          AND ioc_value NOT LIKE '%t.co%'
           AND last_seen >= ?
-        ORDER BY CASE WHEN cve_id IS NOT NULL THEN 0 ELSE 1 END, last_seen DESC
+        ORDER BY last_seen DESC
         LIMIT 200
         """,
         (cutoff,),
@@ -683,29 +682,33 @@ def _gather_iocs(
         if cve:
             network[key]["cves"].add(cve)
 
-    # From threatfox
+    # From threatfox — only those NOT already in ioc_indicator (avoid duplicates)
+    existing_keys = set(network.keys())
     for row in conn.execute(
         """
-        SELECT ioc_value, ioc_type, cve_id
+        SELECT ioc_value, ioc_type, cve_id, threat_type
         FROM cve_threatfox_ioc
         WHERE ioc_type IN ('ip', 'domain', 'url')
+          AND cve_id IS NOT NULL
         ORDER BY last_seen DESC
         LIMIT 100
         """,
     ):
-        val, typ, cve = row
+        val, typ, cve, threat = row
         key = f"{typ}:{val}"
-        if key not in network:
-            network[key] = {
-                "value": val,
-                "type": typ,
-                "sources": set(),
-                "refs": set(),
-                "cves": set(),
-            }
-        network[key]["sources"].add("threatfox")
-        if cve:
-            network[key]["cves"].add(cve)
+        if key in existing_keys:
+            # Add CVE link to existing entry
+            if cve:
+                network[key]["cves"].add(cve)
+            continue
+        network[key] = {
+            "value": val,
+            "type": typ,
+            "sources": {"threatfox"},
+            "refs": set(),
+            "cves": {cve} if cve else set(),
+            "threat_type": threat or "",
+        }
 
     data.network_iocs = sorted(
         [
@@ -716,6 +719,7 @@ def _gather_iocs(
                 "refs": sorted(v["refs"])[:3],
                 "cves": sorted(v["cves"]),
                 "cve_count": len(v["cves"]),
+                "threat_type": v.get("threat_type", ""),
             }
             for v in network.values()
         ],

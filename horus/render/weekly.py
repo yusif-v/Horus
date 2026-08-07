@@ -1387,14 +1387,17 @@ def _build_mitre_section(data: WeeklyData, charts: dict[str, str]) -> str:
 def _build_network_ioc_section(data: WeeklyData) -> str:
     """Build network-based IOCs section."""
     rows = ""
-    for ioc in data.network_iocs[:25]:
-        cves = ", ".join(ioc.get("cves", [])[:5]) or "—"
+    for ioc in data.network_iocs[:50]:
+        cves = ", ".join(ioc.get("cves", [])[:3])
+        threat = ioc.get("threat_type", "")
+        # Show CVE if available, otherwise threat type
+        link_col = cves if cves else (threat if threat else "—")
         sources = ", ".join(ioc.get("sources", []))
         rows += f"""<tr>
             <td><span class="ioc-type-badge">{ioc["type"]}</span></td>
             <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><code>{ioc["value"][:60]}</code></td>
             <td>{sources}</td>
-            <td>{cves}</td>
+            <td>{link_col}</td>
         </tr>"""
 
     if not rows:
@@ -1403,10 +1406,10 @@ def _build_network_ioc_section(data: WeeklyData) -> str:
     return f"""<!-- ═══════════ NETWORK IOCs ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="network-iocs">
-    <h2>8. Network-based Indicators (IOCs)</h2>
-    <p>Network indicators extracted from threat intelligence sources this period. These IPs, domains, and URLs are associated with known threat activity. Private IP ranges and common CDNs are excluded.</p>
+    <h2>7. Network-based Indicators (IOCs)</h2>
+    <p>Network indicators from threat intelligence sources. Linked CVEs indicate known exploitation targets; threat type indicates malware/C2 classification from ThreatFox.</p>
     <table class="data-table ioc-table">
-        <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>Linked CVEs</th></tr></thead>
+        <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>CVE / Threat</th></tr></thead>
         <tbody>{rows}</tbody>
     </table>
 </div>"""
@@ -1415,8 +1418,10 @@ def _build_network_ioc_section(data: WeeklyData) -> str:
 def _build_host_ioc_section(data: WeeklyData) -> str:
     """Build host-based IOCs section."""
     rows = ""
-    for ioc in data.host_iocs[:25]:
-        cves = ", ".join(ioc.get("cves", [])[:5]) or "—"
+    for ioc in data.host_iocs[:50]:
+        cves = ", ".join(ioc.get("cves", [])[:3])
+        threat = ioc.get("threat_type", "")
+        link_col = cves if cves else (threat if threat else "—")
         sources = ", ".join(ioc.get("sources", []))
         val = ioc["value"]
         # For hashes: show first 16 chars + ellipsis (standard IOC display)
@@ -1426,7 +1431,7 @@ def _build_host_ioc_section(data: WeeklyData) -> str:
             <td><span class="ioc-type-badge">{ioc["type"]}</span></td>
             <td><code>{val}</code></td>
             <td>{sources}</td>
-            <td>{cves}</td>
+            <td>{link_col}</td>
         </tr>"""
 
     if not rows:
@@ -1435,10 +1440,10 @@ def _build_host_ioc_section(data: WeeklyData) -> str:
     return f"""<!-- ═══════════ HOST IOCs ═══════════ -->
 <div class="section-divider"></div>
 <div class="section" id="host-iocs">
-    <h2>9. Host-based Indicators (IOCs)</h2>
-    <p>Host-based indicators including file hashes, file paths, and registry keys associated with threat activity.</p>
+    <h2>8. Host-based Indicators (IOCs)</h2>
+    <p>Host-based indicators including file hashes, file paths, and registry keys. Linked CVEs indicate known exploitation targets; threat type indicates malware classification.</p>
     <table class="data-table ioc-table">
-        <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>Linked CVEs</th></tr></thead>
+        <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>CVE / Threat</th></tr></thead>
         <tbody>{rows}</tbody>
     </table>
 </div>"""
