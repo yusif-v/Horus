@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h1>Weekly Threat Report</h1>
+    <p style="color:var(--text-dim);">Generate and download weekly threat intelligence reports.</p>
+
+    <div class="card" style="max-width:600px;">
+        <h3>Generate Report</h3>
+        <form action="/weekly-report/generate" method="POST" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+            <div>
+                <label>Format</label>
+                <select name="format" style="background:var(--card-alt);color:var(--text);border:1px solid var(--border);padding:0.5rem;border-radius:4px;">
+                    <option value="html">HTML</option>
+                    <option value="pdf">PDF</option>
+                    <option value="md">Markdown</option>
+                    <option value="text">Plain Text</option>
+                </select>
+            </div>
+            <div>
+                <label>Weeks Back</label>
+                <input type="number" name="weeks_back" value="1" min="1" max="12" style="background:var(--card-alt);color:var(--text);border:1px solid var(--border);padding:0.5rem;border-radius:4px;width:80px;">
+            </div>
+            <button type="submit" class="btn btn-primary">Generate & Download</button>
+        </form>
+    </div>
+
+    <div class="card" style="max-width:600px;margin-top:1.5rem;">
+        <h3>Quick Download</h3>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <a href="/weekly-report/generate?format=pdf&weeks_back=1" class="btn btn-primary">PDF Report</a>
+            <a href="/weekly-report/generate?format=html&weeks_back=1" class="btn">HTML Report</a>
+            <a href="/weekly-report/generate?format=md&weeks_back=1" class="btn">Markdown</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

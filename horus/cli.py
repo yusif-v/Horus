@@ -116,7 +116,7 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--weekly-format",
-        choices=("text", "md", "html"),
+        choices=("text", "md", "html", "pdf"),
         default="md",
         help="Weekly report output format (default: md).",
     )
@@ -268,6 +268,38 @@ def _cmd_weekly_report(args) -> None:
                 )
         else:
             logger.warning("AI analysis unavailable — rendering template only")
+
+    if args.weekly_format == "pdf":
+        # Convert HTML to PDF
+        import tempfile
+
+        from playwright.sync_api import sync_playwright
+
+        with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w") as f:
+            f.write(report)
+            html_path = f.name
+
+        pdf_path = args.weekly_output or html_path.replace(".html", ".pdf")
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch()
+                page = browser.new_page()
+                page.goto(f"file://{html_path}")
+                page.wait_for_timeout(2000)
+                page.pdf(
+                    path=pdf_path,
+                    format="A4",
+                    margin={"top": "15mm", "bottom": "15mm", "left": "15mm", "right": "15mm"},
+                    print_background=True,
+                    scale=0.9,
+                )
+                browser.close()
+            logger.info("Weekly report PDF saved to %s", pdf_path)
+        except Exception as e:
+            logger.error("PDF generation failed: %s", e)
+        finally:
+            os.unlink(html_path)
+        return
 
     if args.weekly_output:
         out = Path(args.weekly_output)

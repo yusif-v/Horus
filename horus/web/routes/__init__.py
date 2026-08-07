@@ -15,6 +15,7 @@ from .search import bp as search_bp
 from .triage import bp as triage_bp
 from .vendors import bp as vendors_bp
 from .watchlist import bp as watchlist_bp
+from .weekly_report_web import bp as weekly_report_bp
 
 ALL_BLUEPRINTS = [
     auth_bp,
@@ -32,4 +33,5 @@ ALL_BLUEPRINTS = [
     admin_bp,
     watchlist_bp,
     profile_bp,
+    weekly_report_bp,
 ]

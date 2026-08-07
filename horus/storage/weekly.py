@@ -426,7 +426,7 @@ def _gather_news(
         """
         SELECT title, url, source, tier, summary, published_at
         FROM news_article
-        WHERE first_seen >= ?
+        WHERE published_at >= ?
         ORDER BY tier ASC, published_at DESC
         LIMIT 10
         """,

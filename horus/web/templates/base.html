@@ -58,6 +58,7 @@
     <a href="/vendors" class="{% if active == 'vendors' %}active{% endif %}">Vendors</a>
      <a href="/epss-trends" class="{% if active == 'epss-trends' %}active{% endif %}">EPSS Trends</a>
      <a href="/correlations" class="{% if active == 'correlations' %}active{% endif %}">Correlations</a>
+     <a href="/weekly-report" class="{% if active == 'weekly-report' %}active{% endif %}">Weekly Report</a>
      {% if g.user and ('admin' in g.user_roles or g.user_team in ('red', 'blue', 'both')) %}
     <a href="/watchlist" class="{% if active == 'watchlist' %}active{% endif %}">Watchlist</a>
     {% endif %}
