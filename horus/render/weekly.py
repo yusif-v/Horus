@@ -819,23 +819,35 @@ h3 {{ color: var(--text); margin: 1.5rem 0 0.8rem; font-size: 1.05rem; font-weig
 
 /* ── Print Styles ───────────────────────────────────── */
 @media print {{
-    body {{ background: #fff; color: #1a1a1a; font-size: 10.5pt; line-height: 1.45; }}
+    * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
+    body {{ background: #fff !important; color: #1a1a1a !important; font-size: 10pt; line-height: 1.4; }}
     .container {{ max-width: 100%; padding: 0; }}
-    .cover-page {{ background: #fff; min-height: auto; padding: 5cm 2cm; border-bottom: 3px solid #1f6feb; page-break-after: always; }}
-    .cover-title {{ color: #1a1a1a; }}
-    .cover-stat-num {{ color: #1a1a1a; }}
-    .classification-banner {{ border-color: #d29922; color: #8a6d00; }}
-    .section {{ padding: 1.2rem 0; }}
-    .section h2 {{ color: #1f6feb; border-bottom-color: #d0d7de; font-size: 1.1rem; }}
-    .kpi-card, .chart-panel, .cve-card, .news-item {{ background: #f6f8fa; border-color: #d0d7de; break-inside: avoid; }}
-    .data-table thead th {{ background: #f6f8fa; color: #57606a; border-bottom-color: #d0d7de; }}
-    .data-table tbody td {{ border-bottom-color: #eaeef2; }}
-    .data-table tbody tr:nth-child(even) {{ background: #f6f8fa; }}
-    .cve-id, .news-item a {{ color: #1f6feb; }}
-    @page {{ margin: 1.8cm 1.5cm; size: A4; }}
-    @page :first {{ margin: 0; }}
-    h2, h3 {{ page-break-after: avoid; }}
-    .section {{ page-break-inside: avoid; }}
+    .cover-page {{ background: linear-gradient(135deg, #f0f4ff 0%, #fff 50%, #f0f4ff 100%) !important; min-height: auto; padding: 4cm 2cm; border-bottom: 3px solid #1f6feb; page-break-after: always; }}
+    .cover-brand {{ color: #1f6feb !important; }}
+    .cover-title {{ color: #1a1a1a !important; }}
+    .cover-subtitle {{ color: #57606a !important; }}
+    .cover-period {{ color: #1f6feb !important; }}
+    .cover-stat-num {{ color: #1a1a1a !important; }}
+    .cover-stat-num.critical {{ color: #cf222e !important; }}
+    .classification-banner {{ border-color: #d29922 !important; color: #8a6d00 !important; }}
+    .section {{ padding: 1rem 0; page-break-inside: avoid; }}
+    .section h2 {{ color: #1f6feb !important; border-bottom-color: #d0d7de !important; font-size: 1.1rem; page-break-after: avoid; }}
+    .section h3 {{ color: #1a1a1a !important; page-break-after: avoid; }}
+    .kpi-card, .chart-panel, .cve-card, .news-item, .tf-stat {{ background: #f6f8fa !important; border: 1px solid #d0d7de !important; break-inside: avoid; }}
+    .data-table {{ break-inside: avoid; }}
+    .data-table thead th {{ background: #f6f8fa !important; color: #57606a !important; border-bottom: 2px solid #d0d7de !important; }}
+    .data-table tbody td {{ border-bottom: 1px solid #eaeef2 !important; font-size: 0.75rem; }}
+    .data-table tbody tr:nth-child(even) {{ background: #f6f8fa !important; }}
+    .data-table tbody tr:hover {{ background: inherit !important; }}
+    .ioc-table .desc-cell {{ font-size: 0.7rem; }}
+    .kev-row {{ background: #fff3f3 !important; }}
+    .tier-badge {{ color: #fff !important; }}
+    svg {{ max-width: 100% !important; height: auto !important; }}
+    @page {{ margin: 1.5cm; size: A4; }}
+    @page :first {{ margin: 0; size: A4; }}
+    h2, h3, h4 {{ page-break-after: avoid; }}
+    table, figure, .chart-panel, .cve-card, .news-item {{ page-break-inside: avoid; }}
+    .section-divider {{ page-break-before: avoid; }}
 }}
 
 /* ── Responsive ─────────────────────────────────────── */

@@ -285,13 +285,24 @@ def _cmd_weekly_report(args) -> None:
                 browser = p.chromium.launch()
                 page = browser.new_page()
                 page.goto(f"file://{html_path}")
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(3000)
+                # Force SVG rendering before PDF
+                page.evaluate("""() => {
+                    document.querySelectorAll('svg').forEach(s => {
+                        s.setAttribute('width', s.getBoundingClientRect().width);
+                        s.setAttribute('height', s.getBoundingClientRect().height);
+                    });
+                }""")
                 page.pdf(
                     path=pdf_path,
                     format="A4",
-                    margin={"top": "15mm", "bottom": "15mm", "left": "15mm", "right": "15mm"},
+                    margin={"top": "12mm", "bottom": "12mm", "left": "12mm", "right": "12mm"},
                     print_background=True,
-                    scale=0.9,
+                    prefer_css_page_size=True,
+                    scale=0.85,
+                    display_header_footer=True,
+                    footer_template='<div style="font-size:8pt;width:100%;text-align:center;color:#888;padding:0 1cm;"><span class="pageNumber"></span> / <span class="totalPages"></span></div>',
+                    header_template="<div></div>",
                 )
                 browser.close()
             logger.info("Weekly report PDF saved to %s", pdf_path)
