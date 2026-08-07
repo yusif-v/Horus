@@ -1324,11 +1324,12 @@ def _build_host_ioc_section(data: WeeklyData) -> str:
         cves = ", ".join(ioc.get("cves", [])[:5]) or "—"
         sources = ", ".join(ioc.get("sources", []))
         val = ioc["value"]
-        if len(val) > 60:
-            val = f"{val[:30]}...{val[-20:]}"
+        # For hashes: show first 16 chars + ellipsis (standard IOC display)
+        if ioc["type"].startswith("hash_") and len(val) > 20:
+            val = f"{val[:16]}…"
         rows += f"""<tr>
             <td><span class="ioc-type-badge">{ioc["type"]}</span></td>
-            <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><code>{val}</code></td>
+            <td><code>{val}</code></td>
             <td>{sources}</td>
             <td>{cves}</td>
         </tr>"""

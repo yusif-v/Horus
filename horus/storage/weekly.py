@@ -417,15 +417,16 @@ def _gather_news(
     this_end: str,
 ) -> None:
     """Top news articles by tier (severity)."""
+    cutoff = (_utc_now() - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%S")
     rows = conn.execute(
         """
         SELECT title, url, source, tier, summary, published_at
         FROM news_article
-        WHERE first_seen >= ? AND first_seen < ?
+        WHERE first_seen >= ?
         ORDER BY tier ASC, published_at DESC
         LIMIT 10
         """,
-        (this_start, this_end),
+        (cutoff,),
     ).fetchall()
 
     data.news_highlights = [
