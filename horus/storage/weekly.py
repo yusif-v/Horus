@@ -613,15 +613,18 @@ def _gather_iocs(
     # Network IOCs: IPs, domains, URLs — from both ioc_indicator and threatfox
     network: dict[str, dict[str, Any]] = {}
 
-    # From ioc_indicator — all network IOCs (report filters by linked CVE period)
+    # From ioc_indicator — recent network IOCs, CVE-linked first
+    cutoff = (_utc_now() - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%S")
     for row in conn.execute(
         """
         SELECT ioc_value, ioc_type, source, source_ref, cve_id
         FROM ioc_indicator
         WHERE ioc_type IN ('ip', 'domain', 'url')
-        ORDER BY last_seen DESC
+          AND last_seen >= ?
+        ORDER BY CASE WHEN cve_id IS NOT NULL THEN 0 ELSE 1 END, last_seen DESC
         LIMIT 200
         """,
+        (cutoff,),
     ):
         val, typ, src, ref, cve = row
         key = f"{typ}:{val}"
@@ -686,9 +689,11 @@ def _gather_iocs(
         SELECT ioc_value, ioc_type, source, source_ref, cve_id
         FROM ioc_indicator
         WHERE ioc_type IN ('hash_md5', 'hash_sha1', 'hash_sha256', 'path', 'registry')
-        ORDER BY last_seen DESC
+          AND last_seen >= ?
+        ORDER BY CASE WHEN cve_id IS NOT NULL THEN 0 ELSE 1 END, last_seen DESC
         LIMIT 200
         """,
+        (cutoff,),
     ):
         val, typ, src, ref, cve = row
         key = f"{typ}:{val}"
