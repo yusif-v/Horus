@@ -239,7 +239,9 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
             ("trust_threatfox", "REAL DEFAULT 0.0"),
             ("trust_hudsonrock", "REAL DEFAULT 0.0"),
             ("threatfox_ioc_count", "INTEGER DEFAULT 0"),
+            ("otx_ioc_count", "INTEGER DEFAULT 0"),
             ("stealer_hits", "INTEGER DEFAULT 0"),
+            ("trust_otx", "REAL DEFAULT 0.0"),
             ("kev_due_date", "TEXT"),
         ]
         for col, decl in cve_additions:
@@ -488,11 +490,11 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
                epss_score, kev, kev_due_date, reputation_score, confidence,
                social_mentions, poc_source_count,
                imminence_score, imminence_bucket,
-               trust_score, trust_nvd, trust_threatfox, trust_hudsonrock,
-               threatfox_ioc_count, stealer_hits,
-               first_seen, last_seen)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
+                trust_score, trust_nvd, trust_threatfox, trust_hudsonrock,
+                threatfox_ioc_count, otx_ioc_count, trust_otx, stealer_hits,
+                first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
              description           = COALESCE(excluded.description, cve.description),
              cvss_score            = COALESCE(excluded.cvss_score, cve.cvss_score),
              cvss_severity         = COALESCE(excluded.cvss_severity, cve.cvss_severity),
@@ -509,10 +511,12 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
              imminence_bucket      = excluded.imminence_bucket,
              trust_score           = excluded.trust_score,
              trust_nvd             = excluded.trust_nvd,
-             trust_threatfox       = excluded.trust_threatfox,
-             trust_hudsonrock      = excluded.trust_hudsonrock,
-             threatfox_ioc_count   = excluded.threatfox_ioc_count,
-             stealer_hits          = excluded.stealer_hits,
+              trust_threatfox       = excluded.trust_threatfox,
+              trust_hudsonrock       = excluded.trust_hudsonrock,
+              trust_otx              = excluded.trust_otx,
+              threatfox_ioc_count   = excluded.threatfox_ioc_count,
+              otx_ioc_count          = excluded.otx_ioc_count,
+              stealer_hits          = excluded.stealer_hits,
              last_seen             = excluded.last_seen
         """,
         (
@@ -536,6 +540,8 @@ def persist_cve(conn: sqlite3.Connection, cve: CVE) -> None:
             cve.trust_threatfox,
             cve.trust_hudsonrock,
             cve.threatfox_ioc_count,
+            cve.otx_ioc_count,
+            cve.trust_otx,
             cve.stealer_hits,
             now,
             now,

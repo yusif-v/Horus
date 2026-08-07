@@ -58,7 +58,9 @@ class CVE:
     trust_threatfox: float = 0.0  # IOC hits contribution
     trust_hudsonrock: float = 0.0  # stealer log hits
     threatfox_ioc_count: int = 0  # number of ThreatFox IOCs found
+    otx_ioc_count: int = 0  # number of OTX IOCs linked
     stealer_hits: int = 0  # compromised machines for vendor domains
+    trust_otx: float = 0.0  # OTX IOC linkage contribution
     kev_due_date: str | None = None  # CISA KEV remediation deadline
 
 

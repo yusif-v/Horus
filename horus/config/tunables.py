@@ -19,3 +19,9 @@ THREATFOX_API_KEY = os.environ.get(
     "HORUS_THREATFOX_API_KEY",
     "5c31475de44c048c0d17cc8b254d10133e2f190f66952d29",
 )
+
+# AlienVault OTX API key (override via HORUS_OTX_API_KEY env var)
+OTX_API_KEY = os.environ.get(
+    "HORUS_OTX_API_KEY",
+    "7afea1a468f99ced8a0436a191f43c0be29e55a68c4e0cbece2192a132cb7155",
+)

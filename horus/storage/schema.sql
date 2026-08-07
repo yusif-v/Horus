@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS cve (
     trust_threatfox  REAL DEFAULT 0.0,         -- IOC hits contribution
     trust_hudsonrock REAL DEFAULT 0.0,          -- stealer log hits
     threatfox_ioc_count INTEGER DEFAULT 0,      -- ThreatFox IOCs found
+    otx_ioc_count    INTEGER DEFAULT 0,         -- OTX IOCs linked
     stealer_hits     INTEGER DEFAULT 0,         -- compromised machines for vendor domains
+    trust_otx        REAL DEFAULT 0.0,          -- OTX IOC linkage contribution
     kev_due_date   TEXT                      -- CISA KEV remediation deadline
 );
 
