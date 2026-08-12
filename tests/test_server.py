@@ -124,7 +124,7 @@ class _StubConn:
         return False
 
 
-def test_run_once_invokes_pipeline_with_all_enabled_sources(monkeypatch):
+def test_run_once_invokes_pipeline_with_all_enabled_sources(tmp_path, monkeypatch):
     monkeypatch.setattr(server.db, "initialize", lambda: (0, 0))
     captured = {}
 
@@ -134,12 +134,16 @@ def test_run_once_invokes_pipeline_with_all_enabled_sources(monkeypatch):
 
     monkeypatch.setattr(server.Server, "_invoke_pipeline", fake_invoke)
 
-    cfg = server.Config(sources_enabled={"exploit_db": False})
+    # Legacy `sources_enabled` goes through the deprecation shim, which maps
+    # exploit_db → exploitdb and disables it in the manager.
+    config_path = tmp_path / "horus.json"
+    config_path.write_text(json.dumps({"sources_enabled": {"exploit_db": False}}))
+    cfg = server.load_config(str(config_path))
     server.Server(cfg).run_once()
 
     assert "nvd" in captured["sources"]
-    assert "exploit_db" not in captured["sources"]
-    assert captured["enrichers"] == {"epss", "kev"}
+    assert "exploitdb" not in captured["sources"]
+    assert captured["enrichers"] == {"epss", "kev", "otx", "darkweb"}
 
 
 def test_run_due_skips_sources_not_yet_elapsed(monkeypatch):
@@ -184,8 +188,10 @@ def test_run_due_invokes_pipeline_for_elapsed_sources(monkeypatch):
     monkeypatch.setattr(server.Server, "_invoke_pipeline", fake_invoke)
 
     server.Server(server.Config()).run_due()
-    assert server.SOURCE_KEYS.issubset(captured["sources"])
-    assert server.ENRICHER_KEYS.issubset(captured["enrichers"])
+    assert {"nvd", "x_twitter", "github", "gitlab", "codeberg", "exploitdb", "news"}.issubset(
+        captured["sources"]
+    )
+    assert {"epss", "kev", "otx", "darkweb"}.issubset(captured["enrichers"])
 
 
 # ── main entry point ─────────────────────────────────────────────────────
@@ -383,14 +389,15 @@ def test_invoke_pipeline_enricher_only_epss(monkeypatch):
 
 
 def test_invoke_pipeline_source_filter(monkeypatch):
-    """Covers lines 353-365: _invoke_pipeline with source filter."""
-    called = {"run": False, "opts": None}
+    """Covers _invoke_pipeline with source filter."""
+    called = {"run": False, "opts": None, "sources": None}
 
     fake_pipeline = MagicMock()
 
-    def fake_run_pipeline(opts):
+    def fake_run_pipeline(opts, sources=None, enrichers=None):
         called["run"] = True
         called["opts"] = opts
+        called["sources"] = sources
 
     fake_pipeline.run_pipeline = fake_run_pipeline
     fake_pipeline.PipelineOptions = MagicMock()
@@ -400,6 +407,7 @@ def test_invoke_pipeline_source_filter(monkeypatch):
     srv = server.Server(cfg)
     srv._invoke_pipeline(["nvd"], [])
     assert called["run"] is True
+    assert set(called["sources"]) == {"nvd"}
 
 
 def test_main_import_guard(monkeypatch):

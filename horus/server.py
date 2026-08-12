@@ -36,6 +36,7 @@ import subprocess
 import sys
 import threading
 import time
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,8 +58,8 @@ DEFAULT_POLL_INTERVALS: dict[str, int] = {
 
 # Sources are run by the main pipeline (CVE/PoC discovery); enrichers
 # are scheduled but applied to the current batch + DB backfill.
-SOURCE_KEYS = {"nvd", "x_twitter", "github", "gitlab", "exploit_db"}
-ENRICHER_KEYS = {"epss", "kev"}
+SOURCE_KEYS = {"nvd", "x_twitter", "github", "gitlab", "codeberg", "exploitdb", "news"}
+ENRICHER_KEYS = {"epss", "kev", "otx", "darkweb"}
 
 
 @dataclass
@@ -88,6 +89,8 @@ class Config:
     check_every_seconds: int = 60
     web: WebConfig = field(default_factory=WebConfig)
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
+    plugin_dirs: list[str] = field(default_factory=lambda: ["~/.config/horus/plugins"])
+    plugins: dict[str, dict] = field(default_factory=dict)
 
     def interval(self, name: str) -> int:
         return self.poll_intervals.get(name, DEFAULT_POLL_INTERVALS.get(name, 3600))
@@ -142,6 +145,35 @@ def load_config(path: str | None) -> Config:
         t = data["telegram"]
         cfg.telegram.enabled = bool(t.get("enabled", cfg.telegram.enabled))
         cfg.telegram.bot_token = str(t.get("bot_token", cfg.telegram.bot_token))
+    if "plugin_dirs" in data and isinstance(data["plugin_dirs"], list):
+        cfg.plugin_dirs = [str(d) for d in data["plugin_dirs"]]
+    if "plugins" in data and isinstance(data["plugins"], dict):
+        cfg.plugins.update(data["plugins"])
+    # Legacy shim: fold sources_enabled/poll_intervals/telegram into cfg.plugins.
+    # Kept parsed above for backward compat with Config.enabled()/interval().
+    _legacy_to_plugin = {"exploit_db": "exploitdb"}
+    legacy_used = False
+    if "sources_enabled" in data and isinstance(data["sources_enabled"], dict):
+        legacy_used = True
+        for k, v in data["sources_enabled"].items():
+            cfg.plugins.setdefault(_legacy_to_plugin.get(k, k), {})["enabled"] = bool(v)
+    if "poll_intervals" in data and isinstance(data["poll_intervals"], dict):
+        legacy_used = True
+        for k, v in data["poll_intervals"].items():
+            cfg.plugins.setdefault(_legacy_to_plugin.get(k, k), {})["interval_seconds"] = int(v)
+    if "telegram" in data and isinstance(data["telegram"], dict):
+        legacy_used = True
+        t = data["telegram"]
+        cfg.telegram.enabled = bool(t.get("enabled", cfg.telegram.enabled))
+        cfg.telegram.bot_token = str(t.get("bot_token", cfg.telegram.bot_token))
+        cfg.plugins.setdefault("telegram", {})["enabled"] = cfg.telegram.enabled
+    if legacy_used:
+        warnings.warn(
+            "horus.yaml 'sources_enabled'/'poll_intervals'/'telegram' are deprecated; "
+            "use 'plugins:' + 'plugin_dirs:'. Removed in next minor.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     return cfg
 
 
@@ -202,17 +234,38 @@ class Server:
     # ── notification hook ────────────────────────────────────────────────────
 
     def _register_notification_hook(self) -> None:
-        """Register the pipeline end hook for Telegram notification dispatch."""
+        """Register the pipeline end hook for plugin notification dispatch."""
         token = self.cfg.telegram.resolved_token()
         if not token:
             self._log("[WARN] telegram enabled but no bot token; notifications disabled")
             return
         try:
-            from .notifications.dispatcher import dispatch
+            from .core.plugin_types import NotificationContext
             from .pipeline import register_end_hook
+            from .storage import db as _storage
 
-            register_end_hook(lambda result: dispatch(result.events, token))
-            self._log("telegram notification dispatch registered")
+            mgr = self._build_manager()
+            notifs = mgr.notifications()
+            if not notifs:
+                return
+            with _storage.connect() as conn:
+                users = conn.execute(
+                    "SELECT id, username, telegram_chat_id FROM user WHERE telegram_chat_id IS NOT NULL"
+                ).fetchall()
+
+            def _send(chat_id, message):
+                from .bot.api import TelegramAPI, TelegramError
+
+                try:
+                    TelegramAPI(token).send_message(chat_id, message)
+                except TelegramError as e:
+                    print(f"[notify] failed to notify {chat_id}: {e}", file=sys.stderr)
+
+            prefs = {}  # per-plugin prefs default; telegram plugin uses ctx.prefs.get(kind, False)
+            for _name, plugin in notifs.items():
+                ctx = NotificationContext(token=token, users=users, prefs=prefs, send=_send)
+                register_end_hook(lambda result, p=plugin, c=ctx: p.notify(result.events, c))
+            self._log("notification dispatch registered")
         except Exception as e:
             self._log(f"[WARN] failed to register notification hook: {e}")
 
@@ -356,29 +409,34 @@ class Server:
 
     # ── cycles ───────────────────────────────────────────────────────────
 
+    def _build_manager(self):
+        """Build a PluginManager from bundled plugins + cfg.plugin_dirs, with overrides applied."""
+        from pathlib import Path
+
+        from .plugin_manager import PluginManager
+
+        bundled = Path(__file__).parent / "plugins"
+        ext = [Path(d).expanduser() for d in self.cfg.plugin_dirs]
+        mgr = PluginManager(bundled_root=bundled, external_dirs=ext)
+        mgr.apply_config(self.cfg.plugins)
+        return mgr
+
     def run_once(self) -> None:
         """Run all enabled sources/enrichers once, ignoring intervals."""
         db.initialize()
-        self._invoke_pipeline(
-            sources=[s for s in SOURCE_KEYS if self.cfg.enabled(s)],
-            enrichers=[e for e in ENRICHER_KEYS if self.cfg.enabled(e)],
-        )
+        mgr = self._build_manager()
+        self._invoke_pipeline(sources=list(mgr.sources()), enrichers=list(mgr.enrichers()))
 
     def run_due(self) -> None:
         """Run any sources/enrichers whose interval has elapsed."""
         now = time.time()
+        mgr = self._build_manager()
         due_sources: list[str] = []
         due_enrichers: list[str] = []
         with db.connect() as conn:
-            for name in SOURCE_KEYS:
-                if not self.cfg.enabled(name):
-                    continue
-                if now - _last_run_epoch(conn, name) >= self.cfg.interval(name):
-                    due_sources.append(name)
-            for name in ENRICHER_KEYS:
-                if not self.cfg.enabled(name):
-                    continue
-                if now - _last_run_epoch(conn, name) >= self.cfg.interval(name):
+            due_sources = mgr.due_sources(now, lambda n: _last_run_epoch(conn, n))
+            for name, p in mgr.enrichers().items():
+                if now - _last_run_epoch(conn, name) >= p.manifest.interval_seconds:
                     due_enrichers.append(name)
         if not due_sources and not due_enrichers:
             return
@@ -441,16 +499,21 @@ class Server:
 
         from .pipeline import PipelineOptions, run_pipeline
 
+        mgr = self._build_manager()
+        src = {n: mgr.get(n) for n in sources if mgr.get(n) is not None}
+        enr = {n: mgr.get(n) for n in enrichers if mgr.get(n) is not None}
         run_pipeline(
             PipelineOptions(
-                source_filter=set(sources),
-                enricher_filter=set(enrichers) if enrichers else set(),
+                source_filter=set(src),
+                enricher_filter=set(enr) or set(),
                 quiet=True,
                 save_report_md=False,
                 save_graph_html=False,
                 print_report=False,
                 log=lambda m: self._log(m),
-            )
+            ),
+            sources=src,
+            enrichers=enr,
         )
 
     # ── logging ──────────────────────────────────────────────────────────

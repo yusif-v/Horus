@@ -18,7 +18,7 @@ import json
 import logging
 import pkgutil
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -81,9 +81,6 @@ def discover_enrichers() -> dict[str, Any]:
 
 # ── Options & result ─────────────────────────────────────────────────────────
 
-# CVE-producing source names (run first so their IDs are visible to PoC sources).
-CVE_SOURCE_NAMES = {"nvd"}
-
 
 @dataclass
 class PipelineOptions:
@@ -136,6 +133,26 @@ class PipelineResult:
 # ── Selection helpers ────────────────────────────────────────────────────────
 
 
+def _pkind(p: Any) -> str:
+    """Plugin kind tag ("cve"/"poc"/"news"); works for Plugins and raw modules."""
+    return getattr(p, "plugin_kind_tag", None) or getattr(p, "KIND", "") or ""
+
+
+def _pprovides(p: Any) -> list[str]:
+    """Plugin `provides` list; works for Plugins and raw modules."""
+    return getattr(p, "provides", None) or getattr(p, "PROVIDES", []) or []
+
+
+def _pconsumes(p: Any) -> list[str]:
+    """Plugin `consumes` list; works for Plugins and raw modules."""
+    return getattr(p, "consumes", None) or getattr(p, "CONSUMES", []) or []
+
+
+def _pname(p: Any, name: str) -> str:
+    """Human-readable plugin name; works for Plugins and raw modules."""
+    return getattr(p, "display_name", None) or getattr(p, "NAME", None) or name
+
+
 def _select(
     plugins: dict[str, Any],
     filter_: set[str] | None,
@@ -143,7 +160,7 @@ def _select(
 ) -> dict[str, Any]:
     """Pick which plugins run this cycle.
 
-    `filter_=None` → all DEFAULT_ENABLED plugins minus `disabled`.
+    `filter_=None` → all enabled-by-default plugins minus `disabled`.
     `filter_={...}` → exactly those names (filter wins; disabled ignored).
     """
     if filter_ is not None:
@@ -151,7 +168,10 @@ def _select(
     return {
         k: v
         for k, v in plugins.items()
-        if getattr(v, "DEFAULT_ENABLED", True) and k not in disabled
+        if getattr(
+            v, "DEFAULT_ENABLED", getattr(getattr(v, "manifest", None), "enabled_by_default", True)
+        )
+        and k not in disabled
     }
 
 
@@ -195,10 +215,19 @@ def run_pipeline(
         (lambda msg: None) if opts.quiet else (lambda msg: print(msg, file=sys.stderr))
     )
 
-    if sources is None:
-        sources = discover_sources()
-    if enrichers is None:
-        enrichers = discover_enrichers()
+    if sources is None or enrichers is None:
+        from pathlib import Path
+
+        from .plugin_manager import PluginManager
+
+        bundled = Path(__file__).parent / "plugins"
+        mgr = PluginManager(
+            bundled_root=bundled, external_dirs=[Path("~/.config/horus/plugins").expanduser()]
+        )
+        if sources is None:
+            sources = mgr.sources()
+        if enrichers is None:
+            enrichers = mgr.enrichers()
 
     selected_sources = _select(sources, opts.source_filter, opts.disabled_sources)
     selected_enrichers = _select(enrichers, opts.enricher_filter, opts.disabled_enrichers)
@@ -229,11 +258,10 @@ def run_pipeline(
     def _run_source(name: str, mod: Any) -> dict[str, Any]:
         nonlocal step
         step += 1
-        label = getattr(mod, "NAME", name)
+        label = _pname(mod, name)
         log(f"[{step}/{total_steps}] running {label}...")
-        provided = (
-            {"x_discovered_urls": x_discovered_urls} if name in ("github", "codeberg") else {}
-        )
+        consumes = _pconsumes(mod)
+        provided = {c: x_discovered_urls for c in consumes} if consumes else {}
         ctx = SourceContext(
             known_cve_ids=known_cve_ids,
             known_poc_urls=known_poc_urls,
@@ -259,19 +287,19 @@ def run_pipeline(
             return {}
 
     # 1a — CVE sources first
-    cve_source_names: Iterable[str] = sorted(CVE_SOURCE_NAMES & set(selected_sources))
+    cve_source_names = sorted(n for n, p in selected_sources.items() if _pkind(p) == "cve")
     for name in cve_source_names:
         _run_source(name, selected_sources[name])
     known_cve_ids.update({c.id.upper() for c in all_cves})
 
-    # 1b — PoC sources, x_twitter first so github can enrich its URLs.
+    # 1b — PoC sources, providers (x_twitter) first so consumers can enrich URLs.
     poc_source_names = sorted(
-        set(selected_sources) - CVE_SOURCE_NAMES,
-        key=lambda n: (n != "x_twitter", n),
+        (n for n, p in selected_sources.items() if _pkind(p) != "cve"),
+        key=lambda n: (0 if _pprovides(selected_sources[n]) else 1, n),
     )
     for name in poc_source_names:
         source_result = _run_source(name, selected_sources[name])
-        if name == "x_twitter":
+        if "x_discovered_urls" in _pprovides(selected_sources[name]):
             x_discovered_urls = source_result.get("x_discovered_urls", [])
 
     # 1c — Fetch CVEs referenced by PoCs from NVD
@@ -319,7 +347,7 @@ def run_pipeline(
     enricher_ctx = EnricherContext(cves=cves, pocs=pocs)
     for name, mod in sorted(selected_enrichers.items()):
         step += 1
-        label = getattr(mod, "NAME", name)
+        label = _pname(mod, name)
         log(f"[{step}/{total_steps}] running {label}...")
         try:
             mod.enrich(enricher_ctx)
