@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -122,7 +123,7 @@ class PluginManager:
         )
 
     # ── accessors ─────────────────────────────────────────────────────
-    def apply_config(self, plugins_cfg: dict[str, dict]) -> None:
+    def apply_config(self, plugins_cfg: dict[str, dict[str, Any]]) -> None:
         """Merge enable/interval/config overrides from horus.yaml `plugins:`."""
         for name, over in plugins_cfg.items():
             p = self._plugins.get(name)
@@ -134,20 +135,20 @@ class PluginManager:
                 p.config = dict(over["config"])
             # enabled is handled at accessor time via get_enabled()
             if "enabled" in over:
-                p._override_enabled = bool(over["enabled"])
+                p._override_enabled = bool(over["enabled"])  # type: ignore[attr-defined]
 
     def is_enabled(self, name: str) -> bool:
         p = self._plugins.get(name)
         if p is None:
             return False
         if hasattr(p, "_override_enabled"):
-            return p._override_enabled
+            return p._override_enabled  # type: ignore[no-any-return]
         return p.manifest.enabled_by_default
 
     def _by_kind(self, kind: PluginKind) -> dict[str, Plugin]:
         return {n: p for n, p in self._plugins.items() if p.kind == kind and self.is_enabled(n)}
 
-    def due_sources(self, now_epoch: float, last_run_getter) -> list[str]:
+    def due_sources(self, now_epoch: float, last_run_getter: Callable[[str], float]) -> list[str]:
         out = []
         for name, p in self.sources().items():
             last = last_run_getter(name) or 0.0
