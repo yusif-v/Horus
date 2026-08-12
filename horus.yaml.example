@@ -2,26 +2,37 @@
 # Pass via: python3 -m horus --server --config horus.yaml
 # All keys are optional; omitted keys fall back to defaults in horus/server.py.
 
-# Per-source poll intervals (seconds). Server only runs a source when
-# now - last_run >= interval.
-poll_intervals:
-  nvd:         3600   # 1h  — NVD updates roughly every 2h
-  x_twitter:   1800   # 30m — social moves fast
-  github:      3600   # 1h  — search API rate-limited
-  gitlab:      3600   # 1h
-  exploit_db:  7200   # 2h  — slower moving
-  epss:        86400  # 24h — daily CSV
-  kev:         86400  # 24h — daily catalog
+# External plugin directories (folder layout: <kind>/<name>/ with plugin.toml + main.py).
+plugin_dirs:
+  - ~/.config/horus/plugins
 
-# Toggle individual sources/enrichers. Defaults to true when omitted.
-sources_enabled:
-  nvd:        true
-  x_twitter:  true
-  github:     true
-  gitlab:     true
-  exploit_db: true
-  epss:       true
-  kev:        true
+# Per-plugin overrides keyed by plugin name (bundled AND external).
+# Each entry may set: enabled, interval_seconds, config (plugin-specific).
+plugins:
+  nvd:
+    interval_seconds: 3600   # 1h  — NVD updates roughly every 2h
+  x_twitter:
+    interval_seconds: 1800   # 30m — social moves fast
+  github:
+    interval_seconds: 3600   # 1h  — search API rate-limited
+  gitlab:
+    interval_seconds: 3600   # 1h
+  exploitdb:
+    interval_seconds: 7200   # 2h  — slower moving
+  codeberg:
+    interval_seconds: 3600   # 1h
+  news:
+    interval_seconds: 3600   # 1h
+  epss:
+    interval_seconds: 86400  # 24h — daily CSV
+  kev:
+    interval_seconds: 86400  # 24h — daily catalog
+  otx:
+    interval_seconds: 86400  # 24h — daily feed
+  darkweb:
+    interval_seconds: 86400  # 24h — daily feed
+  telegram:
+    enabled: true
 
 # How often the scheduler wakes up to check which sources are due.
 check_every_seconds: 60
@@ -43,5 +54,4 @@ web:
 # Bot username (without @) can be set via TELEGRAM_BOT_USERNAME env var.
 # To disable, set enabled: false or omit this section entirely.
 telegram:
-  enabled: false
-  bot_token: ""  # or set TELEGRAM_BOT_TOKEN env var
+  bot_token: "YOUR_BOT_TOKEN"  # or set TELEGRAM_BOT_TOKEN env var
