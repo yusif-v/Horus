@@ -406,28 +406,38 @@ def _plugin_write_config(config_path: str, data: dict[str, Any]) -> None:
         p.write_text(json.dumps(data, indent=2, sort_keys=False))
 
 
-def _plugin_set_enabled(config_path: str | None, name: str, enabled: bool) -> None:
-    """Set the `enabled` flag for a plugin in the config's `plugins:` block."""
+def _plugin_set_enabled(config_path: str | None, name: str, enabled: bool) -> bool:
+    """Set the `enabled` flag for a plugin in the config's `plugins:` block.
+
+    Returns True when the change was persisted to a config file, False when
+    there is no config file (callers must not claim success).
+    """
     if not config_path:
         logger.warning("no config file; use --config to persist enable/disable state")
-        return
+        return False
     doc = _plugin_read_config(config_path)
     plugins = doc.setdefault("plugins", {})
     entry = plugins.setdefault(name, {})
     entry["enabled"] = bool(enabled)
     _plugin_write_config(config_path, doc)
+    return True
 
 
-def _plugin_set_config(config_path: str | None, name: str, key: str, value: str | None) -> None:
-    """Set a config key for a plugin in the config's `plugins:` block."""
+def _plugin_set_config(config_path: str | None, name: str, key: str, value: str | None) -> bool:
+    """Set a config key for a plugin in the config's `plugins:` block.
+
+    Returns True when the change was persisted to a config file, False when
+    there is no config file (callers must not claim success).
+    """
     if not config_path:
         logger.warning("no config file; use --config to persist plugin config")
-        return
+        return False
     doc = _plugin_read_config(config_path)
     plugins = doc.setdefault("plugins", {})
     entry = plugins.setdefault(name, {})
     entry[key] = value
     _plugin_write_config(config_path, doc)
+    return True
 
 
 def _plugin_show_config(config_path: str | None, name: str) -> None:
@@ -522,14 +532,20 @@ def _cmd_plugin(args: Any) -> None:
         errs = validate_plugin(target)
         print("OK" if not errs else "INVALID:\n" + "\n".join(errs))
     elif args.cmd in ("enable", "disable"):
-        _plugin_set_enabled(args.config, args.name, args.cmd == "enable")
-        print(f"{args.name} {'enabled' if args.cmd == 'enable' else 'disabled'}")
+        persisted = _plugin_set_enabled(args.config, args.name, args.cmd == "enable")
+        if persisted:
+            print(f"{args.name} {'enabled' if args.cmd == 'enable' else 'disabled'}")
+        else:
+            print(f"no config file; nothing persisted for '{args.name}'")
     elif args.cmd == "config":
         if args.key is None:
             _plugin_show_config(args.config, args.name)
         else:
-            _plugin_set_config(args.config, args.name, args.key, args.value)
-            print(f"set {args.name}.{args.key} = {args.value}")
+            persisted = _plugin_set_config(args.config, args.name, args.key, args.value)
+            if persisted:
+                print(f"set {args.name}.{args.key} = {args.value}")
+            else:
+                print(f"no config file; nothing persisted for '{args.name}'")
     elif args.cmd == "add":
         import shutil
 

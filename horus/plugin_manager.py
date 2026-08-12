@@ -8,6 +8,7 @@ plugin (bad manifest, missing entrypoint export, import error) is recorded in
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import logging
 import sys
@@ -73,6 +74,18 @@ def _load_module(entry: Path, entrypoint: str) -> Any:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _load_bundled_module(kind: PluginKind, entry: Path, entrypoint: str) -> Any:
+    """Load a bundled plugin through its real package path.
+
+    Bundled plugins live under `horus.plugins/<kind_dir>/<name>/`, so they
+    are imported via `importlib.import_module` — the same module instance
+    tests, the CLI, and the web layer import directly. External plugins keep
+    the spec-based `_load_module` path.
+    """
+    sub = _KIND_DIRS[kind]
+    return importlib.import_module(f"horus.plugins.{sub}.{entry.name}.{entrypoint}")
 
 
 def scaffold_plugin(kind: PluginKind, name: str, dest_dir: Path) -> Path:
@@ -158,7 +171,12 @@ class PluginManager:
         if ptype not in (kind.value, _KIND_DIRS[kind]):
             raise ValueError(f"type '{ptype}' != dir '{kind.value}'")
         entrypoint = p.get("entrypoint", "main")
-        mod = _load_module(entry, entrypoint)
+        # Bundled plugins import through their package path so there is ONE
+        # module instance per plugin (tests/web/cli import them the same way).
+        if entry.resolve().is_relative_to((Path(__file__).parent / "plugins").resolve()):
+            mod = _load_bundled_module(kind, entry, entrypoint)
+        else:
+            mod = _load_module(entry, entrypoint)
         export = _EXPORT[kind]
         if not hasattr(mod, export) or not callable(getattr(mod, export)):
             raise ValueError(f"missing export '{export}'")

@@ -8,7 +8,16 @@ from horus.plugin_manager import PluginManager
 
 BUNDLED = Path(__file__).parent.parent.parent / "horus" / "plugins"
 
-EXPECTED = ["nvd", "x_twitter", "github", "gitlab", "codeberg", "exploitdb", "news"]
+EXPECTED = [
+    "nvd",
+    "x_twitter",
+    "github",
+    "gitlab",
+    "codeberg",
+    "exploitdb",
+    "news",
+    "resource_intelligence",
+]
 
 
 def test_all_builtin_sources_discovered():

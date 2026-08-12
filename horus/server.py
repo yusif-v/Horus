@@ -58,7 +58,16 @@ DEFAULT_POLL_INTERVALS: dict[str, int] = {
 
 # Sources are run by the main pipeline (CVE/PoC discovery); enrichers
 # are scheduled but applied to the current batch + DB backfill.
-SOURCE_KEYS = {"nvd", "x_twitter", "github", "gitlab", "codeberg", "exploitdb", "news"}
+SOURCE_KEYS = {
+    "nvd",
+    "x_twitter",
+    "github",
+    "gitlab",
+    "codeberg",
+    "exploitdb",
+    "news",
+    "resource_intelligence",
+}
 ENRICHER_KEYS = {"epss", "kev", "otx", "darkweb"}
 
 
@@ -255,19 +264,6 @@ class Server:
             notifs = mgr.notifications()
             if not notifs:
                 return
-            with _storage.connect() as conn:
-                users = conn.execute(
-                    "SELECT id, username, telegram_chat_id FROM user WHERE telegram_chat_id IS NOT NULL"
-                ).fetchall()
-                # A kind is enabled if any user enabled it, else its default.
-                merged_prefs: dict[str, bool] = dict(DEFAULT_PREFS)
-                for user_id, _username, _chat_id in users:
-                    rows = conn.execute(
-                        "SELECT kind, enabled FROM notification_pref WHERE user_id = ?",
-                        (user_id,),
-                    ).fetchall()
-                    for kind, enabled in rows:
-                        merged_prefs[kind] = merged_prefs.get(kind, False) or bool(enabled)
 
             def _send(chat_id, message):
                 from .bot.api import TelegramAPI, TelegramError
@@ -277,9 +273,32 @@ class Server:
                 except TelegramError as e:
                     print(f"[notify] failed to notify {chat_id}: {e}", file=sys.stderr)
 
-            for _name, plugin in notifs.items():
-                ctx = NotificationContext(token=token, users=users, prefs=merged_prefs, send=_send)
-                register_end_hook(lambda result, p=plugin, c=ctx: p.notify(result.events, c))
+            def _dispatch(result) -> None:
+                # Users/prefs are re-queried on EVERY dispatch so users who
+                # link their chat via the bot's `/start <token>` after
+                # registration still receive notifications without a restart.
+                with _storage.connect() as conn:
+                    users = conn.execute(
+                        "SELECT id, username, telegram_chat_id FROM user"
+                        " WHERE telegram_chat_id IS NOT NULL"
+                    ).fetchall()
+                    # A kind is enabled if any user enabled it, else its default.
+                    merged_prefs: dict[str, bool] = dict(DEFAULT_PREFS)
+                    for user_id, _username, _chat_id in users:
+                        rows = conn.execute(
+                            "SELECT kind, enabled FROM notification_pref WHERE user_id = ?",
+                            (user_id,),
+                        ).fetchall()
+                        for kind, enabled in rows:
+                            merged_prefs[kind] = merged_prefs.get(kind, False) or bool(enabled)
+
+                for _name, plugin in notifs.items():
+                    ctx = NotificationContext(
+                        token=token, users=users, prefs=merged_prefs, send=_send
+                    )
+                    plugin.notify(result.events, ctx)
+
+            register_end_hook(_dispatch)
             self._log("notification dispatch registered")
         except Exception as e:
             self._log(f"[WARN] failed to register notification hook: {e}")
@@ -510,6 +529,14 @@ class Server:
                     for cve in cves:
                         if cve.kev:
                             conn.execute("UPDATE cve SET kev = 1 WHERE id = ?", (cve.id,))
+                if "otx" in enrichers:
+                    from .plugins.enrichers.otx.main import backfill as otx_backfill
+
+                    otx_backfill(conn)
+                if "darkweb" in enrichers:
+                    from .plugins.enrichers.darkweb.main import backfill as darkweb_backfill
+
+                    darkweb_backfill(conn)
             return
 
         from .pipeline import PipelineOptions, run_pipeline

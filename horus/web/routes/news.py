@@ -58,7 +58,7 @@ def list_news():
         )
 
     # Build source filter chips from available sources
-    from horus.plugins.sources.news.main import FEEDS
+    from horus.core.feeds import FEEDS
 
     source_filters = [
         {

@@ -10,39 +10,15 @@ from datetime import datetime, timezone
 from typing import Any
 
 from horus.core.context import SourceContext
+from horus.core.feeds import FEEDS
 from horus.storage import db
 
 NAME = "News/RSS Feed"
 DEFAULT_ENABLED = True
 KIND = "news"
 
-# Feed configurations: key → (url, default_tier)
-FEEDS: dict[str, tuple[str, int]] = {
-    "cisa": (
-        "https://www.cisa.gov/cybersecurity-advisories/all.xml",
-        4,
-    ),
-    "hacker_news": (
-        "https://feeds.feedburner.com/TheHackersNews",
-        3,
-    ),
-    "bleepingcomputer": (
-        "https://www.bleepingcomputer.com/feed/",
-        3,
-    ),
-    "packet_storm": (
-        "https://packetstormsecurity.com/feed.xml",
-        2,
-    ),
-    "exploit_db": (
-        "https://www.exploit-db.com/rss.xml",
-        2,
-    ),
-    "nvd": (
-        "https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml",
-        1,
-    ),
-}
+# Feed configurations live in horus.core.feeds (shared with the web layer
+# and core/news_linker so they don't depend on this plugin package).
 
 # Tier 1 keywords — critical sources / KEV
 _TIER1_KEYWORDS = ("cisa", "kev", "known exploited", "0-day", "zero-day", "actively exploited")

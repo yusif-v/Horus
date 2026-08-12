@@ -269,6 +269,7 @@ def run_pipeline(
             min_cvss=opts.min_cvss,
             last_run=last_runs.get(name),
             provided=provided,
+            config=getattr(mod, "config", {}) or {},
         )
         try:
             src_result: dict[str, Any] = mod.run(ctx) or {}
@@ -350,7 +351,13 @@ def run_pipeline(
         label = _pname(mod, name)
         log(f"[{step}/{total_steps}] running {label}...")
         try:
-            mod.enrich(enricher_ctx)
+            mod.enrich(
+                EnricherContext(
+                    cves=cves,
+                    pocs=pocs,
+                    config=getattr(mod, "config", {}) or {},
+                )
+            )
         except Exception as e:
             logger.error("%s failed: %s", label, e)
 

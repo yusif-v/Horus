@@ -36,7 +36,7 @@ class NotificationContext:
 
     token: str | None
     users: list[Any]
-    prefs: dict[str, dict[str, bool]]
+    prefs: dict[str, bool]
     send: Callable[[str, str], None]
 
 

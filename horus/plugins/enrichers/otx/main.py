@@ -75,6 +75,41 @@ def _persist_otx_iocs(
     return inserted
 
 
+def backfill(conn: Any) -> int:
+    """DB-wide OTX IOC backfill: fetch pulses and persist IOCs for every linked CVE.
+
+    Enrichers-only server cycles call this against the whole CVE corpus
+    (analogous to ``epss.backfill_all`` / ``kev.enrich`` on DB rows).
+    Returns the number of IOC rows written.
+    """
+    try:
+        pulses = get_recent_pulses(limit=50)
+    except Exception as e:
+        log.warning("OTX backfill: pulse fetch failed: %s", e)
+        return 0
+
+    if not pulses:
+        return 0
+
+    total = 0
+    for pulse in pulses:
+        pulse_id = pulse.get("id", "")
+        if not pulse_id:
+            continue
+        cves = extract_cves_from_pulse(pulse)
+        if not cves:
+            continue
+        iocs = get_all_pulse_iocs(pulse)
+        if not iocs:
+            continue
+        for cve in cves:
+            total += _persist_otx_iocs(conn, cve, pulse_id, iocs)
+
+    if total:
+        log.info("OTX backfill: %d IOCs persisted", total)
+    return total
+
+
 def enrich(ctx: EnricherContext) -> None:
     """Fetch OTX pulses and link IOCs to CVEs. Mutates CVEs in-place.
 

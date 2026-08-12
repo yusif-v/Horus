@@ -149,6 +149,26 @@ def enrich(ctx: EnricherContext) -> None:
             )
 
 
+def backfill(conn: Any) -> int:
+    """DB-wide dark-web IOC backfill: search ThreatFox for every known CVE and persist.
+
+    Enrichers-only server cycles call this against the whole CVE corpus
+    (analogous to ``epss.backfill_all``). Product-domain C2 lookups are
+    skipped here because `affected` products are not reconstructed from the
+    DB — CVE-ID IOC search covers the corpus. Returns the number of IOC
+    rows written.
+    """
+    cve_ids = [row[0] for row in conn.execute("SELECT id FROM cve")]
+    total = 0
+    for cve_id in cve_ids:
+        iocs = _search_threatfox_for_cve(cve_id, [])
+        if iocs:
+            total += persist_threatfox_iocs(conn, cve_id, iocs)
+    if total:
+        log.info("Dark web backfill: %d IOCs persisted", total)
+    return total
+
+
 def persist_threatfox_iocs(
     conn: Any,
     cve_id: str,

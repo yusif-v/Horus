@@ -35,49 +35,49 @@ class TestResourceModel:
 
 class TestResourceClassification:
     def test_classify_poc(self):
-        from horus.core.resource_intelligence import _classify_resource_type
+        from horus.plugins.sources.resource_intelligence.main import _classify_resource_type
 
         text = "New PoC released for CVE-2026-1234"
         assert _classify_resource_type(text, UrlType.GITHUB_REPO) == "poc"
 
     def test_classify_exploit(self):
-        from horus.core.resource_intelligence import _classify_resource_type
+        from horus.plugins.sources.resource_intelligence.main import _classify_resource_type
 
         text = "Exploit code for Windows kernel vulnerability"
         assert _classify_resource_type(text, UrlType.GITHUB_REPO) == "exploit"
 
     def test_classify_bypass(self):
-        from horus.core.resource_intelligence import _classify_resource_type
+        from horus.plugins.sources.resource_intelligence.main import _classify_resource_type
 
         text = "BitLocker bypass technique using physical access"
         assert _classify_resource_type(text, UrlType.GITHUB_REPO) == "bypass"
 
     def test_classify_tool(self):
-        from horus.core.resource_intelligence import _classify_resource_type
+        from horus.plugins.sources.resource_intelligence.main import _classify_resource_type
 
         text = "Red team tool for lateral movement"
         assert _classify_resource_type(text, UrlType.GITHUB_REPO) == "tool"
 
     def test_classify_advisory(self):
-        from horus.core.resource_intelligence import _classify_resource_type
+        from horus.plugins.sources.resource_intelligence.main import _classify_resource_type
 
         text = "Security advisory: 0day in popular library"
         assert _classify_resource_type(text, UrlType.GENERIC) == "advisory"
 
     def test_classify_gist_as_poc(self):
-        from horus.core.resource_intelligence import _classify_resource_type
+        from horus.plugins.sources.resource_intelligence.main import _classify_resource_type
 
         text = "Check this out"
         assert _classify_resource_type(text, UrlType.GITHUB_GIST) == "poc"
 
     def test_classify_pastebin_as_poc(self):
-        from horus.core.resource_intelligence import _classify_resource_type
+        from horus.plugins.sources.resource_intelligence.main import _classify_resource_type
 
         text = "Some code snippet"
         assert _classify_resource_type(text, UrlType.PASTEBIN) == "poc"
 
     def test_classify_hackerone_as_disclosure(self):
-        from horus.core.resource_intelligence import _classify_resource_type
+        from horus.plugins.sources.resource_intelligence.main import _classify_resource_type
 
         text = "Bug bounty report"
         assert _classify_resource_type(text, UrlType.HACKERONE) == "disclosure"
@@ -85,7 +85,7 @@ class TestResourceClassification:
 
 class TestTagExtraction:
     def test_extract_rce_tag(self):
-        from horus.core.resource_intelligence import _extract_tags
+        from horus.plugins.sources.resource_intelligence.main import _extract_tags
 
         text = "RCE exploit for CVE-2026-1234 in Windows kernel"
         tags = _extract_tags(text)
@@ -94,7 +94,7 @@ class TestTagExtraction:
         assert "windows" in tags
 
     def test_extract_bitlocker_tag(self):
-        from horus.core.resource_intelligence import _extract_tags
+        from horus.plugins.sources.resource_intelligence.main import _extract_tags
 
         text = "BitLocker bypass using TPM vulnerability"
         tags = _extract_tags(text)
@@ -102,7 +102,7 @@ class TestTagExtraction:
         assert "tpm" in tags
 
     def test_extract_multiple_tags(self):
-        from horus.core.resource_intelligence import _extract_tags
+        from horus.plugins.sources.resource_intelligence.main import _extract_tags
 
         text = "LPE via SQL injection in Active Directory"
         tags = _extract_tags(text)
@@ -110,14 +110,14 @@ class TestTagExtraction:
         assert "sql injection" in tags
 
     def test_max_10_tags(self):
-        from horus.core.resource_intelligence import _extract_tags
+        from horus.plugins.sources.resource_intelligence.main import _extract_tags
 
         text = "rce lpe xss sqli csrf ssrf xxe command injection file inclusion buffer overflow use-after-free"
         tags = _extract_tags(text)
         assert len(tags) == 10
 
     def test_case_insensitive(self):
-        from horus.core.resource_intelligence import _extract_tags
+        from horus.plugins.sources.resource_intelligence.main import _extract_tags
 
         text = "RCE Exploit for LINUX kernel"
         tags = _extract_tags(text)

@@ -388,6 +388,40 @@ def test_invoke_pipeline_enricher_only_epss(monkeypatch):
     assert called["backfill"] is True
 
 
+def test_invoke_pipeline_enricher_only_otx(monkeypatch):
+    """Enrichers-only cycles now run the DB-wide OTX IOC backfill."""
+    called = {"backfill": False}
+
+    def fake_backfill(conn):
+        called["backfill"] = True
+
+    fake_otx = MagicMock()
+    fake_otx.backfill = fake_backfill
+    monkeypatch.setitem(sys.modules, "horus.plugins.enrichers.otx.main", fake_otx)
+
+    cfg = server.Config()
+    srv = server.Server(cfg)
+    srv._invoke_pipeline([], ["otx"])
+    assert called["backfill"] is True
+
+
+def test_invoke_pipeline_enricher_only_darkweb(monkeypatch):
+    """Enrichers-only cycles now run the DB-wide dark-web IOC backfill."""
+    called = {"backfill": False}
+
+    def fake_backfill(conn):
+        called["backfill"] = True
+
+    fake_darkweb = MagicMock()
+    fake_darkweb.backfill = fake_backfill
+    monkeypatch.setitem(sys.modules, "horus.plugins.enrichers.darkweb.main", fake_darkweb)
+
+    cfg = server.Config()
+    srv = server.Server(cfg)
+    srv._invoke_pipeline([], ["darkweb"])
+    assert called["backfill"] is True
+
+
 def test_invoke_pipeline_source_filter(monkeypatch):
     """Covers _invoke_pipeline with source filter."""
     called = {"run": False, "opts": None, "sources": None}

@@ -18,7 +18,7 @@ read attributes off `ctx.cli_args`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .model import CVE, PoC
@@ -55,6 +55,10 @@ class SourceContext:
     # the pipeline.
     provided: dict[str, list[str]] = field(default_factory=dict)
 
+    # Per-plugin config merged from `plugins.<name>.config` in horus.yaml.
+    # The plugin's `run(ctx)` reads its own tunables here.
+    config: dict[str, Any] = field(default_factory=dict)
+
     @property
     def x_discovered_urls(self) -> list[str]:
         """Back-compat shortcut for github source."""
@@ -73,3 +77,7 @@ class EnricherContext:
 
     cves: list[CVE]
     pocs: list[PoC]
+
+    # Per-plugin config merged from `plugins.<name>.config` in horus.yaml.
+    # The plugin's `enrich(ctx)` reads its own tunables here.
+    config: dict[str, Any] = field(default_factory=dict)

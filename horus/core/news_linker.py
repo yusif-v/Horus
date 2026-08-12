@@ -152,7 +152,7 @@ def link_cves_to_news(conn: sqlite3.Connection, *, since_days: int = 7) -> dict[
     if critical_cves:
         # Re-scan all RSS feeds for critical CVE coverage
         try:
-            from horus.plugins.sources.news.main import FEEDS
+            from horus.core.feeds import FEEDS
         except ImportError:
             FEEDS = {}
         try:

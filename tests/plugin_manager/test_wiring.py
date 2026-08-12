@@ -116,3 +116,61 @@ def test_run_pipeline_orders_plugin_sources_by_kind_and_provides(monkeypatch):
     assert order == ["nvd", "x_twitter", "github"]
     assert seen["x_twitter"]["provided"] == {}
     assert seen["github"]["provided"] == {"x_discovered_urls": ["https://x.com/u/status/1"]}
+
+
+def test_run_pipeline_passes_plugin_config_to_source(monkeypatch):
+    """A Plugin's merged `config` (from horus.yaml `plugins.<name>.config`) reaches ctx.config."""
+    from horus.storage import db as _db
+
+    _db.initialize()
+    monkeypatch.setattr("horus.core.nvd_fetch.fetch_cve_by_id", lambda _id: None)
+
+    seen: dict[str, dict] = {}
+    nvd = _plugin_source("nvd", kind="cve")
+    nvd.config = {"max": 50, "lookback_days": 30}
+
+    def run(ctx):
+        seen["config"] = dict(ctx.config)
+        return {}
+
+    nvd.module.run = run
+
+    opts = PipelineOptions(
+        source_filter={"nvd"},
+        enricher_filter=set(),
+        quiet=True,
+        save_report_md=False,
+        save_graph_html=False,
+        print_report=False,
+    )
+    run_pipeline(opts, sources={"nvd": nvd}, enrichers={})
+    assert seen["config"] == {"max": 50, "lookback_days": 30}
+
+
+def test_run_pipeline_passes_plugin_config_to_enricher(monkeypatch):
+    """Per-plugin config also reaches EnricherContext for enricher wrappers."""
+    from horus.storage import db as _db
+
+    _db.initialize()
+    monkeypatch.setattr("horus.core.nvd_fetch.fetch_cve_by_id", lambda _id: None)
+
+    seen: dict[str, dict] = {}
+
+    def enrich(ctx):
+        seen["config"] = dict(ctx.config)
+
+    enr = _plugin_source("epss")
+    enr.kind = PluginKind.ENRICHER
+    enr.module.enrich = enrich
+    enr.config = {"cutoff": 0.1}
+
+    opts = PipelineOptions(
+        source_filter=set(),
+        enricher_filter={"epss"},
+        quiet=True,
+        save_report_md=False,
+        save_graph_html=False,
+        print_report=False,
+    )
+    run_pipeline(opts, sources={}, enrichers={"epss": enr})
+    assert seen["config"] == {"cutoff": 0.1}
