@@ -76,11 +76,7 @@ def discover_enrichers() -> dict[str, Any]:
     from .plugin_manager import PluginManager
 
     mgr = PluginManager(bundled_root=Path(__file__).parent / "plugins", external_dirs=[])
-    plugins = {n: p.module for n, p in mgr.enrichers().items()}
-    if plugins:
-        return plugins
-    # Enrichers are not migrated to plugin folders yet (Task 7) — legacy discovery.
-    return _discover_plugins("enrichers", required_export="enrich")
+    return {n: p.module for n, p in mgr.enrichers().items()}
 
 
 # ── Options & result ─────────────────────────────────────────────────────────

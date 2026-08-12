@@ -233,7 +233,7 @@ def _cmd_health_check() -> None:
 
 
 def _cmd_backfill_epss() -> None:
-    from .enrichers.epss import backfill_all
+    from .plugins.enrichers.epss.main import backfill_all
     from .storage import db
 
     db.initialize()

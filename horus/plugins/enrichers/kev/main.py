@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..net.http import fetch_json
+from horus.net.http import fetch_json
 
 if TYPE_CHECKING:
-    from ..core.context import EnricherContext
+    from horus.core.context import EnricherContext
 
 NAME = "CISA KEV"
 DEFAULT_ENABLED = True

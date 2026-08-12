@@ -275,8 +275,10 @@ def test_enricher_sets_otx_count():
     cve = _cve("CVE-2026-1234")
     ctx = EnricherContext(cves=[cve], pocs=[])
 
-    with patch("horus.enrichers.otx.get_recent_pulses", return_value=[_sample_pulse()]):
-        from horus.enrichers import otx
+    with patch(
+        "horus.plugins.enrichers.otx.main.get_recent_pulses", return_value=[_sample_pulse()]
+    ):
+        from horus.plugins.enrichers.otx import main as otx
 
         otx.enrich(ctx)
 
@@ -290,8 +292,8 @@ def test_enricher_no_pulses():
     cve = _cve("CVE-2026-0001")
     ctx = EnricherContext(cves=[cve], pocs=[])
 
-    with patch("horus.enrichers.otx.get_recent_pulses", return_value=[]):
-        from horus.enrichers import otx
+    with patch("horus.plugins.enrichers.otx.main.get_recent_pulses", return_value=[]):
+        from horus.plugins.enrichers.otx import main as otx
 
         otx.enrich(ctx)
 
@@ -312,8 +314,8 @@ def test_enricher_pulse_no_cves():
         "indicators": [{"type": "IPv4", "indicator": "1.2.3.4"}],
     }
 
-    with patch("horus.enrichers.otx.get_recent_pulses", return_value=[pulse]):
-        from horus.enrichers import otx
+    with patch("horus.plugins.enrichers.otx.main.get_recent_pulses", return_value=[pulse]):
+        from horus.plugins.enrichers.otx import main as otx
 
         otx.enrich(ctx)
 
@@ -356,7 +358,7 @@ def test_persist_otx_iocs(tmp_db):
         },
     ]
 
-    from horus.enrichers.otx import _persist_otx_iocs
+    from horus.plugins.enrichers.otx.main import _persist_otx_iocs
 
     count = _persist_otx_iocs(tmp_db, "CVE-2026-1234", "pulse123", iocs)
     assert count == 2
@@ -373,7 +375,7 @@ def test_persist_otx_iocs(tmp_db):
 
 
 def test_persist_empty_iocs(tmp_db):
-    from horus.enrichers.otx import _persist_otx_iocs
+    from horus.plugins.enrichers.otx.main import _persist_otx_iocs
 
     count = _persist_otx_iocs(tmp_db, "CVE-2026-1234", "pulse123", [])
     assert count == 0
@@ -384,7 +386,7 @@ def test_persist_skips_invalid_iocs(tmp_db):
         {"ioc_value": "", "ioc_type": "ip"},  # empty value
         {"ioc_type": "domain"},  # missing value
     ]
-    from horus.enrichers.otx import _persist_otx_iocs
+    from horus.plugins.enrichers.otx.main import _persist_otx_iocs
 
     count = _persist_otx_iocs(tmp_db, "CVE-2026-1234", "pulse123", iocs)
     assert count == 0
@@ -396,7 +398,7 @@ def test_persist_upsert_no_duplicate(tmp_db):
         "ioc_type": "ip",
         "otx_type": "IPv4",
     }
-    from horus.enrichers.otx import _persist_otx_iocs
+    from horus.plugins.enrichers.otx.main import _persist_otx_iocs
 
     _persist_otx_iocs(tmp_db, "CVE-2026-1234", "pulse123", [ioc])
     _persist_otx_iocs(tmp_db, "CVE-2026-1234", "pulse123", [ioc])

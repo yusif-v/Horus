@@ -17,10 +17,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from ..core.threatfox import search_c2, search_ioc
+from horus.core.threatfox import search_c2, search_ioc
 
 if TYPE_CHECKING:
-    from ..core.context import EnricherContext
+    from horus.core.context import EnricherContext
 
 log = logging.getLogger(__name__)
 

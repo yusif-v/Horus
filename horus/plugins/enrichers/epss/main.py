@@ -16,10 +16,10 @@ import sqlite3
 import urllib.request
 from typing import TYPE_CHECKING
 
-from ..storage.db import append_epss_history
+from horus.storage.db import append_epss_history
 
 if TYPE_CHECKING:
-    from ..core.context import EnricherContext
+    from horus.core.context import EnricherContext
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ def enrich(ctx: EnricherContext) -> None:
         logger.info("EPSS: %d/%d CVEs enriched (current batch)", count, len(cves))
 
     # Backfill: score ALL previously-unscored CVEs already in the DB.
-    from ..storage import db as _db
+    from horus.storage import db as _db
 
     try:
         with _db.connect() as conn:

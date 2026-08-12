@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from horus.core.context import EnricherContext
 from horus.core.model import CVE
-from horus.enrichers import epss
+from horus.plugins.enrichers.epss import main as epss
 from horus.storage import db
 
 

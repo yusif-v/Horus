@@ -12,14 +12,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from ..core.otx_client import (
+from horus.core.otx_client import (
     extract_cves_from_pulse,
     get_all_pulse_iocs,
     get_recent_pulses,
 )
 
 if TYPE_CHECKING:
-    from ..core.context import EnricherContext
+    from horus.core.context import EnricherContext
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ def enrich(ctx: EnricherContext) -> None:
 
     Sets otx_ioc_count and trust_otx on CVEs with OTX-sourced IOCs.
     """
-    from ..storage.db import connect
+    from horus.storage.db import connect
 
     try:
         pulses = get_recent_pulses(limit=50)

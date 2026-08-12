@@ -400,13 +400,13 @@ class Server:
             # Enrichers-only cycle: backfill EPSS + run KEV against existing DB.
             with db.connect() as conn:
                 if "epss" in enrichers:
-                    from .enrichers.epss import backfill_all
+                    from .plugins.enrichers.epss.main import backfill_all
 
                     backfill_all(conn)
                 if "kev" in enrichers:
                     from .core.context import EnricherContext
                     from .core.model import CVE
-                    from .enrichers.kev import enrich
+                    from .plugins.enrichers.kev.main import enrich
 
                     # KEV needs CVE objects to mutate; fetch all from DB
                     rows = conn.execute(

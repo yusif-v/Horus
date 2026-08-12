@@ -374,7 +374,7 @@ def test_invoke_pipeline_enricher_only_epss(monkeypatch):
 
     fake_epss = MagicMock()
     fake_epss.backfill_all = fake_backfill
-    monkeypatch.setitem(sys.modules, "horus.enrichers.epss", fake_epss)
+    monkeypatch.setitem(sys.modules, "horus.plugins.enrichers.epss.main", fake_epss)
 
     cfg = server.Config()
     srv = server.Server(cfg)

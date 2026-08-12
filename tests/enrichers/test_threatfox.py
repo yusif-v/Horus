@@ -17,7 +17,7 @@ from horus.core.threatfox import (
     search_c2,
     search_ioc,
 )
-from horus.enrichers import darkweb
+from horus.plugins.enrichers.darkweb import main as darkweb
 
 # ─── Fixtures ──────────────────────────────────────────────────────────────
 

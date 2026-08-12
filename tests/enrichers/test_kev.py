@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from horus.core.context import EnricherContext
 from horus.core.model import CVE
-from horus.enrichers import kev
+from horus.plugins.enrichers.kev import main as kev
 
 
 def _cve(cve_id: str, kev_flag: int = 0, kev_due_date: str | None = None) -> CVE:
