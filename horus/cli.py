@@ -18,6 +18,8 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+from pathlib import Path
+from typing import Any
 
 from . import __version__
 from .logger import setup_logging
@@ -159,6 +161,27 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--config", type=str, default=None, help="Path to YAML/JSON config file (server mode)."
+    )
+
+    # Plugin management
+    p.add_argument(
+        "--plugin",
+        type=str,
+        choices=("list", "enable", "disable", "config", "add", "remove", "scaffold", "validate"),
+        default=None,
+        help="Manage plugins: list, enable, disable, config, add, remove, scaffold, validate.",
+    )
+    p.add_argument("--plugin-kind", type=str, default=None, help="Plugin type (scaffold).")
+    p.add_argument("--plugin-name", type=str, default=None, help="Plugin name or path.")
+    p.add_argument("--plugin-key", type=str, default=None, help="Config key (plugin config set).")
+    p.add_argument(
+        "--plugin-value", type=str, default=None, help="Config value (plugin config set)."
+    )
+    p.add_argument(
+        "--plugins-dir",
+        type=str,
+        default=None,
+        help="External plugins directory (default: ~/.config/horus/plugins).",
     )
 
     # Auto-generated --no-<src> / --skip-<enricher> flags
@@ -344,6 +367,158 @@ def _cmd_auth_status() -> None:
         logger.info("GitHub auth: none (unauthenticated, limit 60/hr)")
 
 
+def _plugin_read_config(config_path: str | None) -> dict[str, Any]:
+    """Parse the full config file (YAML if PyYAML is present, else JSON).
+
+    Returns {} when the file is missing/unparseable so callers can safely
+    rebuild a fresh `plugins:` block.
+    """
+    import json
+
+    if not config_path:
+        return {}
+    p = Path(config_path).expanduser()
+    if not p.exists():
+        return {}
+    try:
+        import yaml
+
+        data = yaml.safe_load(p.read_text()) or {}
+    except ImportError:
+        try:
+            data = json.loads(p.read_text())
+        except json.JSONDecodeError:
+            data = {}
+    return data if isinstance(data, dict) else {}
+
+
+def _plugin_write_config(config_path: str, data: dict[str, Any]) -> None:
+    """Persist the config file, preserving key order via yaml.dump sort_keys=False."""
+    import json
+
+    p = Path(config_path).expanduser()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        import yaml
+
+        p.write_text(yaml.dump(data, sort_keys=False))
+    except ImportError:
+        p.write_text(json.dumps(data, indent=2, sort_keys=False))
+
+
+def _plugin_set_enabled(config_path: str | None, name: str, enabled: bool) -> None:
+    """Set the `enabled` flag for a plugin in the config's `plugins:` block."""
+    if not config_path:
+        logger.warning("no config file; use --config to persist enable/disable state")
+        return
+    doc = _plugin_read_config(config_path)
+    plugins = doc.setdefault("plugins", {})
+    entry = plugins.setdefault(name, {})
+    entry["enabled"] = bool(enabled)
+    _plugin_write_config(config_path, doc)
+
+
+def _plugin_set_config(config_path: str | None, name: str, key: str, value: str | None) -> None:
+    """Set a config key for a plugin in the config's `plugins:` block."""
+    if not config_path:
+        logger.warning("no config file; use --config to persist plugin config")
+        return
+    doc = _plugin_read_config(config_path)
+    plugins = doc.setdefault("plugins", {})
+    entry = plugins.setdefault(name, {})
+    entry[key] = value
+    _plugin_write_config(config_path, doc)
+
+
+def _plugin_show_config(config_path: str | None, name: str) -> None:
+    """Print the config block for a plugin from the `plugins:` section."""
+    from .server import _load_plugins_section
+
+    plugins = _load_plugins_section(config_path) if config_path else {}
+    entry = plugins.get(name)
+    if not entry:
+        print(f"no config for plugin '{name}'")
+        return
+    for k, v in sorted(entry.items()):
+        print(f"  {k}: {v}")
+
+
+def _cmd_plugin(args: Any) -> None:
+    """`horus plugin <subcommand>` — manage plugins via PluginManager."""
+    from .core.plugin_types import PluginKind
+    from .plugin_manager import PluginManager, scaffold_plugin, validate_plugin
+
+    plugins_dir = (
+        Path(args.plugins_dir) if args.plugins_dir else Path("~/.config/horus/plugins").expanduser()
+    )
+    bundled = Path(__file__).parent / "plugins"
+    mgr = PluginManager(bundled_root=bundled, external_dirs=[plugins_dir])
+
+    # Apply enable/disable from config if present.
+    if args.config:
+        from .server import _load_plugins_section
+
+        mgr.apply_config(_load_plugins_section(args.config))
+
+    if args.cmd == "list":
+        buckets = {
+            "source": mgr.sources(),
+            "enricher": mgr.enrichers(),
+            "notification": mgr.notifications(),
+        }
+        for kind, items in buckets.items():
+            for name, p in sorted(items.items()):
+                print(f"[{kind}] {name} v{p.manifest.version} ({p.display_name})")
+        # Flat-layout external plugins (folder directly under an external dir).
+        if plugins_dir.is_dir():
+            for entry in sorted(plugins_dir.iterdir()):
+                if (
+                    entry.is_dir()
+                    and (entry / "plugin.toml").exists()
+                    and mgr.get(entry.name) is None
+                ):
+                    print(f"[external] {entry.name}")
+        for name, err in mgr.broken:
+            print(f"[broken] {name}: {err}")
+    elif args.cmd == "scaffold":
+        kind = PluginKind(args.kind)
+        out = scaffold_plugin(kind, args.name, plugins_dir)
+        print(f"scaffolded {kind.value} plugin -> {out}")
+    elif args.cmd == "validate":
+        target = plugins_dir / args.name
+        if not target.exists():
+            target = next(
+                (
+                    bundled / sub / args.name
+                    for sub in ("sources", "enrichers", "notifications")
+                    if (bundled / sub / args.name).exists()
+                ),
+                None,
+            )
+            if target is None:
+                print(f"plugin '{args.name}' not found")
+                return
+        errs = validate_plugin(target)
+        print("OK" if not errs else "INVALID:\n" + "\n".join(errs))
+    elif args.cmd in ("enable", "disable"):
+        _plugin_set_enabled(args.config, args.name, args.cmd == "enable")
+        print(f"{args.name} {'enabled' if args.cmd == 'enable' else 'disabled'}")
+    elif args.cmd == "config":
+        if args.key is None:
+            _plugin_show_config(args.config, args.name)
+        else:
+            _plugin_set_config(args.config, args.name, args.key, args.value)
+            print(f"set {args.name}.{args.key} = {args.value}")
+    elif args.cmd == "add":
+        import shutil
+
+        dest = plugins_dir / Path(args.name).name
+        shutil.copytree(Path(args.name), dest, dirs_exist_ok=True)
+        print(f"added plugin -> {dest}")
+    elif args.cmd == "remove":
+        print("remove only supported for external plugins; use `horus plugin add` to reinstall")
+
+
 # ── Entry point ─────────────────────────────────────────────────────────────
 
 
@@ -373,6 +548,18 @@ def main(argv: list[str] | None = None) -> None:
         return _cmd_server(args)
     if args.auth_status:
         return _cmd_auth_status()
+    if args.plugin:
+        return _cmd_plugin(
+            argparse.Namespace(
+                cmd=args.plugin,
+                kind=args.plugin_kind,
+                name=args.plugin_name,
+                key=args.plugin_key,
+                value=args.plugin_value,
+                plugins_dir=args.plugins_dir,
+                config=args.config,
+            )
+        )
 
     # ── HORUS_SOURCES_ENABLED / HORUS_SOURCES_DISABLED ────────────────────
     source_filter = set(args.sources.split(",")) if args.sources else None

@@ -39,6 +39,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from .storage import db
 
@@ -142,6 +143,33 @@ def load_config(path: str | None) -> Config:
         cfg.telegram.enabled = bool(t.get("enabled", cfg.telegram.enabled))
         cfg.telegram.bot_token = str(t.get("bot_token", cfg.telegram.bot_token))
     return cfg
+
+
+def _load_plugins_section(config_path: str | None) -> dict[str, Any]:
+    """Return the `plugins:` block of a YAML/JSON config file ({} if absent).
+
+    Shares load_config's parsing strategy: PyYAML if present, else JSON.
+    """
+    if not config_path:
+        return {}
+    p = Path(config_path).expanduser()
+    if not p.exists():
+        return {}
+    raw = p.read_text()
+    data: dict[str, Any]
+    try:
+        import yaml
+
+        data = yaml.safe_load(raw) or {}
+    except ImportError:
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(data, dict):
+        return {}
+    plugins = data.get("plugins", {})
+    return plugins if isinstance(plugins, dict) else {}
 
 
 def _last_run_epoch(conn, name: str) -> float:
