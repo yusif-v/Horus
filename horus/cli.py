@@ -252,22 +252,26 @@ def _cmd_weekly_report(args) -> None:
     with _db_module.connect() as conn:
         weekly_data = gather_weekly_data(conn, weeks_back=args.weeks_back)
 
-    report = render_weekly_report(weekly_data, fmt=args.weekly_format)
+    render_fmt = "html" if args.weekly_format == "pdf" else args.weekly_format
+    report = render_weekly_report(weekly_data, fmt=render_fmt)
 
     if args.ai:
-        from horus.ai import analyze_weekly_report
-
-        ai_result = analyze_weekly_report(weekly_data, report, provider=args.ai_provider)
-        if ai_result:
-            report = f"## AI Threat Analysis\n\n{ai_result.narrative}\n\n---\n\n{report}"
-            if ai_result.has_qa_findings():
-                qa_section = "\n".join(f"- {issue}" for issue in ai_result.qa_issues)
-                report += (
-                    f"\n\n## AI Quality Assurance\n\n"
-                    f"The following issues were identified:\n\n{qa_section}\n"
-                )
+        if render_fmt == "html":
+            logger.warning("--ai is not supported with html/pdf output — rendering template only")
         else:
-            logger.warning("AI analysis unavailable — rendering template only")
+            from horus.ai import analyze_weekly_report
+
+            ai_result = analyze_weekly_report(weekly_data, report, provider=args.ai_provider)
+            if ai_result:
+                report = f"## AI Threat Analysis\n\n{ai_result.narrative}\n\n---\n\n{report}"
+                if ai_result.has_qa_findings():
+                    qa_section = "\n".join(f"- {issue}" for issue in ai_result.qa_issues)
+                    report += (
+                        f"\n\n## AI Quality Assurance\n\n"
+                        f"The following issues were identified:\n\n{qa_section}\n"
+                    )
+            else:
+                logger.warning("AI analysis unavailable — rendering template only")
 
     if args.weekly_format == "pdf":
         # Convert HTML to PDF

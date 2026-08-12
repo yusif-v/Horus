@@ -39,7 +39,8 @@ def generate_weekly_report():
 
     from horus.render.weekly import render_weekly_report
 
-    report = render_weekly_report(weekly_data, fmt=fmt)
+    render_fmt = "html" if fmt == "pdf" else fmt
+    report = render_weekly_report(weekly_data, fmt=render_fmt)
 
     if fmt == "pdf":
         # Convert HTML to PDF
