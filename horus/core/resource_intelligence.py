@@ -15,9 +15,9 @@ import sys
 import urllib.request
 from urllib.parse import urlparse
 
-from ..core.filters import extract_cves
-from ..core.url_extractor import UrlType, extract_urls
-from ..net.xsearch import XAuthError, XSearch, XSearchError
+from horus.core.filters import extract_cves
+from horus.core.url_extractor import UrlType, extract_urls
+from horus.net.xsearch import XAuthError, XSearch, XSearchError
 
 NAME = "Security Resource Intelligence (X/Twitter)"
 DEFAULT_ENABLED = True

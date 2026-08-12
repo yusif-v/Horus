@@ -9,8 +9,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from ..core.context import SourceContext
-from ..storage import db
+from horus.core.context import SourceContext
+from horus.storage import db
 
 NAME = "News/RSS Feed"
 DEFAULT_ENABLED = True

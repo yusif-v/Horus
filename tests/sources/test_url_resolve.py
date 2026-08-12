@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from horus.sources import url_resolve
+from horus.core import url_resolve
 
 
 class TestClassifyDestinationDomain:

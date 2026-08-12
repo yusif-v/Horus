@@ -7,7 +7,7 @@ import json
 from contextlib import contextmanager
 from datetime import datetime
 
-from horus.sources import nvd_fetch
+from horus.core import nvd_fetch
 
 # ── fetch_cve_by_id ──────────────────────────────────────────────────────
 

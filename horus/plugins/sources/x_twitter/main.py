@@ -12,8 +12,8 @@ from urllib.parse import urlparse
 
 from horus.core.filters import extract_cves
 from horus.core.url_extractor import UrlType, extract_urls
+from horus.core.url_resolve import classify_destination_domain, resolve_urls_batch
 from horus.net.xsearch import XAuthError, XSearch, XSearchError
-from horus.sources.url_resolve import classify_destination_domain, resolve_urls_batch
 
 NAME = "X/Twitter (Chrome Auth)"
 DEFAULT_ENABLED = True
@@ -151,7 +151,7 @@ def run(ctx) -> dict:
     if ctx.max_results is not None:
         poc_dicts = poc_dicts[: ctx.max_results]
 
-    from ..core.merge import poc_from_github
+    from horus.core.merge import poc_from_github
 
     pocs = [poc_from_github(r) for r in poc_dicts]
     return {

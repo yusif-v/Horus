@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from horus.sources.news import _classify_tier
+from horus.plugins.sources.news.main import _classify_tier
 
 
 def test_classify_tier_high_priority_keywords():

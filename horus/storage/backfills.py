@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 from ..core.classify import classify_product_category
 from ..core.filters import extract_cves
-from ..sources.nvd import _normalize_product, _normalize_vendor
+from ..core.normalize import _normalize_product, _normalize_vendor
 from . import db
 
 

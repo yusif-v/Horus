@@ -18,9 +18,9 @@ import sys
 from datetime import datetime, timezone
 from urllib.parse import quote as url_quote
 
-from ..config import MAX_REPO_AGE_DAYS, MIN_REPO_STARS
-from ..core.filters import extract_cves, is_fresh_poc
-from ..net.http import fetch_json
+from horus.config import MAX_REPO_AGE_DAYS, MIN_REPO_STARS
+from horus.core.filters import extract_cves, is_fresh_poc
+from horus.net.http import fetch_json
 
 NAME = "GitLab PoC Repos"
 DEFAULT_ENABLED = True
@@ -117,7 +117,7 @@ def run(ctx) -> dict:
     if ctx.max_results is not None:
         results = results[: ctx.max_results]
 
-    from ..core.merge import poc_from_gitlab
+    from horus.core.merge import poc_from_gitlab
 
     pocs = [poc_from_gitlab(r) for r in results]
     return {"cves": [], "pocs": pocs}

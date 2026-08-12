@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from horus.core.context import SourceContext
-from horus.sources import gitlab
+from horus.plugins.sources.gitlab import main as gitlab
 
 
 def _recent_iso(days_ago: int = 1) -> str:

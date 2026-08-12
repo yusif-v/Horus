@@ -91,7 +91,7 @@ def test_pipeline_runs_full_cycle_with_mocked_plugins(tmp_path, monkeypatch):
     }
 
     # Block the NVD-fetch step (no network).
-    monkeypatch.setattr("horus.sources.nvd_fetch.fetch_cve_by_id", lambda _id: None)
+    monkeypatch.setattr("horus.core.nvd_fetch.fetch_cve_by_id", lambda _id: None)
 
     opts = PipelineOptions(
         quiet=True,
@@ -156,8 +156,8 @@ def test_pipeline_fetches_referenced_cves_from_nvd_for_orphan_pocs(monkeypatch):
             "published_at": None,
         }
 
-    monkeypatch.setattr("horus.sources.nvd_fetch.fetch_cve_by_id", fake_fetch)
-    monkeypatch.setattr("horus.sources.nvd_fetch.parse_nvd_cve", fake_parse)
+    monkeypatch.setattr("horus.core.nvd_fetch.fetch_cve_by_id", fake_fetch)
+    monkeypatch.setattr("horus.core.nvd_fetch.parse_nvd_cve", fake_parse)
 
     opts = PipelineOptions(
         quiet=True,
@@ -189,7 +189,7 @@ def test_pipeline_continues_when_a_source_raises(monkeypatch, capsys):
     healthy_poc = PoC(url="https://github.com/u/ok", source="github", stars=10)
     healthy = _make_source("github", pocs=[healthy_poc])
 
-    monkeypatch.setattr("horus.sources.nvd_fetch.fetch_cve_by_id", lambda _id: None)
+    monkeypatch.setattr("horus.core.nvd_fetch.fetch_cve_by_id", lambda _id: None)
 
     opts = PipelineOptions(
         quiet=True,
@@ -218,7 +218,7 @@ def test_pipeline_filter_runs_only_requested_sources(monkeypatch):
         ),
     }
 
-    monkeypatch.setattr("horus.sources.nvd_fetch.fetch_cve_by_id", lambda _id: None)
+    monkeypatch.setattr("horus.core.nvd_fetch.fetch_cve_by_id", lambda _id: None)
 
     opts = PipelineOptions(
         source_filter={"nvd"},
@@ -242,7 +242,7 @@ def test_pipeline_log_callback_receives_progress_messages(monkeypatch):
             "nvd", kind="cve", cves=[CVE(id="CVE-2026-Z", description="z", cvss_score=7)]
         )
     }
-    monkeypatch.setattr("horus.sources.nvd_fetch.fetch_cve_by_id", lambda _id: None)
+    monkeypatch.setattr("horus.core.nvd_fetch.fetch_cve_by_id", lambda _id: None)
 
     messages: list[str] = []
     opts = PipelineOptions(

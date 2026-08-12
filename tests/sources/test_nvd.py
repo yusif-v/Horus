@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from horus.core.context import SourceContext
-from horus.sources import nvd
+from horus.plugins.sources.nvd import main as nvd
 
 
 def _vuln(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from horus.sources.news_linker import (
+from horus.core.news_linker import (
     detect_context,
     extract_cves_from_text,
     extract_links_from_article,

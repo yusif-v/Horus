@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from horus.core.model import Resource
-from horus.core.url_extractor import UrlType
-from horus.sources.resource_intelligence import (
+from horus.core.resource_intelligence import (
     _classify_resource_type,
     _extract_tags,
     _source_for_url_type,
 )
+from horus.core.url_extractor import UrlType
 
 
 class TestClassifyResourceType:

@@ -1,0 +1,8 @@
+[plugin]
+name = "codeberg"
+type = "source"
+version = "1.0.0"
+entrypoint = "main"
+enabled_by_default = true
+[schedule]
+interval_seconds = 3600

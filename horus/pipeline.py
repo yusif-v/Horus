@@ -62,10 +62,24 @@ def _discover_plugins(package_name: str, required_export: str = "run") -> dict[s
 
 
 def discover_sources() -> dict[str, Any]:
-    return _discover_plugins("sources", required_export="run")
+    from pathlib import Path
+
+    from .plugin_manager import PluginManager
+
+    mgr = PluginManager(bundled_root=Path(__file__).parent / "plugins", external_dirs=[])
+    return {n: p.module for n, p in mgr.sources().items()}
 
 
 def discover_enrichers() -> dict[str, Any]:
+    from pathlib import Path
+
+    from .plugin_manager import PluginManager
+
+    mgr = PluginManager(bundled_root=Path(__file__).parent / "plugins", external_dirs=[])
+    plugins = {n: p.module for n, p in mgr.enrichers().items()}
+    if plugins:
+        return plugins
+    # Enrichers are not migrated to plugin folders yet (Task 7) — legacy discovery.
     return _discover_plugins("enrichers", required_export="enrich")
 
 
@@ -270,7 +284,7 @@ def run_pipeline(
     step += 1
     log(f"[{step}/{total_steps}] fetching CVEs referenced by PoCs from NVD...")
     from horus.core.merge import cve_from_nvd
-    from horus.sources.nvd_fetch import fetch_cve_by_id, parse_nvd_cve
+    from horus.core.nvd_fetch import fetch_cve_by_id, parse_nvd_cve
 
     # Collect all CVE IDs referenced by PoCs that aren't in our DB yet
     cve_ids_to_fetch: set[str] = set()
@@ -402,7 +416,7 @@ def run_pipeline(
         log(f"  {correlations_found} correlations, {clusters_built} clusters")
 
     # 6 — CVE-news linking
-    from .sources.news_linker import link_cves_to_news as _link_news
+    from .core.news_linker import link_cves_to_news as _link_news
 
     try:
         with db.connect() as link_conn:
