@@ -1,0 +1,8 @@
+[plugin]
+name = "telegram"
+type = "notification"
+version = "1.0.0"
+entrypoint = "main"
+enabled_by_default = false
+[schedule]
+interval_seconds = 3600
