@@ -35,10 +35,84 @@ _EXPORT = {
     PluginKind.NOTIFICATION: "notify",
 }
 
+_SCAFFOLD_STUBS = {
+    PluginKind.SOURCE: (
+        'NAME = "{name}"\nKIND = "poc"\nDEFAULT_ENABLED = True\n\n'
+        'def run(ctx):\n    """Return {"cves": [], "pocs": []}."""\n'
+        "    return {'cves': [], 'pocs': []}\n"
+    ),
+    PluginKind.ENRICHER: (
+        'NAME = "{name}"\nDEFAULT_ENABLED = True\n\n'
+        'def enrich(ctx):\n    """Mutate ctx.cves / ctx.pocs in place."""\n'
+        "    pass\n"
+    ),
+    PluginKind.NOTIFICATION: (
+        'NAME = "{name}"\nDEFAULT_ENABLED = True\n\n'
+        "def notify(events, ctx):\n"
+        '    """events: dict[str, list[dict]]; ctx: NotificationContext."""\n'
+        "    for kind, items in events.items():\n"
+        "        for item in items:\n"
+        "            ctx.send('default', f'{kind}: {item}')\n"
+    ),
+}
+
 
 def _load_toml(path: Path) -> dict[str, Any]:
     with path.open("rb") as fh:
         return tomllib.load(fh)
+
+
+def _load_module(entry: Path, entrypoint: str) -> Any:
+    mod_path = entry / f"{entrypoint}.py"
+    if not mod_path.exists():
+        raise ValueError(f"entrypoint {entrypoint}.py not found")
+    spec = importlib.util.spec_from_file_location(
+        f"_horus_plugin_{entry.name}_{entrypoint}", mod_path
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def scaffold_plugin(kind: PluginKind, name: str, dest_dir: Path) -> Path:
+    dest = Path(dest_dir) / name
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "plugin.toml").write_text(
+        f'[plugin]\nname = "{name}"\ntype = "{kind.value}"\nversion = "0.1.0"\n'
+        f'entrypoint = "main"\nenabled_by_default = true\n'
+        "[schedule]\ninterval_seconds = 3600\n"
+    )
+    (dest / "main.py").write_text(_SCAFFOLD_STUBS[kind].replace("{name}", name))
+    return dest
+
+
+def validate_plugin(folder: Path) -> list[str]:
+    folder = Path(folder)
+    errs: list[str] = []
+    toml_path = folder / "plugin.toml"
+    if not toml_path.exists():
+        return ["missing plugin.toml"]
+    try:
+        data = _load_toml(toml_path)
+    except Exception as e:
+        return [f"toml parse: {e}"]
+    p = data.get("plugin", {})
+    kind = p.get("type")
+    if kind not in _KIND_DIRS:
+        return [f"unknown type '{kind}'"]
+    entrypoint = p.get("entrypoint", "main")
+    mod_path = folder / f"{entrypoint}.py"
+    if not mod_path.exists():
+        return [f"missing {entrypoint}.py"]
+    try:
+        mod = _load_module(folder, entrypoint)
+    except Exception as e:
+        return [f"import: {e}"]
+    export = _EXPORT[PluginKind(kind)]
+    if not hasattr(mod, export):
+        errs.append(f"missing export '{export}'")
+    return errs
 
 
 class PluginManager:
@@ -77,18 +151,6 @@ class PluginManager:
                         continue
                     self._plugins[plugin.name] = plugin
 
-    def _load_module(self, entry: Path, entrypoint: str) -> Any:
-        mod_path = entry / f"{entrypoint}.py"
-        if not mod_path.exists():
-            raise ValueError(f"entrypoint {entrypoint}.py not found")
-        spec = importlib.util.spec_from_file_location(
-            f"_horus_plugin_{entry.name}_{entrypoint}", mod_path
-        )
-        assert spec and spec.loader
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-
     def _build(self, kind: PluginKind, entry: Path, data: dict[str, Any]) -> Plugin:
         p = data.get("plugin", {})
         name = p.get("name") or entry.name
@@ -96,7 +158,7 @@ class PluginManager:
         if ptype not in (kind.value, _KIND_DIRS[kind]):
             raise ValueError(f"type '{ptype}' != dir '{kind.value}'")
         entrypoint = p.get("entrypoint", "main")
-        mod = self._load_module(entry, entrypoint)
+        mod = _load_module(entry, entrypoint)
         export = _EXPORT[kind]
         if not hasattr(mod, export) or not callable(getattr(mod, export)):
             raise ValueError(f"missing export '{export}'")
