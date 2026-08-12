@@ -30,11 +30,16 @@ horus/
 │   ├── sources/           CVE & PoC source plugins
 │   │   ├── nvd/           authoritative CVE source
 │   │   ├── github/        PoC repo discovery
+│   │   ├── gitlab/        PoC repo discovery
 │   │   ├── x_twitter/     social signal + github URL discovery
-│   │   └── exploitdb/     secondary PoC links
+│   │   ├── exploitdb/     secondary PoC links
+│   │   ├── codeberg/      PoC repo discovery
+│   │   └── news/          security-news RSS feed
 │   ├── enrichers/         post-merge enrichment plugins
 │   │   ├── epss/          EPSS scores + DB-wide backfill
-│   │   └── kev/           CISA KEV flag
+│   │   ├── kev/           CISA KEV flag
+│   │   ├── otx/           AlienVault OTX feed
+│   │   └── darkweb/       dark-web intel
 │   └── notifications/     post-run notification plugins
 │       └── telegram/      per-user Telegram dispatch
 │
@@ -119,8 +124,8 @@ The `horus --plugin` CLI manages plugins (`list`, `enable`/`disable`,
 persist to horus.yaml's `plugins:` block.
 
 Add a source = create `horus/plugins/sources/<name>/{plugin.toml, main.py}`
-(or use `horus --plugin scaffold --plugin-kind source <name>`). Nothing else
-changes. Full authoring guide: `docs/plugins.md`.
+(or use `horus --plugin scaffold --plugin-kind source --plugin-name <name>`).
+Nothing else changes. Full authoring guide: `docs/plugins.md`.
 
 ## What lives where (decision rules)
 

@@ -42,9 +42,9 @@ identical and load identically:
   `--plugins-dir` flag.
 
 The plugin `name` is the unique key used everywhere else: `plugins:` toggles
-in horus.yaml, `horus --plugin` commands, and the auto-generated
-`--no-<name>` / `--skip-<name>` CLI flags. Keep it short, snake_case, and
-unique across all kinds.
+in horus.yaml and `horus --plugin` commands. (The auto-generated
+`--no-<name>` / `--skip-<name>` CLI flags exist for bundled plugins only.)
+Keep it short, snake_case, and unique across all kinds.
 
 ## plugin.toml
 
@@ -107,7 +107,6 @@ def run(ctx) -> dict:
     "description": "…",           # ≤300 chars
     "stars": 42,                  # int or None
     "repo_created_at": "…",       # ISO date, optional
-    "confidence": 0.8,            # 0.0–1.0
 }
 ```
 
@@ -173,8 +172,9 @@ Notes:
   (YAML or JSON). Without it they warn and make no persistent change.
 - `--plugins-dir` overrides the external plugin root (default
   `~/.config/horus/plugins`) for discovery and for `scaffold`/`add`/`remove`.
-- `validate` accepts a plugin name (searched bundled then external) or a
-  path to a plugin folder.
+- `validate` accepts a plugin name (searched external first, then bundled)
+  or an absolute path to a plugin folder (a relative path is treated as a
+  name under each kind subdir).
 - `list` always reflects the full `PluginManager` view, including
   `[broken]` plugins that failed to load.
 
@@ -227,7 +227,6 @@ def run(ctx):
             "description": item["description"][:300],
             "stars": item.get("stars"),
             "repo_created_at": item.get("created_at"),
-            "confidence": 0.8,
         }
         for item in items
     ]
