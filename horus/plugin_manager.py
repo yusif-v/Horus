@@ -76,7 +76,7 @@ def _load_module(entry: Path, entrypoint: str) -> Any:
 
 
 def scaffold_plugin(kind: PluginKind, name: str, dest_dir: Path) -> Path:
-    dest = Path(dest_dir) / name
+    dest = Path(dest_dir) / _KIND_DIRS[kind] / name
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "plugin.toml").write_text(
         f'[plugin]\nname = "{name}"\ntype = "{kind.value}"\nversion = "0.1.0"\n'

@@ -44,4 +44,23 @@ def test_cli_scaffold_then_validate(tmp_path, capsys):
         cmd="validate", name="nt", key=None, value=None, plugins_dir=pd, config=str(yaml)
     )
     _cmd_plugin(a2)
-    assert (pd / "nt" / "plugin.toml").exists()
+    assert (pd / "notifications" / "nt" / "plugin.toml").exists()
+
+
+def test_cli_remove_deletes_external_plugin(tmp_path, capsys):
+    import argparse
+
+    import horus.cli as cli_mod
+    from horus.cli import _cmd_plugin
+
+    pd = tmp_path / "plugins"
+    scaffold_plugin(PluginKind.SOURCE, "demo", pd)
+    bundled = Path(cli_mod.__file__).parent / "plugins"
+    yaml = tmp_path / "horus.yaml"
+    _write_yaml(yaml, pd)
+    args = argparse.Namespace(
+        cmd="remove", name="demo", key=None, value=None, plugins_dir=pd, config=str(yaml)
+    )
+    _cmd_plugin(args)
+    assert not (pd / "sources" / "demo").exists()
+    assert not (bundled / "sources" / "demo").exists()

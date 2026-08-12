@@ -443,6 +443,36 @@ def _plugin_show_config(config_path: str | None, name: str) -> None:
         print(f"  {k}: {v}")
 
 
+def _plugin_find_external(plugins_dir: Path, name: str) -> Path | None:
+    """Locate a plugin folder under an external dir's <kind>/<name> subdirs."""
+    for sub in ("sources", "enrichers", "notifications"):
+        candidate = plugins_dir / sub / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _plugin_infer_kind_dir(folder: Path) -> str | None:
+    """Map a plugin folder's `[plugin] type` to its kind dir name (None if unknown)."""
+    toml_path = folder / "plugin.toml"
+    if not toml_path.exists():
+        return None
+    try:
+        try:
+            import tomllib
+        except ImportError:  # pragma: no cover - py<3.11
+            import tomli as tomllib
+
+        with toml_path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except Exception:
+        return None
+    ptype = data.get("plugin", {}).get("type")
+    return {"source": "sources", "enricher": "enrichers", "notification": "notifications"}.get(
+        ptype
+    )
+
+
 def _cmd_plugin(args: Any) -> None:
     """`horus plugin <subcommand>` — manage plugins via PluginManager."""
     from .core.plugin_types import PluginKind
@@ -469,15 +499,6 @@ def _cmd_plugin(args: Any) -> None:
         for kind, items in buckets.items():
             for name, p in sorted(items.items()):
                 print(f"[{kind}] {name} v{p.manifest.version} ({p.display_name})")
-        # Flat-layout external plugins (folder directly under an external dir).
-        if plugins_dir.is_dir():
-            for entry in sorted(plugins_dir.iterdir()):
-                if (
-                    entry.is_dir()
-                    and (entry / "plugin.toml").exists()
-                    and mgr.get(entry.name) is None
-                ):
-                    print(f"[external] {entry.name}")
         for name, err in mgr.broken:
             print(f"[broken] {name}: {err}")
     elif args.cmd == "scaffold":
@@ -485,8 +506,8 @@ def _cmd_plugin(args: Any) -> None:
         out = scaffold_plugin(kind, args.name, plugins_dir)
         print(f"scaffolded {kind.value} plugin -> {out}")
     elif args.cmd == "validate":
-        target = plugins_dir / args.name
-        if not target.exists():
+        target = _plugin_find_external(plugins_dir, args.name)
+        if target is None:
             target = next(
                 (
                     bundled / sub / args.name
@@ -512,11 +533,20 @@ def _cmd_plugin(args: Any) -> None:
     elif args.cmd == "add":
         import shutil
 
-        dest = plugins_dir / Path(args.name).name
-        shutil.copytree(Path(args.name), dest, dirs_exist_ok=True)
+        src = Path(args.name)
+        kind_dir = _plugin_infer_kind_dir(src)
+        dest = (plugins_dir / kind_dir if kind_dir else plugins_dir) / src.name
+        shutil.copytree(src, dest, dirs_exist_ok=True)
         print(f"added plugin -> {dest}")
     elif args.cmd == "remove":
-        print("remove only supported for external plugins; use `horus plugin add` to reinstall")
+        import shutil
+
+        target = _plugin_find_external(plugins_dir, args.name)
+        if target is None:
+            print(f"plugin '{args.name}' not found in external dir")
+            return
+        shutil.rmtree(target)
+        print(f"removed plugin -> {target}")
 
 
 # ── Entry point ─────────────────────────────────────────────────────────────
