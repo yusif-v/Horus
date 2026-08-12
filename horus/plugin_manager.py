@@ -53,7 +53,6 @@ class PluginManager:
         self._plugins.clear()
         self.broken.clear()
         for kind, sub in _KIND_DIRS.items():
-            found: dict[str, tuple[Path, dict[str, Any]]] = {}
             # Bundled first, then external (external overrides on collision).
             for base in [self.bundled_root, *self.external_dirs]:
                 root = base / sub
@@ -71,25 +70,6 @@ class PluginManager:
                         self.broken.append((entry.name, f"toml: {e}"))
                         continue
                     try:
-                        plugin = self._build(kind, entry, data)
-                    except Exception as e:
-                        self.broken.append((entry.name, str(e)))
-                        continue
-                    found[plugin.name] = (entry, data)
-                    self._plugins[plugin.name] = plugin
-            # Re-register external overrides last so they win.
-            for base in self.external_dirs:
-                root = base / sub
-                if not root.is_dir():
-                    continue
-                for entry in root.iterdir():
-                    if not entry.is_dir() or entry.name.startswith("_"):
-                        continue
-                    toml_path = entry / "plugin.toml"
-                    if not toml_path.exists():
-                        continue
-                    try:
-                        data = _load_toml(toml_path)
                         plugin = self._build(kind, entry, data)
                     except Exception as e:
                         self.broken.append((entry.name, str(e)))
