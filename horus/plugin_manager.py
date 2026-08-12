@@ -122,12 +122,38 @@ class PluginManager:
         )
 
     # ── accessors ─────────────────────────────────────────────────────
+    def apply_config(self, plugins_cfg: dict[str, dict]) -> None:
+        """Merge enable/interval/config overrides from horus.yaml `plugins:`."""
+        for name, over in plugins_cfg.items():
+            p = self._plugins.get(name)
+            if p is None:
+                continue
+            if "interval_seconds" in over and over["interval_seconds"] is not None:
+                p.manifest.interval_seconds = int(over["interval_seconds"])
+            if "config" in over and isinstance(over["config"], dict):
+                p.config = dict(over["config"])
+            # enabled is handled at accessor time via get_enabled()
+            if "enabled" in over:
+                p._override_enabled = bool(over["enabled"])
+
+    def is_enabled(self, name: str) -> bool:
+        p = self._plugins.get(name)
+        if p is None:
+            return False
+        if hasattr(p, "_override_enabled"):
+            return p._override_enabled
+        return p.manifest.enabled_by_default
+
     def _by_kind(self, kind: PluginKind) -> dict[str, Plugin]:
-        return {
-            n: p
-            for n, p in self._plugins.items()
-            if p.kind == kind and p.manifest.enabled_by_default
-        }
+        return {n: p for n, p in self._plugins.items() if p.kind == kind and self.is_enabled(n)}
+
+    def due_sources(self, now_epoch: float, last_run_getter) -> list[str]:
+        out = []
+        for name, p in self.sources().items():
+            last = last_run_getter(name) or 0.0
+            if now_epoch - last >= p.manifest.interval_seconds:
+                out.append(name)
+        return out
 
     def sources(self) -> dict[str, Plugin]:
         return self._by_kind(PluginKind.SOURCE)
