@@ -26,15 +26,17 @@ horus/
 │   ├── classify.py        CVE → attack tag + product category
 │   └── filters.py         is_fresh_poc, extract_cves, ...
 │
-├── sources/               plugin discovery — one file per source
-│   ├── nvd.py             authoritative CVE source
-│   ├── github.py          PoC repo discovery
-│   ├── x_twitter.py       social signal + github URL discovery
-│   └── exploitdb.py       secondary PoC links
-│
-├── enrichers/             post-merge enrichment plugins
-│   ├── epss.py            EPSS scores + DB-wide backfill
-│   └── kev.py             CISA KEV flag
+├── plugins/               plugin folders — one folder per plugin
+│   ├── sources/           CVE & PoC source plugins
+│   │   ├── nvd/           authoritative CVE source
+│   │   ├── github/        PoC repo discovery
+│   │   ├── x_twitter/     social signal + github URL discovery
+│   │   └── exploitdb/     secondary PoC links
+│   ├── enrichers/         post-merge enrichment plugins
+│   │   ├── epss/          EPSS scores + DB-wide backfill
+│   │   └── kev/           CISA KEV flag
+│   └── notifications/     post-run notification plugins
+│       └── telegram/      per-user Telegram dispatch
 │
 ├── storage/               persistence
 │   ├── db.py              schema + migrations + persist_cve/poc/watchlist
@@ -67,6 +69,7 @@ horus/
 
 docs/
 ├── architecture.md        this file
+├── plugins.md             plugin authoring guide
 └── plans/v0.8.md          v0.8 design doc
 
 tests/
@@ -80,10 +83,10 @@ tests/
 ## Dependency arrows (one-way)
 
 ```
-cli.py     ──▶  pipeline.py  ──▶  sources/  enrichers/  storage/  render/
+cli.py     ──▶  pipeline.py  ──▶  plugins/  storage/  render/
                        │                 │
                        ▼                 ▼
-                  net/  config/      net/  config/      config/  core/
+                  net/  config/      net/  config/   config/  core/
 
 server.py  ──▶  pipeline.py  (single source of truth — no fake argv)
 web/       ──▶  storage.db   config   (read-only path)
@@ -92,15 +95,32 @@ web/       ──▶  storage.db   config   (read-only path)
 `pipeline.py` is the only module that knows about run order. CLI and
 server are both thin clients.
 
-## Plugin discovery rules
+## Plugin system
 
-`pipeline.discover_sources()` / `discover_enrichers()` walk
-`horus/sources/` and `horus/enrichers/`. A module is included iff:
+Sources, enrichers, and notifications are all plugins, loaded by a single
+`PluginManager` (`horus/plugin_manager.py`). Bundled plugins live in
+`horus/plugins/<kind>/<name>/` and external plugins under each `plugin_dirs`
+entry (default `~/.config/horus/plugins`); both load identically. A broken
+plugin — bad manifest, missing entrypoint, import error — is recorded and
+skipped, never aborting a run.
 
-1. its name doesn't start with `_`
-2. it exports a callable named `run` (sources) or `enrich` (enrichers)
+Each plugin folder carries a `plugin.toml` manifest (`[plugin]`
+name/type/version/entrypoint/enabled_by_default, `[schedule]`
+interval_seconds, `[config]` schema) and an entrypoint `main.py` exporting:
 
-Add a source = one new file under `sources/`. Nothing else changes.
+| Kind | Entrypoint export | Contract |
+|------|-------------------|----------|
+| source | `run(ctx) -> dict` | returns `{"cves":[...], "pocs":[...]}` (+ optional `social_signals`, `x_discovered_urls`) |
+| enricher | `enrich(ctx) -> None` | mutates `ctx.cves` / `ctx.pocs` in place |
+| notification | `notify(events, ctx)` | `ctx` is a `NotificationContext` (`token`, `users`, `prefs`, `send(channel, message)`) |
+
+The `horus --plugin` CLI manages plugins (`list`, `enable`/`disable`,
+`config`, `add`, `remove`, `scaffold`, `validate`); enable/disable/config
+persist to horus.yaml's `plugins:` block.
+
+Add a source = create `horus/plugins/sources/<name>/{plugin.toml, main.py}`
+(or use `horus --plugin scaffold --plugin-kind source <name>`). Nothing else
+changes. Full authoring guide: `docs/plugins.md`.
 
 ## What lives where (decision rules)
 
@@ -108,8 +128,9 @@ Add a source = one new file under `sources/`. Nothing else changes.
 |--------------------------|-------------|
 | Hits the network | `horus/net/` |
 | Pure domain logic with no I/O | `horus/core/` |
-| Discovers/produces CVEs or PoCs | `horus/sources/` |
-| Post-merge enrichment | `horus/enrichers/` |
+| Discovers/produces CVEs or PoCs | `horus/plugins/sources/<name>/` |
+| Post-merge enrichment | `horus/plugins/enrichers/<name>/` |
+| Sends notifications | `horus/plugins/notifications/<name>/` |
 | Reads/writes SQLite | `horus/storage/` |
 | Builds output artifacts | `horus/render/` |
 | Renders HTML | `horus/web/` |
