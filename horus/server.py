@@ -233,6 +233,13 @@ class Server:
 
     # ── notification hook ────────────────────────────────────────────────────
 
+    def _notifications_enabled(self) -> bool:
+        """True when the manager has any enabled notification plugins (config-driven)."""
+        try:
+            return bool(self._build_manager().notifications())
+        except Exception:
+            return False
+
     def _register_notification_hook(self) -> None:
         """Register the pipeline end hook for plugin notification dispatch."""
         token = self.cfg.telegram.resolved_token()
@@ -243,6 +250,7 @@ class Server:
             from .core.plugin_types import NotificationContext
             from .pipeline import register_end_hook
             from .storage import db as _storage
+            from .web.notifications import DEFAULT_PREFS
 
             mgr = self._build_manager()
             notifs = mgr.notifications()
@@ -252,6 +260,15 @@ class Server:
                 users = conn.execute(
                     "SELECT id, username, telegram_chat_id FROM user WHERE telegram_chat_id IS NOT NULL"
                 ).fetchall()
+                # A kind is enabled if any user enabled it, else its default.
+                merged_prefs: dict[str, bool] = dict(DEFAULT_PREFS)
+                for user_id, _username, _chat_id in users:
+                    rows = conn.execute(
+                        "SELECT kind, enabled FROM notification_pref WHERE user_id = ?",
+                        (user_id,),
+                    ).fetchall()
+                    for kind, enabled in rows:
+                        merged_prefs[kind] = merged_prefs.get(kind, False) or bool(enabled)
 
             def _send(chat_id, message):
                 from .bot.api import TelegramAPI, TelegramError
@@ -261,9 +278,8 @@ class Server:
                 except TelegramError as e:
                     print(f"[notify] failed to notify {chat_id}: {e}", file=sys.stderr)
 
-            prefs = {}  # per-plugin prefs default; telegram plugin uses ctx.prefs.get(kind, False)
             for _name, plugin in notifs.items():
-                ctx = NotificationContext(token=token, users=users, prefs=prefs, send=_send)
+                ctx = NotificationContext(token=token, users=users, prefs=merged_prefs, send=_send)
                 register_end_hook(lambda result, p=plugin, c=ctx: p.notify(result.events, c))
             self._log("notification dispatch registered")
         except Exception as e:
@@ -296,7 +312,7 @@ class Server:
         db.initialize()
 
         # Register notification dispatch hook
-        if self.cfg.telegram.enabled:
+        if self.cfg.telegram.enabled or self._notifications_enabled():
             self._register_notification_hook()
             self._start_bot()
 
