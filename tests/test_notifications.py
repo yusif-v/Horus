@@ -1,10 +1,9 @@
-"""Notification dispatch — per-user event routing with mock Telegram API."""
+"""Notification dispatch — telegram plugin notify path with captured sends."""
 
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 from horus.storage import db as _db
 
@@ -49,6 +48,41 @@ def _fresh_db(suffix=""):
         _db.DB_PATH = old
 
     return _seed_linked, _seed_unlinked, _cleanup
+
+
+def _notification_ctx(token="fake-token", prefs=None):
+    """Build a NotificationContext from the DB-seeded users, mirroring server.py.
+
+    Returns (ctx, sent) where `sent` is the list of (chat_id, message) the
+    plugin's `send` callback captured.
+    """
+    from horus.core.plugin_types import NotificationContext
+    from horus.web.notifications import DEFAULT_PREFS
+
+    with _db.connect() as conn:
+        users = conn.execute(
+            "SELECT id, username, telegram_chat_id FROM user WHERE telegram_chat_id IS NOT NULL"
+        ).fetchall()
+        # A kind is enabled if any user enabled it, else its default (server.py logic).
+        merged_prefs: dict[str, bool] = dict(DEFAULT_PREFS)
+        if prefs is not None:
+            merged_prefs.update(prefs)
+        for user_id, _username, _chat_id in users:
+            rows = conn.execute(
+                "SELECT kind, enabled FROM notification_pref WHERE user_id = ?",
+                (user_id,),
+            ).fetchall()
+            for kind, enabled in rows:
+                merged_prefs[kind] = merged_prefs.get(kind, False) or bool(enabled)
+
+    sent: list[tuple[int, str]] = []
+    ctx = NotificationContext(
+        token=token,
+        users=users,
+        prefs=merged_prefs,
+        send=lambda chat_id, msg: sent.append((chat_id, msg)),
+    )
+    return ctx, sent
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -198,15 +232,15 @@ def test_format_kev_due_soon():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 2. dispatch — per-user routing
+# 2. notify — telegram plugin per-user routing
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def test_dispatch_sends_to_linked_user():
-    _seed_linked, _, _cleanup = _fresh_db("d1")
+def test_notify_sends_to_linked_user():
+    _seed_linked, _, _cleanup = _fresh_db("n1")
     try:
         _seed_linked("alice", chat_id=42)
-        from horus.notifications import dispatcher as dispatch_mod
+        from horus.plugins.notifications.telegram.main import notify
 
         events = {
             "kev_new": [
@@ -214,32 +248,23 @@ def test_dispatch_sends_to_linked_user():
             ],
         }
 
-        with (
-            patch.object(dispatch_mod, "_get_token", return_value="fake-token"),
-            patch("horus.notifications.dispatcher.TelegramAPI") as MockAPI,
-        ):
-            api_instance = MagicMock()
-            MockAPI.return_value = api_instance
-            dispatch_mod.dispatch(events)
+        ctx, sent = _notification_ctx()
+        notify(events, ctx)
 
-        api_instance.send_message.assert_called_once()
-        assert api_instance.send_message.call_args[0][0] == 42
-        assert "NEW KEV ADDITION" in api_instance.send_message.call_args[0][1]
+        assert len(sent) == 1
+        chat_id, msg = sent[0]
+        assert chat_id == 42
+        assert "NEW KEV ADDITION" in msg
+        assert "CVE-2026-1234" in msg
     finally:
         _cleanup()
 
 
-def test_dispatch_skips_disabled_category():
-    _seed_linked, _, _cleanup = _fresh_db("d2")
+def test_notify_skips_disabled_category():
+    _seed_linked, _, _cleanup = _fresh_db("n2")
     try:
-        uid = _seed_linked("alice", chat_id=42)
-        from horus.notifications import dispatcher as dispatch_mod
-
-        with _db.connect() as conn:
-            conn.execute(
-                "INSERT INTO notification_pref (user_id, kind, enabled) VALUES (?, ?, 0)",
-                (uid, "kev_new"),
-            )
+        _seed_linked("alice", chat_id=42)
+        from horus.plugins.notifications.telegram.main import notify
 
         events = {
             "kev_new": [
@@ -247,59 +272,51 @@ def test_dispatch_skips_disabled_category():
             ],
         }
 
-        with (
-            patch.object(dispatch_mod, "_get_token", return_value="fake-token"),
-            patch("horus.notifications.dispatcher.TelegramAPI") as MockAPI,
-        ):
-            api_instance = MagicMock()
-            MockAPI.return_value = api_instance
-            dispatch_mod.dispatch(events)
+        ctx, sent = _notification_ctx(prefs={"kev_new": False})
+        notify(events, ctx)
 
-        api_instance.send_message.assert_not_called()
+        assert sent == []
     finally:
         _cleanup()
 
 
-def test_dispatch_no_token_is_noop():
-    _seed_linked, _, _cleanup = _fresh_db("d3")
+def test_notify_no_token_is_noop():
+    _seed_linked, _, _cleanup = _fresh_db("n3")
     try:
         _seed_linked("alice", chat_id=42)
-        from horus.notifications import dispatcher as dispatch_mod
+        from horus.plugins.notifications.telegram.main import notify
 
         events = {"kev_new": [{"cve_id": "CVE-2026-1234"}]}
 
-        with patch.object(dispatch_mod, "_get_token", return_value=None):
-            dispatch_mod.dispatch(events)  # should not raise
+        ctx, sent = _notification_ctx(token=None)
+        notify(events, ctx)  # should not raise
+
+        assert sent == []
     finally:
         _cleanup()
 
 
-def test_dispatch_no_linked_users_is_noop():
-    _, _seed_unlinked, _cleanup = _fresh_db("d4")
+def test_notify_no_linked_users_is_noop():
+    _, _seed_unlinked, _cleanup = _fresh_db("n4")
     try:
         _seed_unlinked("bob")
-        from horus.notifications import dispatcher as dispatch_mod
+        from horus.plugins.notifications.telegram.main import notify
 
         events = {"kev_new": [{"cve_id": "CVE-2026-1234"}]}
 
-        with (
-            patch.object(dispatch_mod, "_get_token", return_value="fake-token"),
-            patch("horus.notifications.dispatcher.TelegramAPI") as MockAPI,
-        ):
-            api_instance = MagicMock()
-            MockAPI.return_value = api_instance
-            dispatch_mod.dispatch(events)
+        ctx, sent = _notification_ctx()
+        notify(events, ctx)
 
-        api_instance.send_message.assert_not_called()
+        assert sent == []
     finally:
         _cleanup()
 
 
-def test_dispatch_multiple_events_batched():
-    _seed_linked, _, _cleanup = _fresh_db("d5")
+def test_notify_batches_multiple_events():
+    _seed_linked, _, _cleanup = _fresh_db("n5")
     try:
         _seed_linked("alice", chat_id=42)
-        from horus.notifications import dispatcher as dispatch_mod
+        from horus.plugins.notifications.telegram.main import notify
 
         events = {
             "kev_new": [
@@ -308,50 +325,42 @@ def test_dispatch_multiple_events_batched():
             ],
         }
 
-        with (
-            patch.object(dispatch_mod, "_get_token", return_value="fake-token"),
-            patch("horus.notifications.dispatcher.TelegramAPI") as MockAPI,
-        ):
-            api_instance = MagicMock()
-            MockAPI.return_value = api_instance
-            dispatch_mod.dispatch(events)
+        ctx, sent = _notification_ctx()
+        notify(events, ctx)
 
-        api_instance.send_message.assert_called_once()
-        msg = api_instance.send_message.call_args[0][1]
+        assert len(sent) == 1
+        chat_id, msg = sent[0]
+        assert chat_id == 42
         assert "CVE-2026-1001" in msg
         assert "CVE-2026-1002" in msg
     finally:
         _cleanup()
 
 
-def test_dispatch_skips_empty_event_lists():
-    _seed_linked, _, _cleanup = _fresh_db("d6")
+def test_notify_skips_empty_event_lists():
+    _seed_linked, _, _cleanup = _fresh_db("n6")
     try:
         _seed_linked("alice", chat_id=42)
-        from horus.notifications import dispatcher as dispatch_mod
+        from horus.plugins.notifications.telegram.main import notify
 
         events = {"kev_new": [], "critical_cve": []}
 
-        with (
-            patch.object(dispatch_mod, "_get_token", return_value="fake-token"),
-            patch("horus.notifications.dispatcher.TelegramAPI") as MockAPI,
-        ):
-            api_instance = MagicMock()
-            MockAPI.return_value = api_instance
-            dispatch_mod.dispatch(events)
+        ctx, sent = _notification_ctx()
+        notify(events, ctx)
 
-        api_instance.send_message.assert_not_called()
+        assert sent == []
     finally:
         _cleanup()
 
 
-def test_dispatch_telegram_error_is_caught():
-    _seed_linked, _, _cleanup = _fresh_db("d7")
+def test_notify_telegram_error_is_caught():
+    """A send failure for one user must not stop other users (server `_send` behavior)."""
+    _seed_linked, _, _cleanup = _fresh_db("n7")
     try:
         _seed_linked("alice", chat_id=42)
         _seed_linked("bob", chat_id=99)
         from horus.bot.api import TelegramError
-        from horus.notifications import dispatcher as dispatch_mod
+        from horus.plugins.notifications.telegram.main import notify
 
         events = {
             "kev_new": [
@@ -359,16 +368,25 @@ def test_dispatch_telegram_error_is_caught():
             ],
         }
 
-        with (
-            patch.object(dispatch_mod, "_get_token", return_value="fake-token"),
-            patch("horus.notifications.dispatcher.TelegramAPI") as MockAPI,
-        ):
-            api_instance = MagicMock()
-            api_instance.send_message.side_effect = [TelegramError("network"), MagicMock()]
-            MockAPI.return_value = api_instance
-            dispatch_mod.dispatch(events)
+        delivered: list[tuple[int, str]] = []
+        attempts: list[int] = []
 
-        assert api_instance.send_message.call_count == 2
+        def _send(chat_id, message):
+            attempts.append(chat_id)
+            try:
+                if chat_id == 42:
+                    raise TelegramError("network")
+                delivered.append((chat_id, message))
+            except TelegramError:
+                pass
+
+        ctx, _sent = _notification_ctx()
+        ctx.send = _send
+        notify(events, ctx)
+
+        assert attempts == [42, 99]
+        assert len(delivered) == 1
+        assert delivered[0][0] == 99
     finally:
         _cleanup()
 
@@ -379,13 +397,13 @@ def test_dispatch_telegram_error_is_caught():
 
 
 def test_batch_messages_single():
-    from horus.notifications.dispatcher import _batch_messages
+    from horus.plugins.notifications.telegram.main import _batch_messages
 
     assert _batch_messages(["hello"]) == ["hello"]
 
 
 def test_batch_messages_under_limit():
-    from horus.notifications.dispatcher import _batch_messages
+    from horus.plugins.notifications.telegram.main import _batch_messages
 
     result = _batch_messages(["a", "b", "c"])
     assert len(result) == 1
@@ -393,7 +411,7 @@ def test_batch_messages_under_limit():
 
 
 def test_batch_messages_over_limit():
-    from horus.notifications.dispatcher import _batch_messages
+    from horus.plugins.notifications.telegram.main import _batch_messages
 
     big = ["x" * 210 for _ in range(20)]
     result = _batch_messages(big, max_len=4000)
@@ -403,6 +421,6 @@ def test_batch_messages_over_limit():
 
 
 def test_batch_messages_empty():
-    from horus.notifications.dispatcher import _batch_messages
+    from horus.plugins.notifications.telegram.main import _batch_messages
 
     assert _batch_messages([]) == []
