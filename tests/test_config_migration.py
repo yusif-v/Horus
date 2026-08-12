@@ -28,3 +28,13 @@ def test_unified_keys_load(tmp_path):
     cfg = load_config(str(cfg_path))
     assert cfg.plugin_dirs == ["~/.config/horus/plugins"]
     assert cfg.plugins["github"]["enabled"] is True
+
+
+def test_telegram_only_no_warning(tmp_path):
+    cfg_path = tmp_path / "horus.yaml"
+    cfg_path.write_text("telegram:\n  enabled: true\n  bot_token: tok\n")
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        cfg = load_config(str(cfg_path))
+        assert not any(issubclass(x.category, DeprecationWarning) for x in w)
+    assert cfg.plugins["telegram"]["enabled"] is True

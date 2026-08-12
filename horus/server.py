@@ -162,7 +162,6 @@ def load_config(path: str | None) -> Config:
         for k, v in data["poll_intervals"].items():
             cfg.plugins.setdefault(_legacy_to_plugin.get(k, k), {})["interval_seconds"] = int(v)
     if "telegram" in data and isinstance(data["telegram"], dict):
-        legacy_used = True
         t = data["telegram"]
         cfg.telegram.enabled = bool(t.get("enabled", cfg.telegram.enabled))
         cfg.telegram.bot_token = str(t.get("bot_token", cfg.telegram.bot_token))

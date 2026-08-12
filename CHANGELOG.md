@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-08-13
+
+### Added
+- **Plugin system**: sources, enrichers, and notifications are now folder+`plugin.toml` plugins loaded by a single `PluginManager` (bundled `horus/plugins/<kind>/<name>/` + external `plugin_dirs`).
+- **`horus plugin` CLI**: `list`, `enable`/`disable`, `config`, `add`, `remove`, `scaffold`, `validate`.
+
+### Changed
+- **Unified config schema**: `horus.yaml` now uses `plugin_dirs:` + `plugins:` (per-plugin `enabled`/`interval_seconds`/`config`). Legacy `sources_enabled`/`poll_intervals`/`telegram` keys still honored with a `DeprecationWarning`; removed in the next minor.
+
 ## [0.15.0] - 2026-08-07
 
 ### Added

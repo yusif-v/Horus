@@ -1,6 +1,6 @@
 # Horus
 
-**Version:** 0.15.0
+**Version:** 0.16.0
 
 CVE + PoC discovery pipeline with reputation scoring, weekly threat reports, AI-powered analysis, and MITRE ATT&CK mapping. Runs as a one-shot CLI or 24/7 server.
 
