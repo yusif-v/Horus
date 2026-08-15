@@ -36,6 +36,12 @@ plugins:
     config:
       bot_token: "YOUR_BOT_TOKEN"  # or set TELEGRAM_BOT_TOKEN env var
 
+# AI news feed — score new RSS articles with AI, post the important ones to /posts.
+news_feed:
+  enabled: true
+  threshold: 80           # min importance score (0-100) to become a post
+  max_articles_per_run: 50
+
 # How often the scheduler wakes up to check which sources are due.
 check_every_seconds: 60
 

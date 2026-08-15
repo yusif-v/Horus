@@ -487,3 +487,27 @@ def test_main_import_guard(monkeypatch):
     if server.__name__ == "__main__":
         server.main()
     assert called["main"] is True
+
+
+# ── news-feed end-hook ───────────────────────────────────────────────────
+
+
+def test_news_feed_hook_registered_when_enabled(monkeypatch):
+    from horus import server as srv
+
+    registered: list = []
+    monkeypatch.setattr("horus.pipeline.register_end_hook", lambda fn: registered.append(fn))
+    cfg = srv.Config()
+    srv.Server(cfg)._register_news_feed_hook()
+    assert len(registered) == 1
+
+
+def test_news_feed_hook_not_registered_when_disabled(monkeypatch):
+    from horus import server as srv
+
+    registered: list = []
+    monkeypatch.setattr("horus.pipeline.register_end_hook", lambda fn: registered.append(fn))
+    cfg = srv.Config()
+    cfg.news_feed.enabled = False
+    srv.Server(cfg)._register_news_feed_hook()
+    assert registered == []

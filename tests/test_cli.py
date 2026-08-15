@@ -190,3 +190,12 @@ def test_main_one_shot_honors_config_disabled_source(tmp_path):
     sources = kwargs["sources"]
     assert "github" not in sources
     assert "nvd" in sources
+
+
+def test_cli_news_feed_flag_registered():
+    from horus.cli import _build_parser
+    from horus.pipeline import discover_enrichers, discover_sources
+
+    p = _build_parser(discover_sources(), discover_enrichers())
+    args = p.parse_args(["--news-feed"])
+    assert args.news_feed is True

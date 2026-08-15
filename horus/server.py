@@ -295,6 +295,33 @@ class Server:
         except Exception as e:
             self._log(f"[WARN] failed to register notification hook: {e}")
 
+    # ── news-feed hook ───────────────────────────────────────────────────
+
+    def _register_news_feed_hook(self) -> None:
+        """Register the pipeline end-hook that scores + posts AI-curated news."""
+        if not self.cfg.news_feed.enabled:
+            return
+        try:
+            from .news_feed import score_and_post
+            from .pipeline import register_end_hook
+
+            threshold = self.cfg.news_feed.threshold
+            max_articles = self.cfg.news_feed.max_articles_per_run
+
+            def _hook(result) -> None:
+                from .storage import db as _storage
+
+                with _storage.connect() as conn:
+                    outcome = score_and_post(conn, threshold=threshold, max_articles=max_articles)
+                if outcome.scored or outcome.posted:
+                    self._log(f"news-feed: scored {outcome.scored}, posted {outcome.posted}")
+                elif outcome.error:
+                    self._log(f"[WARN] news-feed skipped: {outcome.error}")
+
+            register_end_hook(_hook)
+        except Exception as e:
+            self._log(f"[WARN] failed to register news-feed hook: {e}")
+
     def _start_bot(self) -> None:
         """Start the Telegram bot listener in a background thread."""
         token = self.cfg.telegram.resolved_token()
@@ -325,6 +352,8 @@ class Server:
         if self.cfg.telegram.enabled or self._notifications_enabled():
             self._register_notification_hook()
             self._start_bot()
+
+        self._register_news_feed_hook()
 
         if self.cfg.web.enabled:
             self._start_web()

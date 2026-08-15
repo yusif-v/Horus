@@ -95,6 +95,11 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
         help="Score every unscored CVE in the DB with EPSS, then exit.",
     )
     p.add_argument(
+        "--news-feed",
+        action="store_true",
+        help="Score new news articles with AI and post important ones, then exit.",
+    )
+    p.add_argument(
         "--backfill",
         choices=("products", "poc_cve", "all"),
         default=None,
@@ -275,6 +280,25 @@ def _cmd_backfill_epss() -> None:
     with db.connect() as conn:
         updated = backfill_all(conn)
     logger.info("EPSS backfill: %d CVEs updated", updated)
+
+
+def _cmd_news_feed(args) -> None:
+    from .news_feed import score_and_post
+    from .server import load_config
+    from .storage import db
+
+    cfg = load_config(args.config)
+    db.initialize()
+    with db.connect() as conn:
+        outcome = score_and_post(
+            conn,
+            threshold=cfg.news_feed.threshold,
+            max_articles=cfg.news_feed.max_articles_per_run,
+            provider=getattr(args, "ai_provider", None),
+        )
+    if outcome.error:
+        logger.warning("news-feed: %s", outcome.error)
+    logger.info("news-feed: scored %d, posted %d", outcome.scored, outcome.posted)
 
 
 def _cmd_backfill(target: str) -> None:
@@ -619,6 +643,8 @@ def main(argv: list[str] | None = None) -> None:
         return _cmd_export_json(args.export_json)
     if args.weekly_report:
         return _cmd_weekly_report(args)
+    if args.news_feed:
+        return _cmd_news_feed(args)
     if args.server or args.server_once:
         return _cmd_server(args)
     if args.auth_status:
