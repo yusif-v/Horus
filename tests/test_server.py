@@ -33,6 +33,18 @@ def test_config_enabled_respects_explicit_false():
     assert cfg.enabled("github") is True
 
 
+def test_config_news_feed_defaults():
+    cfg = server.Config()
+    assert cfg.news_feed.enabled is True
+    assert cfg.news_feed.threshold == 80
+    assert cfg.news_feed.max_articles_per_run == 50
+
+
+def test_load_config_news_feed_block(tmp_path):
+    cfg = server.load_config(str(tmp_path / "nope.yaml"))  # defaults
+    assert cfg.news_feed.threshold == 80
+
+
 # ── load_config ──────────────────────────────────────────────────────────
 
 

@@ -321,13 +321,28 @@ CREATE TABLE IF NOT EXISTS news_article (
     tier            INTEGER NOT NULL DEFAULT 3, -- 1 (critical) .. 5 (noise)
     summary         TEXT,
     published_at    TEXT,
-    first_seen      TEXT NOT NULL
+    first_seen      TEXT NOT NULL,
+    ai_score        INTEGER,                    -- v0.17 AI news feed
+    ai_rationale    TEXT,
+    ai_headline     TEXT,
+    ai_summary      TEXT,
+    scored_at       TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_news_article_source ON news_article(source);
 CREATE INDEX IF NOT EXISTS idx_news_article_tier ON news_article(tier);
 CREATE INDEX IF NOT EXISTS idx_news_article_published ON news_article(published_at);
 CREATE INDEX IF NOT EXISTS idx_news_article_first_seen ON news_article(first_seen);
+
+-- ─── AI News Feed posts (v0.17) ───────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS news_post (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    article_id INTEGER NOT NULL UNIQUE REFERENCES news_article(id) ON DELETE CASCADE,
+    posted_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_news_post_posted_at ON news_post(posted_at);
 
 -- ─── CVE-News linking (v0.14) ──────────────────────────────────────────
 

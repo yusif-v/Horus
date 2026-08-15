@@ -91,6 +91,13 @@ class TelegramConfig:
 
 
 @dataclass
+class NewsFeedConfig:
+    enabled: bool = True
+    threshold: int = 80
+    max_articles_per_run: int = 50
+
+
+@dataclass
 class Config:
     poll_intervals: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_POLL_INTERVALS))
     sources_enabled: dict[str, bool] = field(default_factory=dict)
@@ -99,6 +106,7 @@ class Config:
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     plugin_dirs: list[str] = field(default_factory=lambda: ["~/.config/horus/plugins"])
     plugins: dict[str, dict] = field(default_factory=dict)
+    news_feed: NewsFeedConfig = field(default_factory=NewsFeedConfig)
 
     def interval(self, name: str) -> int:
         return self.poll_intervals.get(name, DEFAULT_POLL_INTERVALS.get(name, 3600))
@@ -149,6 +157,13 @@ def load_config(path: str | None) -> Config:
         cfg.plugin_dirs = [str(d) for d in data["plugin_dirs"]]
     if "plugins" in data and isinstance(data["plugins"], dict):
         cfg.plugins.update(data["plugins"])
+    if "news_feed" in data and isinstance(data["news_feed"], dict):
+        nf = data["news_feed"]
+        cfg.news_feed.enabled = bool(nf.get("enabled", cfg.news_feed.enabled))
+        cfg.news_feed.threshold = int(nf.get("threshold", cfg.news_feed.threshold))
+        cfg.news_feed.max_articles_per_run = int(
+            nf.get("max_articles_per_run", cfg.news_feed.max_articles_per_run)
+        )
     # Legacy shim: fold sources_enabled/poll_intervals/telegram into cfg.plugins.
     # Kept parsed above for backward compat with Config.enabled()/interval().
     _legacy_to_plugin = {"exploit_db": "exploitdb"}

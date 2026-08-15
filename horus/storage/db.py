@@ -265,6 +265,23 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
             if col not in existing_user:
                 conn.execute(f"ALTER TABLE user ADD COLUMN {col} {decl}")
 
+    # news_article — additions from v0.17 (AI news feed).
+    news_exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='news_article'"
+    ).fetchone()
+    if news_exists:
+        existing_news = {row[1] for row in conn.execute("PRAGMA table_info(news_article)")}
+        news_additions = [
+            ("ai_score", "INTEGER"),
+            ("ai_rationale", "TEXT"),
+            ("ai_headline", "TEXT"),
+            ("ai_summary", "TEXT"),
+            ("scored_at", "TEXT"),
+        ]
+        for col, decl in news_additions:
+            if col not in existing_news:
+                conn.execute(f"ALTER TABLE news_article ADD COLUMN {col} {decl}")
+
     # v0.10 data cleanup: fix PoCs where NVD/advisory URLs were linked to
     # multiple CVEs from the same tweet, but the URL only references one.
     # Keep only the CVE that matches the URL path.
@@ -824,3 +841,62 @@ def fetch_resources(
             d["cve_ids"] = json.loads(d["cve_refs"]) if d.get("cve_refs") else []
             results.append(d)
         return results, total
+
+
+# ─── News feed (AI scoring + posting; v0.17) ────────────────────────────
+
+
+def get_unscored_news(conn: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
+    conn.row_factory = sqlite3.Row
+    return conn.execute(
+        """SELECT id, title, url, source, tier, summary, published_at, first_seen
+           FROM news_article WHERE ai_score IS NULL
+           ORDER BY first_seen LIMIT ?""",
+        (limit,),
+    ).fetchall()
+
+
+def save_news_score(
+    conn: sqlite3.Connection,
+    article_id: int,
+    *,
+    score: int,
+    rationale: str,
+    headline: str,
+    summary: str,
+    scored_at: str,
+) -> None:
+    conn.execute(
+        """UPDATE news_article
+           SET ai_score = ?, ai_rationale = ?, ai_headline = ?, ai_summary = ?, scored_at = ?
+           WHERE id = ?""",
+        (score, rationale, headline, summary, scored_at, article_id),
+    )
+
+
+def post_news_article(conn: sqlite3.Connection, article_id: int, posted_at: str) -> bool:
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO news_post (article_id, posted_at) VALUES (?, ?)",
+        (article_id, posted_at),
+    )
+    return cur.rowcount > 0
+
+
+def get_news_posts(
+    conn: sqlite3.Connection, *, page: int = 1, per_page: int = 20
+) -> tuple[list[dict[str, Any]], int]:
+    conn.row_factory = sqlite3.Row
+    offset = (page - 1) * per_page
+    total = conn.execute(
+        "SELECT COUNT(*) FROM news_post p JOIN news_article a ON a.id = p.article_id"
+    ).fetchone()[0]
+    rows = conn.execute(
+        """SELECT p.id, p.posted_at, a.id AS article_id, a.title, a.url, a.source, a.tier,
+                  COALESCE(a.ai_headline, a.title) AS headline,
+                  COALESCE(a.ai_summary, a.summary) AS post_summary,
+                  a.ai_score, a.ai_rationale
+           FROM news_post p JOIN news_article a ON a.id = p.article_id
+           ORDER BY p.posted_at DESC LIMIT ? OFFSET ?""",
+        (per_page, offset),
+    ).fetchall()
+    return [dict(r) for r in rows], int(total)
