@@ -162,6 +162,12 @@ class PluginManager:
                     except Exception as e:
                         self.broken.append((entry.name, str(e)))
                         continue
+                    if plugin.name in self._plugins:
+                        logger.info(
+                            "plugin '%s' from %s overrides the bundled/external copy",
+                            plugin.name,
+                            entry,
+                        )
                     self._plugins[plugin.name] = plugin
 
     def _build(self, kind: PluginKind, entry: Path, data: dict[str, Any]) -> Plugin:
@@ -181,6 +187,9 @@ class PluginManager:
         if not hasattr(mod, export) or not callable(getattr(mod, export)):
             raise ValueError(f"missing export '{export}'")
         sched = data.get("schedule", {})
+        config_schema = data.get("config", {})
+        if not isinstance(config_schema, dict):
+            config_schema = {}
         manifest = PluginManifest(
             name=name,
             type=kind,
@@ -188,14 +197,24 @@ class PluginManager:
             entrypoint=entrypoint,
             enabled_by_default=bool(p.get("enabled_by_default", True)),
             interval_seconds=int(sched.get("interval_seconds", 3600)),
-            config_schema=data.get("config", {}),
+            config_schema=config_schema,
             requires=p.get("requires", []),
         )
+        # Seed Plugin.config from the manifest's declared defaults so config
+        # overrides in horus.yaml merge on top of something real.
+        config_defaults: dict[str, Any] = {}
+        for k, v in config_schema.items():
+            if isinstance(v, dict):
+                config_defaults[k] = v.get("default")
+            else:
+                config_defaults[k] = v
         return Plugin(
             name=name,
             kind=kind,
             manifest=manifest,
             module=mod,
+            config=config_defaults,
+            path=entry,
             display_name=getattr(mod, "NAME", name),
             plugin_kind_tag=getattr(mod, "KIND", ""),
             provides=getattr(mod, "PROVIDES", []),
@@ -212,17 +231,16 @@ class PluginManager:
             if "interval_seconds" in over and over["interval_seconds"] is not None:
                 p.manifest.interval_seconds = int(over["interval_seconds"])
             if "config" in over and isinstance(over["config"], dict):
-                p.config = dict(over["config"])
-            # enabled is handled at accessor time via get_enabled()
+                p.config = {**p.config, **over["config"]}
             if "enabled" in over:
-                p._override_enabled = bool(over["enabled"])  # type: ignore[attr-defined]
+                p.enabled_override = bool(over["enabled"])
 
     def is_enabled(self, name: str) -> bool:
         p = self._plugins.get(name)
         if p is None:
             return False
-        if hasattr(p, "_override_enabled"):
-            return p._override_enabled  # type: ignore[no-any-return]
+        if p.enabled_override is not None:
+            return p.enabled_override
         return p.manifest.enabled_by_default
 
     def _by_kind(self, kind: PluginKind) -> dict[str, Plugin]:
@@ -244,6 +262,10 @@ class PluginManager:
 
     def notifications(self) -> dict[str, Plugin]:
         return self._by_kind(PluginKind.NOTIFICATION)
+
+    def all(self) -> dict[str, Plugin]:
+        """Every discovered plugin, enabled or not (for `plugin list`)."""
+        return dict(self._plugins)
 
     def get(self, name: str) -> Plugin | None:
         return self._plugins.get(name)

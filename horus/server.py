@@ -28,7 +28,6 @@ Config file (YAML if PyYAML is installed; JSON also accepted):
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import os
 import signal
@@ -110,6 +109,8 @@ class Config:
 
 def load_config(path: str | None) -> Config:
     """Load YAML/JSON config; return defaults if path is None or missing."""
+    from .core.config_io import parse_config_text
+
     cfg = Config()
     if not path:
         return cfg
@@ -117,21 +118,11 @@ def load_config(path: str | None) -> Config:
     if not p.exists():
         logger.warning("config not found at %s, using defaults", p)
         return cfg
-    raw = p.read_text()
-    data: dict
     try:
-        import yaml  # type: ignore
-
-        data = yaml.safe_load(raw) or {}
-    except ImportError:
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as e:
-            print(
-                f"  [WARN] PyYAML missing and config is not JSON ({e}); using defaults",
-                file=sys.stderr,
-            )
-            return cfg
+        data = parse_config_text(p.read_text())
+    except ValueError as e:
+        print(f"  [WARN] {e}; using defaults", file=sys.stderr)
+        return cfg
     if "poll_intervals" in data and isinstance(data["poll_intervals"], dict):
         cfg.poll_intervals.update({k: int(v) for k, v in data["poll_intervals"].items()})
     if "sources_enabled" in data and isinstance(data["sources_enabled"], dict):
@@ -174,7 +165,9 @@ def load_config(path: str | None) -> Config:
         t = data["telegram"]
         cfg.telegram.enabled = bool(t.get("enabled", cfg.telegram.enabled))
         cfg.telegram.bot_token = str(t.get("bot_token", cfg.telegram.bot_token))
-        cfg.plugins.setdefault("telegram", {})["enabled"] = cfg.telegram.enabled
+        entry = cfg.plugins.setdefault("telegram", {})
+        entry["enabled"] = cfg.telegram.enabled
+        entry.setdefault("config", {}).setdefault("bot_token", cfg.telegram.bot_token)
     if legacy_used:
         warnings.warn(
             "horus.yaml 'sources_enabled'/'poll_intervals'/'telegram' are deprecated; "
@@ -186,28 +179,10 @@ def load_config(path: str | None) -> Config:
 
 
 def _load_plugins_section(config_path: str | None) -> dict[str, Any]:
-    """Return the `plugins:` block of a YAML/JSON config file ({} if absent).
+    """Return the `plugins:` block of a YAML/JSON config file ({} if absent)."""
+    from .core.config_io import load_config_document
 
-    Shares load_config's parsing strategy: PyYAML if present, else JSON.
-    """
-    if not config_path:
-        return {}
-    p = Path(config_path).expanduser()
-    if not p.exists():
-        return {}
-    raw = p.read_text()
-    data: dict[str, Any]
-    try:
-        import yaml
-
-        data = yaml.safe_load(raw) or {}
-    except ImportError:
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            return {}
-    if not isinstance(data, dict):
-        return {}
+    data = load_config_document(config_path)
     plugins = data.get("plugins", {})
     return plugins if isinstance(plugins, dict) else {}
 
@@ -258,7 +233,7 @@ class Server:
             from .core.plugin_types import NotificationContext
             from .pipeline import register_end_hook
             from .storage import db as _storage
-            from .web.notifications import DEFAULT_PREFS
+            from .web.notifications import effective_prefs
 
             mgr = self._build_manager()
             notifs = mgr.notifications()
@@ -282,19 +257,21 @@ class Server:
                         "SELECT id, username, telegram_chat_id FROM user"
                         " WHERE telegram_chat_id IS NOT NULL"
                     ).fetchall()
-                    # A kind is enabled if any user enabled it, else its default.
-                    merged_prefs: dict[str, bool] = dict(DEFAULT_PREFS)
+                    # Per-user prefs: defaults merged with that user's rows, so
+                    # a user who disabled a kind never receives it (no OR-merge
+                    # across users).
+                    prefs_by_user: dict[int, dict[str, bool]] = {}
                     for user_id, _username, _chat_id in users:
                         rows = conn.execute(
                             "SELECT kind, enabled FROM notification_pref WHERE user_id = ?",
                             (user_id,),
                         ).fetchall()
-                        for kind, enabled in rows:
-                            merged_prefs[kind] = merged_prefs.get(kind, False) or bool(enabled)
+                        stored = {kind: bool(enabled) for kind, enabled in rows}
+                        prefs_by_user[user_id] = effective_prefs(stored)
 
                 for _name, plugin in notifs.items():
                     ctx = NotificationContext(
-                        token=token, users=users, prefs=merged_prefs, send=_send
+                        token=token, users=users, prefs=prefs_by_user, send=_send
                     )
                     plugin.notify(result.events, ctx)
 

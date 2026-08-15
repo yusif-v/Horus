@@ -1,4 +1,5 @@
-# tests/plugin_manager/test_plugin_types.py
+"""Plugin type contracts — kinds, manifest, NotificationContext."""
+
 from __future__ import annotations
 
 from horus.core.plugin_types import NotificationContext, PluginKind, PluginManifest

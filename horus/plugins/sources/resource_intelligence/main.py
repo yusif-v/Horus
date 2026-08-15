@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import sys
 import urllib.request
+from typing import Any
 from urllib.parse import urlparse
 
+from horus.core.context import SourceContext
 from horus.core.filters import extract_cves
 from horus.core.url_extractor import UrlType, extract_urls
 from horus.net.xsearch import XAuthError, XSearch, XSearchError
@@ -222,7 +224,7 @@ def resolve_url(url: str, timeout: int = 5) -> str | None:
         return None
 
 
-def run(ctx) -> dict:
+def run(ctx: SourceContext) -> dict[str, Any]:
     """Search X for security-relevant posts and extract resources."""
     try:
         xs = XSearch()

@@ -70,6 +70,7 @@ def _persist_otx_iocs(
             )
             inserted += 1
         except Exception:
+            # a single malformed IOC must not abort the whole batch — skip it
             pass
 
     return inserted

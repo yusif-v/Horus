@@ -42,7 +42,7 @@ identical and load identically:
   `--plugins-dir` flag.
 
 The plugin `name` is the unique key used everywhere else: `plugins:` toggles
-in horus.yaml and `horus --plugin` commands. (The auto-generated
+in horus.yaml and `horus plugin` commands. (The auto-generated
 `--no-<name>` / `--skip-<name>` CLI flags exist for bundled plugins only.)
 Keep it short, snake_case, and unique across all kinds.
 
@@ -71,7 +71,7 @@ max_results = { type = "int", default = 100 }
 | `[plugin] entrypoint` | string | no | Module file to load (no `.py`). Default `main`. |
 | `[plugin] enabled_by_default` | bool | no | Whether the plugin runs unless overridden in `plugins:`. Default `true`. |
 | `[schedule] interval_seconds` | int | no | Poll cadence used by the server scheduler. Default `3600`. |
-| `[config]` | table | no | Declarative schema of user-tunable options, `key = { type, default }`. Runtime values are set per-plugin under `plugins:` in horus.yaml (via `horus --plugin config <name> <key> <value>`). |
+| `[config]` | table | no | Declarative schema of user-tunable options, `key = { type, default }`. Runtime values are set per-plugin under `plugins:` in horus.yaml (via `horus plugin config <name> <key> <value>`). |
 
 ## Interface contracts
 
@@ -142,29 +142,26 @@ def notify(events, ctx):
                 ctx.send(chat_id, f"{kind}: {item}")
 ```
 
-## `horus --plugin` CLI
+## `horus plugin` CLI
 
-The plugin manager CLI is flag-style — one `--plugin <subcommand>` with
-`--plugin-*` args:
+The plugin manager is a subcommand — `horus plugin <action> [args]`, with
+`--config` / `--plugins-dir` accepted before or after the action:
 
 ```
-horus --plugin list
-horus --plugin <subcommand> --plugin-kind <type> --plugin-name <name>
-                            --plugin-key <key> --plugin-value <value>
-                            --plugins-dir <dir> --config <horus.yaml>
+horus plugin <action> [name] [key [value]] [--config <horus.yaml>] [--plugins-dir <dir>]
 ```
 
-| Subcommand | Description | Example |
-|------------|-------------|---------|
-| `list` | All plugins by kind + version/display name; `[broken]` entries too. | `horus --plugin list` |
-| `enable <name>` | Set `enabled: true` in the config `plugins:` block. | `horus --plugin enable --plugin-name telegram --config horus.yaml` |
-| `disable <name>` | Set `enabled: false`. | `horus --plugin disable --plugin-name github --config horus.yaml` |
-| `config <name>` | Show the plugin's `plugins:` block from horus.yaml. | `horus --plugin config --plugin-name nvd --config horus.yaml` |
-| `config <name> <key> <value>` | Set a plugin config key in horus.yaml. | `horus --plugin config --plugin-name nvd --plugin-key max_results --plugin-value 50 --config horus.yaml` |
-| `add <path>` | Copy a plugin folder into the external plugins dir (kind subdir inferred from its `plugin.toml`). | `horus --plugin add --plugin-name ~/src/myext` |
-| `remove <name>` | Delete an **external** plugin folder. Bundled plugins are never removed. | `horus --plugin remove --plugin-name myext` |
-| `scaffold <type> <name>` | Create `plugin.toml` + `main.py` stubs under the external dir. | `horus --plugin scaffold --plugin-kind source --plugin-name mysrc` |
-| `validate <name|path>` | Check manifest + entrypoint import + required export. Prints `OK` or `INVALID:` with reasons. | `horus --plugin validate --plugin-name mysrc` |
+| Action | Description | Example |
+|--------|-------------|---------|
+| `list` | All plugins by kind + version/display name + enabled state + path; `[broken]` entries too. | `horus plugin list` |
+| `enable <name>` | Set `enabled: true` in the config `plugins:` block. | `horus plugin enable telegram --config horus.yaml` |
+| `disable <name>` | Set `enabled: false`. | `horus plugin disable github --config horus.yaml` |
+| `config <name>` | Show the plugin's `plugins.<name>.config` block from horus.yaml. | `horus plugin config nvd --config horus.yaml` |
+| `config <name> <key> <value>` | Set a plugin config key under `plugins.<name>.config`. | `horus plugin config nvd max_results 50 --config horus.yaml` |
+| `add <path>` | Copy a plugin folder into the external plugins dir (kind subdir inferred from its `plugin.toml`). | `horus plugin add ~/src/myext` |
+| `remove <name>` | Delete an **external** plugin folder. Bundled plugins are never removed. | `horus plugin remove myext` |
+| `scaffold <type> <name>` | Create `plugin.toml` + `main.py` stubs under the external dir. | `horus plugin scaffold source mysrc` |
+| `validate <name|path>` | Check manifest + entrypoint import + required export. Prints `OK` or `INVALID:` with reasons. | `horus plugin validate mysrc` |
 
 Notes:
 
@@ -173,8 +170,7 @@ Notes:
 - `--plugins-dir` overrides the external plugin root (default
   `~/.config/horus/plugins`) for discovery and for `scaffold`/`add`/`remove`.
 - `validate` accepts a plugin name (searched external first, then bundled)
-  or an absolute path to a plugin folder (a relative path is treated as a
-  name under each kind subdir).
+  or a path to a plugin folder.
 - `list` always reflects the full `PluginManager` view, including
   `[broken]` plugins that failed to load.
 
@@ -185,7 +181,7 @@ Add a source to the **external** plugins dir so it doesn't touch the repo.
 **1. Scaffold**
 
 ```bash
-horus --plugin scaffold --plugin-kind source --plugin-name mysrc
+horus plugin scaffold source mysrc
 # scaffolded source plugin -> ~/.config/horus/plugins/sources/mysrc
 ```
 
@@ -236,7 +232,7 @@ def run(ctx):
 **3. Validate**
 
 ```bash
-horus --plugin validate --plugin-name mysrc   # -> OK
+horus plugin validate mysrc   # -> OK
 ```
 
 **4. Enable it** — either in `horus.yaml`:
@@ -251,12 +247,12 @@ plugins:
 or via the CLI (same thing):
 
 ```bash
-horus --plugin enable --plugin-name mysrc --config horus.yaml
+horus plugin enable mysrc --config horus.yaml
 ```
 
 That's it. The next `horus --server` cycle polls `mysrc` on its interval and
 the pipeline treats it like any bundled source. Remove it anytime with
-`horus --plugin remove --plugin-name mysrc`.
+`horus plugin remove mysrc`.
 
 ## Config reference
 

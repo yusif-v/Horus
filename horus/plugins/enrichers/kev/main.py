@@ -5,6 +5,7 @@ Fetches the CISA KEV catalog and marks matching CVEs.
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING
 
 from horus.net.http import fetch_json
@@ -24,9 +25,6 @@ def enrich(ctx: EnricherContext) -> None:
     Also captures dueDate into cve.kev_due_date for overdue/due-soon tracking.
     """
     cves = ctx.cves
-
-    # Import sys only where needed (kept for line count consistency with file)
-    import sys
 
     try:
         data = fetch_json(KEV_URL)

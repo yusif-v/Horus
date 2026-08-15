@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 
@@ -32,11 +33,16 @@ class NotificationContext:
 
     `send` is a helper the plugin calls instead of talking to a transport
     directly, so the same plugin contract works for Telegram/Slack/email.
+
+    `prefs` is keyed by user id: ``prefs[user_id]`` is that user's
+    per-kind enabled map (defaults already merged). This keeps per-user
+    opt-outs intact — a user who disabled a kind must not receive it
+    just because someone else enabled it.
     """
 
     token: str | None
     users: list[Any]
-    prefs: dict[str, bool]
+    prefs: dict[Any, dict[str, bool]]
     send: Callable[[str, str], None]
 
 
@@ -49,6 +55,10 @@ class Plugin:
     manifest: PluginManifest
     module: Any
     config: dict[str, Any] = field(default_factory=dict)
+    # Source folder the plugin was loaded from (bundled or external).
+    path: Path | None = None
+    # Explicit enabled override from horus.yaml (None = use manifest default).
+    enabled_override: bool | None = None
     # Display/metadata kept from the module for backward-compatible ordering.
     display_name: str = ""
     plugin_kind_tag: str = ""  # module KIND attribute ("cve"/"poc")

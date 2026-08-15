@@ -13,15 +13,12 @@ files.
 
 from __future__ import annotations
 
-import importlib
 import json
 import logging
-import pkgutil
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from .core.context import EnricherContext, SourceContext
@@ -42,23 +39,6 @@ _DEFAULT_KIND = _KIND_POC  # safest assumption for plugins that forget to declar
 
 
 # ── Plugin discovery ─────────────────────────────────────────────────────────
-
-
-def _discover_plugins(package_name: str, required_export: str = "run") -> dict[str, Any]:
-    """Return {module_name: module} for plugins exporting `required_export`."""
-    package_path = Path(__file__).parent / package_name
-    plugins: dict[str, Any] = {}
-    for _finder, name, _ispkg in pkgutil.iter_modules([str(package_path)]):
-        if name.startswith("_"):
-            continue
-        try:
-            mod = importlib.import_module(f".{name}", f"horus.{package_name}")
-        except ImportError as e:
-            logging.warn("could not load %s/%s: %s", package_name, name, e)
-            continue
-        if hasattr(mod, required_export) and callable(getattr(mod, required_export)):
-            plugins[name] = mod
-    return plugins
 
 
 def discover_sources() -> dict[str, Any]:

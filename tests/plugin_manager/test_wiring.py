@@ -1,3 +1,5 @@
+"""Pipeline wiring — manager-built Plugin dicts drive run_pipeline ordering + config."""
+
 from __future__ import annotations
 
 import types

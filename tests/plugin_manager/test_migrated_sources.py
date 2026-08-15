@@ -1,4 +1,5 @@
-# tests/plugin_manager/test_migrated_sources.py
+"""Migrated bundled sources still discover through the manager."""
+
 from __future__ import annotations
 
 from pathlib import Path

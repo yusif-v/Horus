@@ -8,8 +8,10 @@ from __future__ import annotations
 import contextlib
 import sys
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from horus.config import NVD_LOOKBACK_DAYS, NVD_MAX_LOOKBACK_DAYS
+from horus.core.context import SourceContext
 from horus.core.normalize import _normalize_product, _normalize_vendor
 from horus.net.http import fetch_json
 
@@ -102,7 +104,7 @@ def _resolve_start(now: datetime, last_run_iso: str | None) -> datetime:
 KIND = "cve"  # produces authoritative CVE records
 
 
-def run(ctx) -> dict:
+def run(ctx: SourceContext) -> dict[str, Any]:
     """Fetch recent CVEs from NVD. Returns {"cves": [dict], "pocs": []}."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     start = _resolve_start(now, ctx.last_run).strftime("%Y-%m-%dT%H:%M:%S.000")

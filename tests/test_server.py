@@ -92,6 +92,26 @@ def test_load_config_bad_json_without_yaml_returns_defaults(tmp_path: Path, monk
     assert cfg.check_every_seconds == 60  # defaults
 
 
+def test_load_config_folds_legacy_telegram_into_plugins(tmp_path: Path):
+    """a6: the deprecated `telegram:` block folds into plugins.telegram.config."""
+    config_path = tmp_path / "horus.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "telegram": {
+                    "enabled": True,
+                    "bot_token": "tok-123",
+                }
+            }
+        )
+    )
+    cfg = server.load_config(str(config_path))
+    entry = cfg.plugins.get("telegram", {})
+    assert entry.get("enabled") is True
+    assert entry.get("config", {}).get("bot_token") == "tok-123"
+    assert cfg.telegram.bot_token == "tok-123"
+
+
 # ── _last_run_epoch ──────────────────────────────────────────────────────
 
 

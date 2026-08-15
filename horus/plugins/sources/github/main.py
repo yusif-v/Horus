@@ -14,8 +14,10 @@ from __future__ import annotations
 import sys
 import urllib.parse
 from datetime import datetime, timezone
+from typing import Any
 
 from horus.config import GITHUB_QUERIES, MAX_REPO_AGE_DAYS, MIN_REPO_STARS
+from horus.core.context import SourceContext
 from horus.core.filters import extract_cves, is_fresh_poc
 from horus.net.auth import github_token
 from horus.net.http import fetch_json
@@ -37,7 +39,7 @@ def _confidence_for_stars(stars: int | None) -> str:
     return "low"
 
 
-def run(ctx) -> dict:
+def run(ctx: SourceContext) -> dict[str, Any]:
     """Search GitHub for new PoC repos. Returns {"cves": [], "pocs": [dict]}.
 
     Also enriches any GitHub URLs `ctx.x_discovered_urls` (surfaced by

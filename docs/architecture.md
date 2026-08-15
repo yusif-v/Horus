@@ -119,12 +119,12 @@ interval_seconds, `[config]` schema) and an entrypoint `main.py` exporting:
 | enricher | `enrich(ctx) -> None` | mutates `ctx.cves` / `ctx.pocs` in place |
 | notification | `notify(events, ctx)` | `ctx` is a `NotificationContext` (`token`, `users`, `prefs`, `send(channel, message)`) |
 
-The `horus --plugin` CLI manages plugins (`list`, `enable`/`disable`,
+The `horus plugin` CLI manages plugins (`list`, `enable`/`disable`,
 `config`, `add`, `remove`, `scaffold`, `validate`); enable/disable/config
 persist to horus.yaml's `plugins:` block.
 
 Add a source = create `horus/plugins/sources/<name>/{plugin.toml, main.py}`
-(or use `horus --plugin scaffold --plugin-kind source --plugin-name <name>`).
+(or use `horus plugin scaffold source <name>`).
 Nothing else changes. Full authoring guide: `docs/plugins.md`.
 
 ## What lives where (decision rules)

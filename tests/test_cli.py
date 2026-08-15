@@ -178,3 +178,15 @@ def test_main_no_nvd_disabled():
         main(["--no-save", "--no-graph", "--no-nvd"])
     opts = mock_pipeline.call_args[0][0]
     assert "nvd" in opts.disabled_sources
+
+
+def test_main_one_shot_honors_config_disabled_source(tmp_path):
+    """a1: a source disabled in horus.yaml is not passed into run_pipeline."""
+    cfg = tmp_path / "horus.yaml"
+    cfg.write_text("plugins:\n  github:\n    enabled: false\n")
+    with patch("horus.cli.run_pipeline") as mock_pipeline:
+        main(["--no-save", "--no-graph", "--config", str(cfg)])
+    _, kwargs = mock_pipeline.call_args
+    sources = kwargs["sources"]
+    assert "github" not in sources
+    assert "nvd" in sources

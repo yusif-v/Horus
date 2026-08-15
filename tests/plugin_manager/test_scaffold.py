@@ -1,4 +1,5 @@
-# tests/plugin_manager/test_scaffold.py
+"""Scaffold generator produces plugins that pass validation."""
+
 from __future__ import annotations
 
 from horus.core.plugin_types import PluginKind

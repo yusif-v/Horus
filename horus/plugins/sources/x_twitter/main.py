@@ -8,8 +8,10 @@ classification of the resource type.
 from __future__ import annotations
 
 import sys
+from typing import Any
 from urllib.parse import urlparse
 
+from horus.core.context import SourceContext
 from horus.core.filters import extract_cves
 from horus.core.url_extractor import UrlType, extract_urls
 from horus.core.url_resolve import classify_destination_domain, resolve_urls_batch
@@ -47,7 +49,7 @@ DEFAULT_QUERIES = [
 ]
 
 
-def run(ctx) -> dict:
+def run(ctx: SourceContext) -> dict[str, Any]:
     """Search X for CVE mentions and extract URLs.
 
     Resolves t.co URLs to their final destination for proper classification.

@@ -33,6 +33,8 @@ plugins:
     interval_seconds: 86400  # 24h — daily feed
   telegram:
     enabled: true
+    config:
+      bot_token: "YOUR_BOT_TOKEN"  # or set TELEGRAM_BOT_TOKEN env var
 
 # How often the scheduler wakes up to check which sources are due.
 check_every_seconds: 60
@@ -53,5 +55,9 @@ web:
 # Token can also be set via TELEGRAM_BOT_TOKEN env var.
 # Bot username (without @) can be set via TELEGRAM_BOT_USERNAME env var.
 # To disable, set enabled: false or omit this section entirely.
-telegram:
-  bot_token: "YOUR_BOT_TOKEN"  # or set TELEGRAM_BOT_TOKEN env var
+#
+# NOTE: the top-level `telegram:` block is deprecated. Configure the bot via
+# `plugins.telegram.config` (above) instead. The old block is folded into it
+# with a DeprecationWarning.
+# telegram:
+#   bot_token: "YOUR_BOT_TOKEN"

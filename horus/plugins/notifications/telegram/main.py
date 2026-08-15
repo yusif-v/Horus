@@ -29,8 +29,8 @@ def notify(events: dict[str, list[dict[str, Any]]], ctx: NotificationContext) ->
         return
     for user_row in ctx.users:
         # user_row shape: (id, username, chat_id)
-        _user_id, username, chat_id = user_row[0], user_row[1], user_row[2]
-        prefs = ctx.prefs
+        user_id, username, chat_id = user_row[0], user_row[1], user_row[2]
+        prefs = ctx.prefs.get(user_id, {})
         messages = []
         for kind, items in events.items():
             if not items:

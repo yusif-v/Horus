@@ -24,12 +24,7 @@ from typing import Any
 from . import __version__
 from .logger import setup_logging
 from .net.auth import github_token
-from .pipeline import (
-    PipelineOptions,
-    discover_enrichers,
-    discover_sources,
-    run_pipeline,
-)
+from .pipeline import PipelineOptions, run_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +36,9 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="horus",
         description="Daily PoC research scanner — plugin-based CVE & PoC aggregator.",
+        # `allow_abbrev=False` so `--plugin` is NOT ambiguous with `--plugins-dir`
+        # (an aborted flag-style invocation must fail, not silently run).
+        allow_abbrev=False,
     )
     p.add_argument("--version", action="version", version=f"horus {__version__}")
 
@@ -162,27 +160,64 @@ def _build_parser(sources: dict, enrichers: dict) -> argparse.ArgumentParser:
     p.add_argument(
         "--config", type=str, default=None, help="Path to YAML/JSON config file (server mode)."
     )
-
-    # Plugin management
-    p.add_argument(
-        "--plugin",
-        type=str,
-        choices=("list", "enable", "disable", "config", "add", "remove", "scaffold", "validate"),
-        default=None,
-        help="Manage plugins: list, enable, disable, config, add, remove, scaffold, validate.",
-    )
-    p.add_argument("--plugin-kind", type=str, default=None, help="Plugin type (scaffold).")
-    p.add_argument("--plugin-name", type=str, default=None, help="Plugin name or path.")
-    p.add_argument("--plugin-key", type=str, default=None, help="Config key (plugin config set).")
-    p.add_argument(
-        "--plugin-value", type=str, default=None, help="Config value (plugin config set)."
-    )
     p.add_argument(
         "--plugins-dir",
         type=str,
         default=None,
         help="External plugins directory (default: ~/.config/horus/plugins).",
     )
+
+    # Plugin management — `horus plugin <action> [args]`
+    plugin_sub = p.add_subparsers(dest="plugin_cmd", metavar="plugin")
+    plugin_parser = plugin_sub.add_parser(
+        "plugin",
+        help="Manage plugins: list, enable, disable, config, add, remove, scaffold, validate.",
+    )
+    actions = plugin_parser.add_subparsers(dest="plugin_action", metavar="ACTION")
+    # `--config` / `--plugins-dir` are also top-level options; SUPPRESS keeps a
+    # subcommand-scoped value from clobbering the top-level one (and vice versa).
+
+    def _plugin_flags(s: argparse.ArgumentParser) -> None:
+        s.add_argument("--config", default=argparse.SUPPRESS)
+        s.add_argument("--plugins-dir", default=argparse.SUPPRESS)
+
+    _p = actions.add_parser("list", help="List all discovered (bundled + external) plugins.")
+    _plugin_flags(_p)
+
+    _p = actions.add_parser("enable", help="Set enabled: true for a plugin in horus.yaml.")
+    _p.add_argument("name")
+    _plugin_flags(_p)
+
+    _p = actions.add_parser("disable", help="Set enabled: false for a plugin in horus.yaml.")
+    _p.add_argument("name")
+    _plugin_flags(_p)
+
+    _p = actions.add_parser(
+        "config", help="Show or set a plugin's config: `config <name> [<key> [<value>]]`."
+    )
+    _p.add_argument("name")
+    _p.add_argument("key", nargs="?")
+    _p.add_argument("value", nargs="?")
+    _plugin_flags(_p)
+
+    _p = actions.add_parser("add", help="Install a plugin folder into an external plugins dir.")
+    _p.add_argument("name", metavar="path")
+    _plugin_flags(_p)
+
+    _p = actions.add_parser("remove", help="Remove an external plugin folder (never bundled).")
+    _p.add_argument("name")
+    _plugin_flags(_p)
+
+    _p = actions.add_parser(
+        "scaffold", help="Generate a starter plugin folder (manifest + main.py stub)."
+    )
+    _p.add_argument("kind", choices=("source", "enricher", "notification"))
+    _p.add_argument("name")
+    _plugin_flags(_p)
+
+    _p = actions.add_parser("validate", help="Validate a plugin manifest + entrypoint + export.")
+    _p.add_argument("name", metavar="name|path", help="Plugin name or path to a plugin folder.")
+    _plugin_flags(_p)
 
     # Auto-generated --no-<src> / --skip-<enricher> flags
     for name, mod in sorted(sources.items()):
@@ -373,23 +408,9 @@ def _plugin_read_config(config_path: str | None) -> dict[str, Any]:
     Returns {} when the file is missing/unparseable so callers can safely
     rebuild a fresh `plugins:` block.
     """
-    import json
+    from .core.config_io import load_config_document
 
-    if not config_path:
-        return {}
-    p = Path(config_path).expanduser()
-    if not p.exists():
-        return {}
-    try:
-        import yaml
-
-        data = yaml.safe_load(p.read_text()) or {}
-    except ImportError:
-        try:
-            data = json.loads(p.read_text())
-        except json.JSONDecodeError:
-            data = {}
-    return data if isinstance(data, dict) else {}
+    return load_config_document(config_path)
 
 
 def _plugin_write_config(config_path: str, data: dict[str, Any]) -> None:
@@ -424,7 +445,7 @@ def _plugin_set_enabled(config_path: str | None, name: str, enabled: bool) -> bo
 
 
 def _plugin_set_config(config_path: str | None, name: str, key: str, value: str | None) -> bool:
-    """Set a config key for a plugin in the config's `plugins:` block.
+    """Set a config key for a plugin in the config's `plugins.<name>.config:` block.
 
     Returns True when the change was persisted to a config file, False when
     there is no config file (callers must not claim success).
@@ -435,17 +456,17 @@ def _plugin_set_config(config_path: str | None, name: str, key: str, value: str 
     doc = _plugin_read_config(config_path)
     plugins = doc.setdefault("plugins", {})
     entry = plugins.setdefault(name, {})
-    entry[key] = value
+    entry.setdefault("config", {})[key] = value
     _plugin_write_config(config_path, doc)
     return True
 
 
 def _plugin_show_config(config_path: str | None, name: str) -> None:
-    """Print the config block for a plugin from the `plugins:` section."""
+    """Print the config block for a plugin from the `plugins.<name>.config:` section."""
     from .server import _load_plugins_section
 
     plugins = _load_plugins_section(config_path) if config_path else {}
-    entry = plugins.get(name)
+    entry = (plugins.get(name) or {}).get("config", {})
     if not entry:
         print(f"no config for plugin '{name}'")
         return
@@ -501,14 +522,10 @@ def _cmd_plugin(args: Any) -> None:
         mgr.apply_config(_load_plugins_section(args.config))
 
     if args.cmd == "list":
-        buckets = {
-            "source": mgr.sources(),
-            "enricher": mgr.enrichers(),
-            "notification": mgr.notifications(),
-        }
-        for kind, items in buckets.items():
-            for name, p in sorted(items.items()):
-                print(f"[{kind}] {name} v{p.manifest.version} ({p.display_name})")
+        for name, p in sorted(mgr.all().items()):
+            state = "enabled" if mgr.is_enabled(name) else "disabled"
+            loc = str(p.path) if p.path else "?"
+            print(f"[{p.kind.value}] {name} v{p.manifest.version} ({p.display_name}) {state} {loc}")
         for name, err in mgr.broken:
             print(f"[broken] {name}: {err}")
     elif args.cmd == "scaffold":
@@ -516,19 +533,23 @@ def _cmd_plugin(args: Any) -> None:
         out = scaffold_plugin(kind, args.name, plugins_dir)
         print(f"scaffolded {kind.value} plugin -> {out}")
     elif args.cmd == "validate":
-        target = _plugin_find_external(plugins_dir, args.name)
-        if target is None:
-            target = next(
-                (
-                    bundled / sub / args.name
-                    for sub in ("sources", "enrichers", "notifications")
-                    if (bundled / sub / args.name).exists()
-                ),
-                None,
-            )
+        target: Path | None = Path(args.name)
+        if target is not None and not (target / "plugin.toml").exists():
+            # Not a path to a plugin folder — treat as a name.
+            target = _plugin_find_external(plugins_dir, args.name)
             if target is None:
-                print(f"plugin '{args.name}' not found")
-                return
+                target = next(
+                    (
+                        bundled / sub / args.name
+                        for sub in ("sources", "enrichers", "notifications")
+                        if (bundled / sub / args.name).exists()
+                    ),
+                    None,
+                )
+                if target is None:
+                    print(f"plugin '{args.name}' not found")
+                    return
+        assert target is not None
         errs = validate_plugin(target)
         print("OK" if not errs else "INVALID:\n" + "\n".join(errs))
     elif args.cmd in ("enable", "disable"):
@@ -571,13 +592,21 @@ def _cmd_plugin(args: Any) -> None:
 def main(argv: list[str] | None = None) -> None:
     setup_logging()
 
-    sources = discover_sources()
-    enrichers = discover_enrichers()
-    args = _build_parser(sources, enrichers).parse_args(argv)
+    from .plugin_manager import PluginManager
+
+    bundled = Path(__file__).parent / "plugins"
+    default_ext = Path("~/.config/horus/plugins").expanduser()
+
+    # Flag generation + --list-sources use the default-enabled plugin set;
+    # config is only resolvable after args are parsed.
+    probe = PluginManager(bundled_root=bundled, external_dirs=[default_ext])
+    probe_sources = {n: p.module for n, p in probe.sources().items()}
+    probe_enrichers = {n: p.module for n, p in probe.enrichers().items()}
+    args = _build_parser(probe_sources, probe_enrichers).parse_args(argv)
 
     # One-shot commands fall through here.
     if args.list_sources:
-        return _cmd_list_sources(sources, enrichers)
+        return _cmd_list_sources(probe_sources, probe_enrichers)
     if args.query:
         return _cmd_query(args)
     if args.health_check:
@@ -594,14 +623,14 @@ def main(argv: list[str] | None = None) -> None:
         return _cmd_server(args)
     if args.auth_status:
         return _cmd_auth_status()
-    if args.plugin:
+    if args.plugin_cmd == "plugin":
         return _cmd_plugin(
             argparse.Namespace(
-                cmd=args.plugin,
-                kind=args.plugin_kind,
-                name=args.plugin_name,
-                key=args.plugin_key,
-                value=args.plugin_value,
+                cmd=args.plugin_action,
+                kind=getattr(args, "kind", None),
+                name=getattr(args, "name", None),
+                key=getattr(args, "key", None),
+                value=getattr(args, "value", None),
                 plugins_dir=args.plugins_dir,
                 config=args.config,
             )
@@ -617,6 +646,17 @@ def main(argv: list[str] | None = None) -> None:
             source_filter = {s.strip() for s in env_enabled.split(",") if s.strip()}
             if source_filter:
                 logger.info("Sources enabled via HORUS_SOURCES_ENABLED: %s", source_filter)
+
+    # Resolve the real plugin set from config so `plugins.<name>.enabled` and
+    # `plugins.<name>.config` are honored for one-shot runs too.
+    from .server import load_config
+
+    cfg = load_config(args.config)
+    ext = [Path(d).expanduser() for d in cfg.plugin_dirs]
+    mgr = PluginManager(bundled_root=bundled, external_dirs=ext)
+    mgr.apply_config(cfg.plugins)
+    sources = mgr.sources()
+    enrichers = mgr.enrichers()
 
     disabled_sources = {n for n in sources if getattr(args, f"no_{n}", False)}
     disabled_enrichers = {n for n in enrichers if getattr(args, f"skip_{n}", False)}

@@ -11,10 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Plugin system**: sources, enrichers, and notifications are now folder+`plugin.toml` plugins loaded by a single `PluginManager` (bundled `horus/plugins/<kind>/<name>/` + external `plugin_dirs`).
-- **`horus --plugin` CLI**: `list`, `enable`/`disable`, `config`, `add`, `remove`, `scaffold`, `validate`.
+- **`horus plugin` CLI**: `list`, `enable`/`disable`, `config`, `add`, `remove`, `scaffold`, `validate`.
 
 ### Changed
 - **Unified config schema**: `horus.yaml` now uses `plugin_dirs:` + `plugins:` (per-plugin `enabled`/`interval_seconds`/`config`). Legacy `sources_enabled`/`poll_intervals`/`telegram` keys still honored with a `DeprecationWarning`; removed in the next minor.
+- **`horus plugin config <name> <key> <value>`** writes under `plugins.<name>.config` so the value is actually applied by `apply_config`.
+- **Notification prefs are per-user**: `NotificationContext.prefs` is now `{user_id: {kind: bool}}`; a user who disabled a kind no longer receives it just because another user enabled it.
+- **One-shot runs honor config**: `horus` (non-server) builds its plugin set from horus.yaml, so `plugins.<name>.enabled`/`.config` apply to one-shot scans too.
+
+### Added
+- `PluginManager.all()` + `Plugin.path` surfaced by `horus plugin list` (enabled state + location).
+- Server enrichers-only cycle also backfills OTX + darkweb (deliberate extension beyond the epss+kev plan).
+- `horus/core/feeds.py` FEEDS registry de-couples the web layer and news linker from the news plugin package.
+
+### Cleaned up
+- Removed the dead `_discover_plugins` (pkgutil-based) from `pipeline.py`; plugin discovery lives in `PluginManager`. Deleted its now-obsolete test file.
+- Typed all bundled plugin entrypoints (`run(ctx: SourceContext)` / `enrich(ctx: EnricherContext)`).
+- Replaced the dynamic `_override_enabled` attribute on `Plugin` with a declared `enabled_override` field.
+- Unified YAML/JSON config parsing into `horus/core/config_io.py` (shared by server + CLI).
+- Standardized test module docstrings in `tests/plugin_manager/`.
 
 ## [0.15.0] - 2026-08-07
 

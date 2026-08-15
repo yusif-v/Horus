@@ -14,8 +14,10 @@ from __future__ import annotations
 import sys
 import urllib.parse
 from datetime import datetime, timezone
+from typing import Any
 
 from horus.config import CODEBERG_QUERIES, MAX_REPO_AGE_DAYS, MIN_REPO_STARS
+from horus.core.context import SourceContext
 from horus.core.filters import extract_cves, is_fresh_poc
 from horus.net.auth import codeberg_token
 from horus.net.http import fetch_json
@@ -48,7 +50,7 @@ def _extract_owner_repo_from_url(url: str) -> tuple[str, str] | None:
     return owner, repo
 
 
-def run(ctx) -> dict:
+def run(ctx: SourceContext) -> dict[str, Any]:
     """Search Codeberg for new PoC repos. Returns {"cves": [], "pocs": [dict]}
 
     Also enriches any Codeberg URLs `ctx.x_discovered_urls` (surfaced by

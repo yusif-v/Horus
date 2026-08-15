@@ -1,4 +1,5 @@
-# tests/plugin_manager/test_load.py
+"""PluginManager discovery — bundled + external, collisions, broken skip, config."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -85,6 +86,76 @@ def test_apply_config_disables_and_overrides_interval(tmp_path):
     p = mgr.get("cfg")
     assert p.config == {"max": 50}
     assert p.manifest.interval_seconds == 1800
+
+
+def test_manifest_config_defaults_seed_plugin_config(tmp_path):
+    """[config] defaults in plugin.toml become Plugin.config before any override."""
+    from horus.plugin_manager import PluginManager
+
+    d = tmp_path / "sources" / "defaults"
+    d.mkdir(parents=True)
+    (d / "plugin.toml").write_text(
+        '[plugin]\nname = "defaults"\ntype = "source"\nversion = "1.0.0"\n'
+        'entrypoint = "main"\n[schedule]\ninterval_seconds = 3600\n'
+        "[config]\nmax = {type='int', default=10}\nlabel = {type='str', default='auto'}\n"
+    )
+    (d / "main.py").write_text("NAME='D'\nKIND='poc'\ndef run(ctx):\n return {}\n")
+    mgr = PluginManager(bundled_root=tmp_path / "never", external_dirs=[tmp_path])
+    p = mgr.get("defaults")
+    assert p.config == {"max": 10, "label": "auto"}
+
+
+def test_apply_config_merges_over_manifest_defaults(tmp_path):
+    """horus.yaml config merges onto manifest defaults instead of replacing them."""
+    from horus.plugin_manager import PluginManager
+
+    d = tmp_path / "sources" / "merge"
+    d.mkdir(parents=True)
+    (d / "plugin.toml").write_text(
+        '[plugin]\nname = "merge"\ntype = "source"\nversion = "1.0.0"\n'
+        'entrypoint = "main"\n[schedule]\ninterval_seconds = 3600\n'
+        "[config]\nmax = {type='int', default=10}\nlabel = {type='str', default='auto'}\n"
+    )
+    (d / "main.py").write_text("NAME='M'\nKIND='poc'\ndef run(ctx):\n return {}\n")
+    mgr = PluginManager(bundled_root=tmp_path / "never", external_dirs=[tmp_path])
+    mgr.apply_config({"merge": {"enabled": True, "config": {"max": 50}}})
+    p = mgr.get("merge")
+    # Overridden key changed, untouched default preserved.
+    assert p.config == {"max": 50, "label": "auto"}
+
+
+def test_external_override_logs_info(tmp_path, bundled, caplog):
+    import logging
+
+    from horus.plugin_manager import PluginManager
+
+    _make_plugin(bundled, "sources", "dup")
+    ext = tmp_path / "ext"
+    _make_plugin(ext, "sources", "dup")
+    with caplog.at_level(logging.INFO, logger="horus.plugin_manager"):
+        PluginManager(bundled_root=bundled, external_dirs=[ext])
+    assert any("dup" in r.message and "overrides" in r.message for r in caplog.records)
+
+
+def test_all_lists_disabled_plugins(tmp_path, bundled):
+    from horus.plugin_manager import PluginManager
+
+    _make_plugin(tmp_path, "sources", "on")
+    _make_plugin(tmp_path, "sources", "off", enabled=False)
+    mgr = PluginManager(bundled_root=bundled, external_dirs=[tmp_path])
+    assert "off" not in mgr.sources()
+    assert "off" in mgr.all()
+    assert mgr.is_enabled("on") is True
+    assert mgr.is_enabled("off") is False
+
+
+def test_plugin_has_path(tmp_path, bundled):
+    from horus.plugin_manager import PluginManager
+
+    _make_plugin(tmp_path, "sources", "where")
+    mgr = PluginManager(bundled_root=bundled, external_dirs=[tmp_path])
+    p = mgr.get("where")
+    assert p.path == tmp_path / "sources" / "where"
 
 
 def test_due_sources_uses_interval(tmp_path):

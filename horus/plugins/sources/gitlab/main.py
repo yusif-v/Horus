@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime, timezone
+from typing import Any
 from urllib.parse import quote as url_quote
 
 from horus.config import MAX_REPO_AGE_DAYS, MIN_REPO_STARS
+from horus.core.context import SourceContext
 from horus.core.filters import extract_cves, is_fresh_poc
 from horus.net.http import fetch_json
 
@@ -50,7 +52,7 @@ def _confidence_for_stars(stars: int | None) -> str:
     return "low"
 
 
-def run(ctx) -> dict:
+def run(ctx: SourceContext) -> dict[str, Any]:
     """Search GitLab for new PoC repos. Returns {"cves": [], "pocs": [dict]}."""
     results = []
     base = "https://gitlab.com/api/v4/projects"

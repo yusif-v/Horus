@@ -53,33 +53,35 @@ def _fresh_db(suffix=""):
 def _notification_ctx(token="fake-token", prefs=None):
     """Build a NotificationContext from the DB-seeded users, mirroring server.py.
 
+    `prefs` is a per-user override map: {user_id: {kind: bool}}. Prefs are
+    keyed by user so opt-outs are honored per user (no OR-merge across users).
     Returns (ctx, sent) where `sent` is the list of (chat_id, message) the
     plugin's `send` callback captured.
     """
     from horus.core.plugin_types import NotificationContext
-    from horus.web.notifications import DEFAULT_PREFS
+    from horus.web.notifications import effective_prefs
 
     with _db.connect() as conn:
         users = conn.execute(
             "SELECT id, username, telegram_chat_id FROM user WHERE telegram_chat_id IS NOT NULL"
         ).fetchall()
-        # A kind is enabled if any user enabled it, else its default (server.py logic).
-        merged_prefs: dict[str, bool] = dict(DEFAULT_PREFS)
-        if prefs is not None:
-            merged_prefs.update(prefs)
+        # Per-user prefs: that user's DB rows merged with defaults (server.py logic).
+        prefs_by_user: dict[int, dict[str, bool]] = {}
         for user_id, _username, _chat_id in users:
             rows = conn.execute(
                 "SELECT kind, enabled FROM notification_pref WHERE user_id = ?",
                 (user_id,),
             ).fetchall()
-            for kind, enabled in rows:
-                merged_prefs[kind] = merged_prefs.get(kind, False) or bool(enabled)
+            stored = {kind: bool(enabled) for kind, enabled in rows}
+            if prefs is not None and user_id in prefs:
+                stored.update(prefs[user_id])
+            prefs_by_user[user_id] = effective_prefs(stored)
 
     sent: list[tuple[int, str]] = []
     ctx = NotificationContext(
         token=token,
         users=users,
-        prefs=merged_prefs,
+        prefs=prefs_by_user,
         send=lambda chat_id, msg: sent.append((chat_id, msg)),
     )
     return ctx, sent
@@ -263,7 +265,7 @@ def test_notify_sends_to_linked_user():
 def test_notify_skips_disabled_category():
     _seed_linked, _, _cleanup = _fresh_db("n2")
     try:
-        _seed_linked("alice", chat_id=42)
+        alice_id = _seed_linked("alice", chat_id=42)
         from horus.plugins.notifications.telegram.main import notify
 
         events = {
@@ -272,7 +274,7 @@ def test_notify_skips_disabled_category():
             ],
         }
 
-        ctx, sent = _notification_ctx(prefs={"kev_new": False})
+        ctx, sent = _notification_ctx(prefs={alice_id: {"kev_new": False}})
         notify(events, ctx)
 
         assert sent == []
@@ -292,6 +294,35 @@ def test_notify_no_token_is_noop():
         notify(events, ctx)  # should not raise
 
         assert sent == []
+    finally:
+        _cleanup()
+
+
+def test_notify_respects_per_user_opt_out():
+    """A user who disabled a kind must not receive it even if another enabled it."""
+    _seed_linked, _, _cleanup = _fresh_db("n8")
+    try:
+        alice_id = _seed_linked("alice", chat_id=42)
+        bob_id = _seed_linked("bob", chat_id=99)
+        with _db.connect() as conn:
+            for uid, enabled in ((alice_id, 1), (bob_id, 0)):
+                conn.execute(
+                    "INSERT INTO notification_pref (user_id, kind, enabled) VALUES (?, ?, ?)",
+                    (uid, "poc_new", enabled),
+                )
+        from horus.plugins.notifications.telegram.main import notify
+
+        events = {
+            "poc_new": [
+                {"cve_id": "CVE-2026-1234", "url": "https://github.com/x/y", "source": "github"}
+            ],
+        }
+
+        ctx, sent = _notification_ctx()
+        notify(events, ctx)
+
+        # Only alice (enabled) gets the poc_new event; bob opted out.
+        assert [ch for ch, _ in sent] == [42]
     finally:
         _cleanup()
 

@@ -1,4 +1,5 @@
-# tests/plugin_manager/test_cli.py
+"""`horus plugin` CLI — list/enable/disable/config/add/remove/scaffold/validate."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -127,7 +128,7 @@ def test_cli_config_set_and_show(tmp_path, capsys):
     assert "set demo.api_key = abc123" in capsys.readouterr().out
 
     doc = _plugin_read_config(str(yaml))
-    assert doc["plugins"]["demo"]["api_key"] == "abc123"
+    assert doc["plugins"]["demo"]["config"]["api_key"] == "abc123"
     assert doc["plugins"]["demo"]["enabled"] is True  # existing key preserved
 
     _cmd_plugin(_ns("config", "demo", config=str(yaml), plugins_dir=tmp_path / "plugins"))
@@ -155,7 +156,7 @@ def test_cli_config_write_json_fallback(tmp_path, monkeypatch):
     assert ok is True
 
     doc = _plugin_read_config(str(json_path))
-    assert doc["plugins"]["demo"]["api_key"] == "xyz"
+    assert doc["plugins"]["demo"]["config"]["api_key"] == "xyz"
     assert doc["plugins"]["demo"]["enabled"] is True  # existing key preserved
     assert doc["web"]["port"] == 8081  # unrelated top-level key preserved
 
@@ -178,3 +179,80 @@ def test_cli_config_set_without_config_does_not_claim_success(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "no config file; nothing persisted" in out
     assert "set demo.k = v" not in out
+
+
+def test_cli_list_shows_enabled_state_and_path(tmp_path, capsys):
+    import argparse
+
+    from horus.cli import _cmd_plugin
+
+    pd = tmp_path / "plugins"
+    scaffold_plugin(PluginKind.SOURCE, "demo", pd)
+    yaml = tmp_path / "horus.yaml"
+    _write_yaml(yaml, pd)
+    args = argparse.Namespace(
+        cmd="list", name=None, key=None, value=None, plugins_dir=pd, config=str(yaml)
+    )
+    _cmd_plugin(args)
+    out = capsys.readouterr().out
+    # bundled plugins are also listed, but the external demo must show state+path
+    line = next(x for x in out.splitlines() if "demo" in x and "source" in x)
+    assert "enabled" in line
+    assert str(pd / "sources" / "demo") in line
+
+
+def test_cli_list_shows_disabled_state(tmp_path, capsys):
+    import argparse
+
+    from horus.cli import _cmd_plugin
+
+    pd = tmp_path / "plugins"
+    scaffold_plugin(PluginKind.SOURCE, "demo", pd)
+    yaml = tmp_path / "horus.yaml"
+    yaml.write_text(f"plugin_dirs:\n  - {pd}\nplugins:\n  demo:\n    enabled: false\n")
+    args = argparse.Namespace(
+        cmd="list", name=None, key=None, value=None, plugins_dir=pd, config=str(yaml)
+    )
+    _cmd_plugin(args)
+    out = capsys.readouterr().out
+    line = next(x for x in out.splitlines() if "demo" in x and "source" in x)
+    assert "disabled" in line
+
+
+def test_cli_validate_accepts_path(tmp_path, capsys):
+    import argparse
+
+    from horus.cli import _cmd_plugin
+
+    pd = tmp_path / "plugins"
+    folder = scaffold_plugin(PluginKind.SOURCE, "demo", pd)
+    args = argparse.Namespace(
+        cmd="validate", name=str(folder), key=None, value=None, plugins_dir=pd, config=None
+    )
+    _cmd_plugin(args)
+    assert "OK" in capsys.readouterr().out
+
+
+def test_main_plugin_subcommand_scaffold(tmp_path, capsys):
+    """b1: `horus plugin <action>` subcommand routes through main()."""
+    from horus.cli import main
+
+    pd = tmp_path / "plugins"
+    main(["plugin", "scaffold", "source", "demo", "--plugins-dir", str(pd)])
+    assert (pd / "sources" / "demo" / "plugin.toml").exists()
+
+    main(["plugin", "validate", "demo", "--plugins-dir", str(pd)])
+    assert "OK" in capsys.readouterr().out
+
+
+def test_main_plugin_subcommand_config_sets_nested_block(tmp_path, capsys):
+    """b1 + c1: config set via subcommand lands under plugins.<name>.config."""
+    from horus.cli import _plugin_read_config, main
+
+    yaml = tmp_path / "horus.yaml"
+    yaml.write_text("plugins:\n  demo:\n    enabled: true\n")
+    pd = tmp_path / "plugins"
+
+    main(["plugin", "config", "demo", "max", "50", "--config", str(yaml), "--plugins-dir", str(pd)])
+    doc = _plugin_read_config(str(yaml))
+    assert doc["plugins"]["demo"]["config"]["max"] == "50"
