@@ -127,6 +127,13 @@ Add a source = create `horus/plugins/sources/<name>/{plugin.toml, main.py}`
 (or use `horus plugin scaffold source <name>`).
 Nothing else changes. Full authoring guide: `docs/plugins.md`.
 
+## News feed
+
+News articles ingested by the `news` source plugin are scored for importance by
+the AI via `horus/news_feed`; articles scoring at or above `news_feed.threshold`
+become posts on a new `/posts` web page. Scoring runs as a pipeline end-hook
+(after each full cycle) or manually via `horus news-feed`.
+
 ## What lives where (decision rules)
 
 | If the code does this... | Put it here |

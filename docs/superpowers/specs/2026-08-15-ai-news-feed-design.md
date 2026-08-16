@@ -2,7 +2,7 @@
 
 *Date: 2026-08-15*
 *Branch: `refactor/plugin-system`*
-*Status: approved design, pending implementation plan*
+*Status: implemented*
 
 ## Goal
 

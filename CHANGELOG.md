@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **AI news feed**: new articles from RSS are scored for importance by the AI; articles above `news_feed.threshold` become posts on a new `/posts` page. New `horus news-feed` CLI command.
+
 ## [0.16.0] - 2026-08-13
 
 ### Added

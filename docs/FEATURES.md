@@ -15,6 +15,7 @@
 11. [CVE-News Intelligence Linking](#cve-news-intelligence-linking)
 12. [Web Dashboard](#web-dashboard)
 13. [API Reference](#api-reference)
+14. [AI News Feed](#ai-news-feed)
 
 ---
 
@@ -247,6 +248,7 @@ Flask app with 13 blueprints, RBAC, CSRF protection, audit logging.
 | `/triage` | write | Action queue |
 | `/watchlist` | team | Per-team pins |
 | `/news` | read all | Classified RSS news |
+| `/posts` | read all | AI-curated news feed |
 | `/resources` | read all | Security intelligence |
 | `/correlations` | read all | CVE correlation clusters |
 | `/epss-trends` | read all | EPSS movers dashboard |
@@ -273,3 +275,28 @@ Flask app with 13 blueprints, RBAC, CSRF protection, audit logging.
 | `GET /api/clusters` | Correlation clusters |
 | `GET /api/clusters/<id>` | Cluster members |
 | `GET /api/attack-techniques` | All techniques with counts |
+
+---
+
+## AI News Feed
+
+New articles from the RSS news source are scored for importance by the AI. Articles scoring at or above `news_feed.threshold` become **posts** on a new `/posts` feed page — an AI-curated, ranked read of the security-news intake.
+
+**Flow:**
+1. RSS articles land in `news_article` via the news source plugin
+2. `horus/news_feed` scores every new article 0–100 (one batched AI call per cycle)
+3. Each scored article is persisted (never re-scored); `ai_score >= threshold` → post
+
+**Triggers:**
+- Automatic: server pipeline end-hook after each full cycle
+- Manual/backfill: `horus news-feed` CLI command (prints `scored N, posted M`)
+
+**Config (`horus.yaml`):**
+```yaml
+news_feed:
+  enabled: true
+  threshold: 80            # min ai_score to become a post
+  max_articles_per_run: 50 # token-cost bound per cycle
+```
+
+**`/posts` page (read all):** AI headline, score badge, AI rationale, source, original link, posted_at. Paginated like `/news`; read-only (no moderation in v1).
