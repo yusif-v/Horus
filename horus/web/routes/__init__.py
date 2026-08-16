@@ -9,6 +9,7 @@ from .dashboard import bp as dashboard_bp
 from .epss_trends import bp as epss_trends_bp
 from .news import bp as news_bp
 from .pocs import bp as pocs_bp
+from .posts import bp as posts_bp
 from .profile import bp as profile_bp
 from .resources import bp as resources_bp
 from .search import bp as search_bp
@@ -26,6 +27,7 @@ ALL_BLUEPRINTS = [
     pocs_bp,
     resources_bp,
     news_bp,
+    posts_bp,
     vendors_bp,
     epss_trends_bp,
     correlations_bp,

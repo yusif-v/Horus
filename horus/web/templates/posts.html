@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">{{ eyebrow|default('AI news feed') }}</div>
+<h1 class="page-title">{{ title }} <em>· {{ total }}</em></h1>
+{% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
+
+{% if rows %}
+<div class="panel">
+  <div class="panel-body flush">
+    <table class="table">
+      <thead>
+        <tr><th>Score</th><th>Headline</th><th>Source</th><th>Posted</th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><span class="badge">{{ r.ai_score }}</span></td>
+          <td>
+            <a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.headline }}</a>
+            {% if r.title %}<div class="text-muted small">{{ r.title }}</div>{% endif %}
+            {% if r.ai_rationale %}<div class="text-muted small">{{ r.ai_rationale }}</div>{% endif %}
+            <div class="text-muted small">{{ r.post_summary }}</div>
+          </td>
+          <td>{{ r.source }}</td>
+          <td>{{ r.posted_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="pagination">
+  {% if prev_url %}<a href="{{ prev_url }}">← Newer</a>{% endif %}
+  {% if next_url %}<a href="{{ next_url }}">Older →</a>{% endif %}
+</div>
+{% else %}
+<p class="empty-state">No posts yet — the AI hasn't flagged any news as important.</p>
+{% endif %}
+{% endblock %}
