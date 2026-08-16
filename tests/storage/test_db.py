@@ -27,11 +27,11 @@ def test_get_unscored_news_and_save_score(tmp_path):
     with db.connect() as conn:
         conn.execute(
             "INSERT INTO news_article (title, url, source, tier, summary, first_seen)"
-            " VALUES ('A', 'http://a', 'hacker_news', 1, 's', '2026-08-01T00:00:00Z')"
+            " VALUES ('A', 'http://db-a.test', 'hacker_news', 1, 's', '2026-08-01T00:00:00Z')"
         )
         conn.execute(
             "INSERT INTO news_article (title, url, source, tier, summary, first_seen)"
-            " VALUES ('B', 'http://b', 'hacker_news', 3, 's', '2026-08-01T00:00:00Z')"
+            " VALUES ('B', 'http://db-b.test', 'hacker_news', 3, 's', '2026-08-01T00:00:00Z')"
         )
         unscored = db.get_unscored_news(conn, limit=10)
         assert len(unscored) == 2

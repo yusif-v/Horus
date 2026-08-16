@@ -15,11 +15,13 @@ def _seed_db():
         c.execute(
             "INSERT INTO news_article (title, url, source, tier, summary, first_seen,"
             " ai_score, ai_rationale, ai_headline, ai_summary, scored_at)"
-            " VALUES ('Apache RCE', 'http://a', 'hacker_news', 1, 's',"
+            " VALUES ('Apache RCE', 'http://posts-a.test', 'hacker_news', 1, 's',"
             " '2026-08-01T00:00:00Z', 95, 'exploited', 'RCE Critical', 'Patch now',"
             " '2026-08-15T00:00:00Z')"
         )
-        article_id = c.execute("SELECT id FROM news_article WHERE url = 'http://a'").fetchone()[0]
+        article_id = c.execute(
+            "SELECT id FROM news_article WHERE url = 'http://posts-a.test'"
+        ).fetchone()[0]
         c.execute(
             "INSERT INTO news_post (article_id, posted_at) VALUES (?, ?)",
             (article_id, "2026-08-15T00:00:00Z"),

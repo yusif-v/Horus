@@ -20,7 +20,7 @@ Existing pieces reused:
 
 1. **Output surface**: posts live on a new **Horus web feed page** (`/posts`). No Telegram/external publishing in v1.
 2. **AI decision**: score **every new article** 0-100 + one-line rationale + AI headline/summary; post those above a config `threshold`.
-3. **Trigger**: automatic via a server pipeline **end-hook** after each cycle; plus a `horus news-feed` CLI command for manual/backfill.
+3. **Trigger**: automatic via a server pipeline **end-hook** after each cycle; plus a `horus --news-feed` CLI command for manual/backfill.
 4. **Scoring granularity**: all new articles (no keyword pre-filter) — AI is the authority, keyword tiers stay as display metadata.
 5. **Threshold semantics**: config threshold; each article scored **once** when first seen; changing the threshold affects only future articles.
 6. **Failure handling**: AI provider down → skip that cycle, retry next cycle (articles stay un-scored). No keyword fallback.
@@ -133,7 +133,7 @@ news_feed:
 
 ### CLI (`horus/cli.py`)
 
-- `horus news-feed`: loads config, initializes DB, runs `score_and_post`, prints
+- `horus --news-feed`: loads config, initializes DB, runs `score_and_post`, prints
   summary (`scored N, posted M`). Mirrors `--backfill-epss` style.
 
 ### Web page (`horus/web/routes/posts.py` + template)

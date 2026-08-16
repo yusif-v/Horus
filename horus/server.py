@@ -298,7 +298,14 @@ class Server:
     # ── news-feed hook ───────────────────────────────────────────────────
 
     def _register_news_feed_hook(self) -> None:
-        """Register the pipeline end-hook that scores + posts AI-curated news."""
+        """Register the pipeline end-hook that scores + posts AI-curated news.
+
+        The hook fires after every full `run_pipeline` invocation, including
+        enrichers-only cycles (the spec envisioned it only after full runs,
+        but `register_end_hook` is global). In enrichers-only cycles it is a
+        no-op: no articles were ingested, so `get_unscored_news` returns
+        nothing and `score_and_post` short-circuits before any AI call.
+        """
         if not self.cfg.news_feed.enabled:
             return
         try:

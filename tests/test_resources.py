@@ -4,6 +4,25 @@ from __future__ import annotations
 
 from horus.core.model import Resource
 from horus.core.url_extractor import UrlType
+from horus.storage import db as _db
+
+
+def _temp_db(tmp_path):
+    """Point _db.DB_PATH at a per-test temp file; return a cleanup closure.
+
+    Mirrors `tests/test_notifications.py::_fresh_db`: the module-global DB
+    path is restored even when the test fails, so later tests keep using the
+    shared session DB. Restored to the canonical session path (not the
+    pre-set value) because other test modules leak `DB_PATH` to temp files;
+    restoring those would break every later test.
+    """
+    _db.DB_PATH = tmp_path / "test.db"
+    _db.initialize()
+
+    def _cleanup():
+        _db.DB_PATH = _db.STATE_DIR / "horus.db"
+
+    return _cleanup
 
 
 class TestResourceModel:
@@ -127,107 +146,103 @@ class TestTagExtraction:
 
 class TestPersistResource:
     def test_persist_and_fetch(self, tmp_path):
+        cleanup = _temp_db(tmp_path)
+        try:
+            resource = Resource(
+                url="https://github.com/test/repo",
+                resource_type="tool",
+                source="x_twitter",
+                title="Test Resource",
+                description="A test resource",
+                source_url="https://x.com/user/status/123",
+                source_author="testuser",
+                engagement_score=42,
+                tags=["rce", "kernel"],
+                cve_refs=["CVE-2026-1234"],
+                stars=100,
+                repo_created_at="2026-01-01T00:00:00Z",
+            )
 
-        from horus.storage import db as _db
+            with _db.connect() as conn:
+                _db.persist_resource(conn, resource)
 
-        # Use temp DB
-        db_path = tmp_path / "test.db"
-        _db.DB_PATH = db_path
-        _db.initialize()
-
-        resource = Resource(
-            url="https://github.com/test/repo",
-            resource_type="tool",
-            source="x_twitter",
-            title="Test Resource",
-            description="A test resource",
-            source_url="https://x.com/user/status/123",
-            source_author="testuser",
-            engagement_score=42,
-            tags=["rce", "kernel"],
-            cve_refs=["CVE-2026-1234"],
-            stars=100,
-            repo_created_at="2026-01-01T00:00:00Z",
-        )
-
-        with _db.connect() as conn:
-            _db.persist_resource(conn, resource)
-
-        # Fetch back
-        results, total = _db.fetch_resources(page=1, per_page=20)
-        assert total == 1
-        assert len(results) == 1
-        r = results[0]
-        assert r["url"] == "https://github.com/test/repo"
-        assert r["resource_type"] == "tool"
-        assert r["tags"] == ["rce", "kernel"]
-        assert r["engagement_score"] == 42
-        assert r["stars"] == 100
+            # Fetch back
+            results, total = _db.fetch_resources(page=1, per_page=20)
+            assert total == 1
+            assert len(results) == 1
+            r = results[0]
+            assert r["url"] == "https://github.com/test/repo"
+            assert r["resource_type"] == "tool"
+            assert r["tags"] == ["rce", "kernel"]
+            assert r["engagement_score"] == 42
+            assert r["stars"] == 100
+        finally:
+            cleanup()
 
     def test_persist_dedup(self, tmp_path):
-        from horus.storage import db as _db
+        cleanup = _temp_db(tmp_path)
+        try:
+            r1 = Resource(
+                url="https://example.com", resource_type="poc", source="web", title="First"
+            )
+            r2 = Resource(
+                url="https://example.com", resource_type="tool", source="web", title="Updated"
+            )
 
-        db_path = tmp_path / "test.db"
-        _db.DB_PATH = db_path
-        _db.initialize()
+            with _db.connect() as conn:
+                _db.persist_resource(conn, r1)
+                _db.persist_resource(conn, r2)
 
-        r1 = Resource(url="https://example.com", resource_type="poc", source="web", title="First")
-        r2 = Resource(
-            url="https://example.com", resource_type="tool", source="web", title="Updated"
-        )
-
-        with _db.connect() as conn:
-            _db.persist_resource(conn, r1)
-            _db.persist_resource(conn, r2)
-
-        _, total = _db.fetch_resources(page=1, per_page=20)
-        assert total == 1  # Deduplicated by URL
+            _, total = _db.fetch_resources(page=1, per_page=20)
+            assert total == 1  # Deduplicated by URL
+        finally:
+            cleanup()
 
     def test_fetch_with_filters(self, tmp_path):
-        from horus.storage import db as _db
+        cleanup = _temp_db(tmp_path)
+        try:
+            resources = [
+                Resource(url="https://a.com", resource_type="poc", source="x_twitter"),
+                Resource(url="https://b.com", resource_type="tool", source="github"),
+                Resource(url="https://c.com", resource_type="poc", source="pastebin"),
+            ]
 
-        db_path = tmp_path / "test.db"
-        _db.DB_PATH = db_path
-        _db.initialize()
+            with _db.connect() as conn:
+                for r in resources:
+                    _db.persist_resource(conn, r)
 
-        resources = [
-            Resource(url="https://a.com", resource_type="poc", source="x_twitter"),
-            Resource(url="https://b.com", resource_type="tool", source="github"),
-            Resource(url="https://c.com", resource_type="poc", source="pastebin"),
-        ]
+            # Filter by type
+            _, total = _db.fetch_resources(page=1, per_page=20, resource_type_filter="poc")
+            assert total == 2
 
-        with _db.connect() as conn:
-            for r in resources:
-                _db.persist_resource(conn, r)
-
-        # Filter by type
-        _, total = _db.fetch_resources(page=1, per_page=20, resource_type_filter="poc")
-        assert total == 2
-
-        # Filter by source
-        _, total = _db.fetch_resources(page=1, per_page=20, source_filter="github")
-        assert total == 1
+            # Filter by source
+            _, total = _db.fetch_resources(page=1, per_page=20, source_filter="github")
+            assert total == 1
+        finally:
+            cleanup()
 
     def test_fetch_sort_engagement(self, tmp_path):
-        from horus.storage import db as _db
+        cleanup = _temp_db(tmp_path)
+        try:
+            resources = [
+                Resource(
+                    url="https://a.com", resource_type="poc", source="web", engagement_score=10
+                ),
+                Resource(
+                    url="https://b.com", resource_type="tool", source="web", engagement_score=100
+                ),
+                Resource(
+                    url="https://c.com", resource_type="exploit", source="web", engagement_score=50
+                ),
+            ]
 
-        db_path = tmp_path / "test.db"
-        _db.DB_PATH = db_path
-        _db.initialize()
+            with _db.connect() as conn:
+                for r in resources:
+                    _db.persist_resource(conn, r)
 
-        resources = [
-            Resource(url="https://a.com", resource_type="poc", source="web", engagement_score=10),
-            Resource(url="https://b.com", resource_type="tool", source="web", engagement_score=100),
-            Resource(
-                url="https://c.com", resource_type="exploit", source="web", engagement_score=50
-            ),
-        ]
-
-        with _db.connect() as conn:
-            for r in resources:
-                _db.persist_resource(conn, r)
-
-        results, total = _db.fetch_resources(page=1, per_page=20, sort="engagement")
-        assert total == 3
-        assert results[0]["engagement_score"] == 100
-        assert results[-1]["engagement_score"] == 10
+            results, total = _db.fetch_resources(page=1, per_page=20, sort="engagement")
+            assert total == 3
+            assert results[0]["engagement_score"] == 100
+            assert results[-1]["engagement_score"] == 10
+        finally:
+            cleanup()

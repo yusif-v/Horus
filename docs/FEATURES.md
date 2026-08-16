@@ -289,7 +289,7 @@ New articles from the RSS news source are scored for importance by the AI. Artic
 
 **Triggers:**
 - Automatic: server pipeline end-hook after each full cycle
-- Manual/backfill: `horus news-feed` CLI command (prints `scored N, posted M`)
+- Manual/backfill: `horus --news-feed` CLI command (prints `scored N, posted M`)
 
 **Config (`horus.yaml`):**
 ```yaml

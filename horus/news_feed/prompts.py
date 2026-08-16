@@ -65,7 +65,7 @@ def parse_scoring_response(raw: str, known_ids: set[int]) -> dict[int, dict[str,
             continue
         score = item.get("score")
         try:
-            score = int(score)
+            score = int(float(score))
         except (TypeError, ValueError):
             score = 0
         score = max(0, min(100, score))

@@ -45,6 +45,14 @@ def test_parse_scoring_response_valid():
     assert 2 not in out
 
 
+def test_parse_scoring_response_quoted_float_score():
+    raw = """{"articles": [{"id": 1, "score": "92.5", "rationale": "actively exploited",
+              "headline": "Apache RCE critical", "summary": "Patch now"}]}"""
+    out = parse_scoring_response(raw, known_ids={1})
+    assert out[1]["score"] == 92
+    assert out[1]["rationale"] == "actively exploited"
+
+
 def test_parse_scoring_response_skips_unknown_id():
     raw = """{"articles": [{"id": 999, "score": 50, "rationale": "x",
               "headline": "h", "summary": "s"}]}"""

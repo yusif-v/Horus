@@ -1,7 +1,7 @@
 """AI-curated news feed — score new articles, post the important ones.
 
 Entry point: `score_and_post(conn, ...)`. Wired into the server as a
-pipeline end-hook and exposed as `horus news-feed` on the CLI.
+pipeline end-hook and exposed as `horus --news-feed` on the CLI.
 """
 
 from __future__ import annotations
