@@ -7,6 +7,7 @@ reputation scores.
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
@@ -686,7 +687,7 @@ def link_pocs_to_cves(cves: list[CVE], pocs: list[PoC]) -> dict[str, list[PoC]]:
     return links
 
 
-def persist_attack_techniques(conn, cve_id: str, tags: list[str]) -> None:
+def persist_attack_techniques(conn: sqlite3.Connection, cve_id: str, tags: list[str]) -> None:
     """Compute ATT&CK techniques from attack tags and store them for a CVE.
 
     Replaces any existing technique rows for the CVE so re-classification

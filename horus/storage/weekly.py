@@ -420,17 +420,18 @@ def _gather_news(
     this_start: str,
     this_end: str,
 ) -> None:
-    """Top news articles by tier (severity) from the last 7 days."""
-    cutoff = (_utc_now() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
+    """Top news articles by tier (severity) within the report period."""
+    # published_at is nullable (linker-inserted articles carry only first_seen).
+    when = "COALESCE(published_at, first_seen)"
     rows = conn.execute(
-        """
-        SELECT title, url, source, tier, summary, published_at
+        f"""
+        SELECT title, url, source, tier, summary, {when}
         FROM news_article
-        WHERE published_at >= ?
-        ORDER BY tier ASC, published_at DESC
+        WHERE {when} >= ? AND {when} < ?
+        ORDER BY tier ASC, {when} DESC
         LIMIT 10
         """,
-        (cutoff,),
+        (this_start, this_end),
     ).fetchall()
 
     data.news_highlights = [

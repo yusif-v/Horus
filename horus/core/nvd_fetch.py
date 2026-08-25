@@ -36,7 +36,8 @@ def fetch_cve_by_id(cve_id: str) -> dict[str, Any] | None:
     if not vulns:
         return None
 
-    return vulns[0].get("cve")
+    cve = vulns[0].get("cve")
+    return cve if isinstance(cve, dict) else None
 
 
 def parse_nvd_cve(raw: dict[str, Any]) -> dict[str, Any] | None:
@@ -101,7 +102,7 @@ def parse_nvd_cve(raw: dict[str, Any]) -> dict[str, Any] | None:
                 published_at = datetime.fromisoformat(published_iso.replace("Z", "+00:00"))
 
         # Extract affected products from configurations
-        affected = []
+        affected: list[dict[str, Any]] = []
         configs = raw.get("configurations", [])
         for config in configs:
             for node in config.get("nodes", []):
@@ -113,7 +114,7 @@ def parse_nvd_cve(raw: dict[str, Any]) -> dict[str, Any] | None:
                             vendor = parts[3] if parts[3] != "*" else "unknown"
                             product = parts[4] if parts[4] != "*" else "unknown"
                             if vendor != "unknown" or product != "unknown":
-                                from horus.core.merge import classify_product_category
+                                from .classify import classify_product_category
 
                                 affected.append(
                                     {

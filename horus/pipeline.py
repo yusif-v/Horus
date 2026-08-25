@@ -401,16 +401,16 @@ def run_pipeline(
             posted = db.persist_social_posts(conn, all_social_signals, known_cve_ids=db_cve_ids)
             if posted:
                 log(f"  persisted {posted} social posts")
-        for name, result in source_results.items():
+        for name, sr in source_results.items():
             db.mark_run(conn, name)
-            status = "error" if "error" in result else "ok"
+            status = "error" if "error" in sr else "ok"
             db.upsert_source_health(
                 conn,
                 name,
                 status=status,
-                error=result.get("error"),
-                cve_count=result.get("cves", 0),
-                poc_count=result.get("pocs", 0),
+                error=sr.get("error"),
+                cve_count=sr.get("cves", 0),
+                poc_count=sr.get("pocs", 0),
             )
         # Discovered-but-disabled sources show as intentionally skipped, not broken.
         for name in set(sources) - set(selected_sources):
